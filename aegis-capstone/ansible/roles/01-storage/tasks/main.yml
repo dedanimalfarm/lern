@@ -28,17 +28,19 @@
 
 - name: Подготовка списков устройств
   set_fact:
-    aegis_data_devices_final: >-
-      {% set results = [] %}
-      {% for item in resolved_data_devs.results | default([]) %}
-        {% if not item.skipped | default(false) %}
-          {% set _ = results.append(item.item | combine({'dev': item.stdout})) %}
-        {% else %}
-          {% set _ = results.append(item.item) %}
-        {% endif %}
-      {% endfor %}
-      {{ results }}
+    aegis_data_devices_final: "{{ _data_raw | from_json }}"
     aegis_raid_devices_final: "{{ resolved_raid_devs.results | default([]) | map(attribute='stdout') | list }}"
+  vars:
+    _data_raw: >-
+      {%- set results = [] -%}
+      {%- for item in resolved_data_devs.results | default([]) -%}
+        {%- if not item.skipped | default(false) -%}
+          {%- set _ = results.append(item.item | combine({'dev': item.stdout})) -%}
+        {%- else -%}
+          {%- set _ = results.append(item.item) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ results | to_json }}
 
 # Зачем: Зависимость для создания software RAID (используется для бэкап-узла).
 # Почему так: Устанавливается условно (только если есть список `aegis_raid_devices`), чтобы не засорять остальные узлы.
@@ -108,17 +110,19 @@
 
 - name: Обновление списка устройств с учетом разделов
   set_fact:
-    aegis_data_devices_partitioned: >-
-      {% set results = [] %}
-      {% for item in aegis_data_devices_final %}
-        {% if item.dev is defined %}
-          {% set suffix = 'p1' if 'nvme' in item.dev else '1' %}
-          {% set _ = results.append(item | combine({'pdev': item.dev + suffix})) %}
-        {% else %}
-          {% set _ = results.append(item) %}
-        {% endif %}
-      {% endfor %}
-      {{ results }}
+    aegis_data_devices_partitioned: "{{ _part_raw | from_json }}"
+  vars:
+    _part_raw: >-
+      {%- set results = [] -%}
+      {%- for item in aegis_data_devices_final -%}
+        {%- if item.dev is defined -%}
+          {%- set suffix = 'p1' if 'nvme' in item.dev else '1' -%}
+          {%- set _ = results.append(item | combine({'pdev': item.dev + suffix})) -%}
+        {%- else -%}
+          {%- set _ = results.append(item) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ results | to_json }}
 
 # Зачем: LVM дает возможность онлайн-расширения (`vgextend`, `lvextend`) и создания снапшотов.
 - name: Создание Volume Group на каждом выделенном диске

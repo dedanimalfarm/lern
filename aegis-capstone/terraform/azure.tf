@@ -201,11 +201,11 @@ resource "azurerm_subnet_network_security_group_association" "a3" {
 
 locals {
   az_vms = {
-    app     = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = azurerm_public_ip.app.id, disks = { monitor = { lun = 0, size = 16 } } }
-    db      = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = null, disks = { pgsql = { lun = 0, size = 16 }, mongo = { lun = 1, size = 16 }, redis = { lun = 2, size = 16 } } }
-    kafka   = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { jbod0 = { lun = 0, size = 16 }, jbod1 = { lun = 1, size = 16 } } }
-    etcd    = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { etcd = { lun = 0, size = 16 } } }
-    storage = { rg = azurerm_resource_group.r3, sub = azurerm_subnet.s3.id, pip = null, disks = { raid0 = { lun = 0, size = 16 }, raid1 = { lun = 1, size = 16 }, raid2 = { lun = 2, size = 16 } } }
+    app     = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = azurerm_public_ip.app.id, disks = { monitor = { lun = 10, size = 16 } } }
+    db      = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = null, disks = { pgsql = { lun = 10, size = 16 }, mongo = { lun = 11, size = 16 }, redis = { lun = 12, size = 16 } } }
+    kafka   = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { jbod0 = { lun = 10, size = 16 }, jbod1 = { lun = 11, size = 16 } } }
+    etcd    = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { etcd = { lun = 10, size = 16 } } }
+    storage = { rg = azurerm_resource_group.r3, sub = azurerm_subnet.s3.id, pip = null, disks = { raid0 = { lun = 10, size = 16 }, raid1 = { lun = 11, size = 16 }, raid2 = { lun = 12, size = 16 } } }
   }
   az_disks_flat = flatten([
     for vm_k, vm_v in local.az_vms : [

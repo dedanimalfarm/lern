@@ -82,7 +82,7 @@ resource "local_file" "hv_az_app" {
     aegis_cloud = "azure",
     aegis_region = azurerm_resource_group.r1.location,
     aegis_data_devices = [
-      { name = "monitor", lun = 0, fs = "xfs", mount = "/var/lib/victoria-metrics-data" }
+      { name = "monitor", lun = 10, fs = "xfs", mount = "/var/lib/victoria-metrics-data" }
     ],
     aegis_raid_luns = []
   })
@@ -94,9 +94,9 @@ resource "local_file" "hv_az_db" {
     aegis_cloud = "azure",
     aegis_region = azurerm_resource_group.r1.location,
     aegis_data_devices = [
-      { name = "pgsql", lun = 0, fs = "ext4", mount = "/var/lib/postgresql" },
-      { name = "mongo", lun = 1, fs = "xfs", mount = "/var/lib/mongodb" },
-      { name = "redis", lun = 2, fs = "ext4", mount = "/var/lib/redis" }
+      { name = "pgsql", lun = 10, fs = "ext4", mount = "/var/lib/postgresql" },
+      { name = "mongo", lun = 11, fs = "xfs", mount = "/var/lib/mongodb" },
+      { name = "redis", lun = 12, fs = "ext4", mount = "/var/lib/redis" }
     ],
     aegis_raid_luns = []
   })
@@ -108,8 +108,8 @@ resource "local_file" "hv_az_kafka" {
     aegis_cloud = "azure",
     aegis_region = azurerm_resource_group.r2.location,
     aegis_data_devices = [
-      { name = "kafka_jbod0", lun = 0, fs = "xfs", mount = "/var/lib/kafka/data0" },
-      { name = "kafka_jbod1", lun = 1, fs = "xfs", mount = "/var/lib/kafka/data1" }
+      { name = "kafka_jbod0", lun = 10, fs = "xfs", mount = "/var/lib/kafka/data0" },
+      { name = "kafka_jbod1", lun = 11, fs = "xfs", mount = "/var/lib/kafka/data1" }
     ],
     aegis_raid_luns = []
   })
@@ -121,7 +121,7 @@ resource "local_file" "hv_az_etcd" {
     aegis_cloud = "azure",
     aegis_region = azurerm_resource_group.r2.location,
     aegis_data_devices = [
-      { name = "etcd", lun = 0, fs = "ext4", mount = "/var/lib/etcd" }
+      { name = "etcd", lun = 10, fs = "ext4", mount = "/var/lib/etcd" }
     ],
     aegis_raid_luns = []
   })
@@ -135,6 +135,6 @@ resource "local_file" "hv_az_storage" {
     aegis_data_devices = [
       { name = "backups", dev = "/dev/md0", fs = "xfs", mount = "/mnt/backups" }
     ],
-    aegis_raid_luns = [0, 1, 2]
+    aegis_raid_luns = [10, 11, 12]
   })
 }
