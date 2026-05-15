@@ -43,6 +43,7 @@ last_verified: 2026-04-29
 | Топология сети, peering | [docs/topology.md](docs/topology.md) и `terraform/azure.tf` |
 | Диски и mount-points | `ansible/inventory/host_vars/<host>.yml` (генерится Terraform'ом) |
 | Версии provider'ов | `terraform/versions.tf` |
+| Конфигурация Terraform backend | блок `backend "azurerm"` в `terraform/versions.tf` (см. [docs/runbooks/remote-state.md](docs/runbooks/remote-state.md)) |
 | Архитектурные решения | `docs/adr/` |
 | Термины и определения | [docs/glossary.md](docs/glossary.md) |
 
@@ -52,7 +53,7 @@ last_verified: 2026-04-29
 
 - `ansible/inventory/host_vars/*.yml` — генерится `terraform/inventory.tf` через `local_file`. Правки исчезнут при следующем `terraform apply`.
 - `ansible/inventory/hosts.ini` — генерится тем же способом, **но** сейчас часто правится руками. Перед правкой проверь, что изменения попадут в `inventory.tf` (иначе TF их затрёт).
-- `terraform/.terraform/`, `*.tfstate*`, `terraform/.generated/` — служебные/сгенерированные.
+- `terraform/.terraform/`, `*.tfstate*`, `terraform/.generated/` — служебные/сгенерированные. **Стейт хранится удалённо в Azure Blob** (`aegistfstate52018f/tfstate/aegis-v4.tfstate`), локальные `*.tfstate` должны быть пустыми. Onboarding/откат/troubleshooting — в [docs/runbooks/remote-state.md](docs/runbooks/remote-state.md).
 - `terraform/${path.module}/`, `terraform/${var.ansible_host_vars_dir}/` — мусор от старого бага, удалить можно (см. [ADR-0005](docs/adr/0005-remove-generate-tf-py.md)).
 
 ## Команды воспроизведения
