@@ -1,6 +1,14 @@
 terraform {
   required_version = ">= 1.5"
 
+  backend "azurerm" {
+    resource_group_name  = "aegis-tfstate-rg"
+    storage_account_name = "aegistfstate52018f"
+    container_name       = "tfstate"
+    key                  = "aegis-v4.tfstate"
+    use_azuread_auth     = true
+  }
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
