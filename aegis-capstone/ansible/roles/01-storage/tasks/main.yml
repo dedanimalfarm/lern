@@ -20,6 +20,9 @@
   loop_control:
     label: "Resolving {{ item.name }} (LUN: {{ item.lun | default('N/A') }})"
   when: item.lun is defined
+  until: resolved_data_devs.stdout | length > 0
+  retries: 5
+  delay: 5
   changed_when: false
 
 - name: Резолв LUN для RAID (Azure)
@@ -32,6 +35,9 @@
   register: resolved_raid_devs
   loop: "{{ aegis_raid_luns | default([]) }}"
   when: aegis_raid_luns | default([]) | length > 0
+  until: resolved_raid_devs.stdout | length > 0
+  retries: 5
+  delay: 5
   changed_when: false
 
 - name: Подготовка списков устройств
@@ -50,25 +56,47 @@
       {%- endfor -%}
       {{ results | to_json }}
 
+- name: Assertion для устройства
+  assert:
+    that:
+      - aegis_data_devices_final | selectattr('dev', 'truthy') | list | length == aegis_data_devices | default([]) | length
+    fail_msg: "Не все устройства зарезолвились ({{ aegis_data_devices_final | selectattr('dev', 'truthy') | list | length }} resolved vs {{ aegis_data_devices | default([]) | length }} expected)"
+
+- name: Assertions for RAID
+  assert:
+    that:
+      - (aegis_raid_devices_final | default([])) | length == (aegis_raid_luns | default([])) | length
+    fail_msg: "Количество разрешенных устройств RAID не соответствует включению в конфигурацию ({{ aegis_raid_devices_final | default([]) | length }} vs {{ aegis_raid_luns | default([]) | length }})"
+
 # Зачем: Зависимость для создания software RAID (используется для бэкап-узла).
 # Почему так: Устанавливается условно (только если есть список `aegis_raid_devices`), чтобы не засорять остальные узлы.
+
+- name: Проверка существования RAID массива /dev/md0
+  stat:
+    path: /dev/md0
+  register: md0_stat
+
 - name: Установка mdadm для RAID
   apt:
     name: mdadm
     state: present
   when: aegis_raid_devices_final | length > 0
 
-- name: Остановка существующих RAID массивов
+- name: Остановка частичных/битых RAID массивов перед сборкой
   shell: |
     mdadm --stop /dev/md* || true
     mdadm --remove /dev/md* || true
-  when: aegis_raid_devices_final | length >= 3
+  when:
+    - aegis_raid_devices_final | length >= 3
+    - not md0_stat.stat.exists
   changed_when: false
 
 - name: Очистка дисков перед созданием RAID (Azure)
   shell: "mdadm --zero-superblock {{ item }} || true"
   loop: "{{ aegis_raid_devices_final }}"
-  when: aegis_raid_devices_final | length >= 3
+  when:
+    - aegis_raid_devices_final | length >= 3
+    - not md0_stat.stat.exists
   changed_when: false
 
 # Зачем: Обеспечить отказоустойчивое хранилище (RAID 5) для архивов и бэкапов.
@@ -143,12 +171,12 @@
 
 # Зачем: Утилизировать 100% выделенного диска под конкретную базу данных.
 # Почему так: Удалено `ignore_errors: yes`, так как правильное использование модуля и проверка состояния делают это излишним.
-- name: Создание Logical Volume (100%FREE)
+- name: Создание Logical Volume (100%VG)
   community.general.lvol:
     vg: "vg_{{ item.name }}"
     lv: "lv_{{ item.name }}"
-    size: 100%FREE
-    shrink: false
+    size: 100%VG
+    resizefs: yes
   loop: "{{ aegis_data_devices_partitioned | selectattr('pdev', 'defined') | list }}"
   loop_control:
     label: "lv_{{ item.name }}"
