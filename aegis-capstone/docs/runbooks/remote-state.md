@@ -17,7 +17,7 @@ related:
 
 - State лежит в Azure Blob: `aegistfstate52018f/tfstate/aegis-v4.tfstate` (RG `aegis-tfstate-rg`, регион `westeurope`).
 - Auth — Azure AD, **не** access-keys. Нужна роль `Storage Blob Data Contributor` на storage account.
-- На свежей машине: `az login` → `export ARM_USE_AZUREAD=true` → `terraform init` → готово.
+- На свежей машине: `az login` → `terraform init` → готово. Env-переменные настраивать не нужно — backend читает auth-режим из HCL.
 - Локальный `terraform.tfstate` больше **не должен** содержать данных. Если он непустой — что-то сломалось.
 
 ## Координаты бэкенда (SSOT)
@@ -67,7 +67,6 @@ cd terraform
 rm -f terraform.tfstate terraform.tfstate.backup terraform.tfstate.*.backup
 
 # 5) Поднять backend — Terraform подтянет стейт из Azure
-export ARM_USE_AZUREAD=true     # удобно прописать в ~/.bashrc
 terraform init
 
 # 6) Sanity-check — должен быть "No changes":
@@ -83,10 +82,9 @@ terraform plan
 
 ## Работа в обычном режиме (чек-лист при изменении `.tf`)
 
-Никаких флагов больше не нужно после первичной настройки — `ARM_USE_AZUREAD=true` в окружении и `az login`. Дальше — стандартный пятишаговый цикл:
+Никаких env-переменных не нужно — `use_azuread_auth = true` в HCL-блоке backend'а форсит AD-аутентификацию без дополнительных флагов. Достаточно живого `az login`. Дальше — стандартный пятишаговый цикл:
 
 ```bash
-export ARM_USE_AZUREAD=true                  # один раз на сессию (или в ~/.bashrc)
 cd /root/lern/aegis-capstone/terraform
 
 # 1. Отредактировал foo.tf — форматирование
@@ -234,7 +232,7 @@ az storage account update \
 - **403 при `terraform init`** — RBAC ещё не применился (Azure пропагирует роли до ~60 секунд), либо неверная подписка в `az account show`. Подожди минуту и повтори.
 - **`Error: building account: unable to configure ResourceManagerAccount: ...`** — нет `az login` или истёк токен. `az login` снова.
 - **Непустой `terraform.tfstate` после миграции** — что-то пошло не так, **не коммитить**. Проверь, что `init -migrate-state` отработал без ошибок.
-- **`ARM_USE_AZUREAD` не выставлен** — Terraform попытается взять access-key из SA. Без RBAC на data-plane это даст 403, с RBAC на control-plane (`Storage Account Contributor`) — может неожиданно сработать через listKeys и обойти AD-аудит. Лучше всегда экспортировать переменную.
+- **Удалили `use_azuread_auth = true` из backend-блока** — Terraform начнёт ходить в control-plane за shared access-key через `listKeys`. Это другой путь авторизации: RBAC `Storage Blob Data Contributor` перестанет работать, нужен будет `Storage Account Contributor` или ключ в `ARM_ACCESS_KEY`. Не удаляй флаг без явной причины. Историческая env-переменная `ARM_USE_AZUREAD=true` делает то же, но при наличии HCL-флага избыточна — её включение для старых azurerm < 3.x.
 - **Удаление SA или RG руками** — потеряешь стейт **навсегда** (если soft-delete выключен). Имя `aegistfstate52018f` лучше пометить замком в Azure Portal: `az lock create --lock-type CanNotDelete --name protect-tfstate --resource-group aegis-tfstate-rg`.
 
 ## История
