@@ -45,7 +45,7 @@ sdi       10G disk                    <- рабочий
 
 ## Модуль 1: Виртуальные файловые системы в оперативной памяти и ядре
 
-### Теория для изучения перед модулем
+### Теория для изучения перед модулем (см [презентацию](https://docs.google.com/presentation/d/1qpQU-friz4ZNsJrl-3qeYxd8ilxgDXgLv3V-5Wny9yw/edit?usp=sharing))
 
 - Иерархия файловой системы Linux (FHS): назначение `/proc`, `/sys`, `/dev`, `/run`
 - Что такое VFS (Virtual File System) в ядре Linux
