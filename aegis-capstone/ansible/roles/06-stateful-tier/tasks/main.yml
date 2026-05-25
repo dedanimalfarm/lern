@@ -16,9 +16,9 @@
 # Почему так: Ставится только на `db_nodes` для аппаратной изоляции от приложения.
 - name: Setup Database Tier
   block:
-    - name: Установка PostgreSQL и Redis
+    - name: Установка PostgreSQL, Redis и psycopg2
       apt:
-        name: [postgresql, redis-server]
+        name: [postgresql, redis-server, python3-psycopg2]
         state: present
         update_cache: yes
 
@@ -46,9 +46,44 @@
         owner: mongodb
         group: mongodb
 
+    - name: Настройка postgre config
+      lineinfile:
+        path: /etc/postgresql/{{ pg_version }}/main/postgresql.conf
+        regexp: '^#?listen_addresses'
+        line: "listen_addresses = 'localhost,{{ wg_overlay_ip }}'"
+      notify: restart postgresql
+
+    - name: Настройка pg_hba config
+      lineinfile:
+        path: /etc/postgresql/{{ pg_version }}/main/pg_hba.conf
+        insertafter: '^# IPv4 local connections'
+        line: 'host   aegis   aegis   10.100.0.0/24   scram-sha-256'
+      notify: restart postgresql
+
     - name: Запуск баз данных
       systemd: name="{{ item }}" state=started enabled=yes
       loop: [postgresql, redis-server, mongod]
+
+    - name: Создание роли aegis в postgre
+      become: yes
+      become_user: postgres
+      no_log: yes
+      community.postgresql.postgresql_user:
+        name: aegis
+        password: "{{ aegis_pg_password }}"
+        role_attr_flags: NOSUPERUSER
+
+    - name: Создание БД aegis в postgre
+      become: yes
+      become_user: postgres
+      community.postgresql.postgresql_db:
+        name: aegis
+        owner: aegis
+        encoding: UTF-8
+        lc_collate: en_US.UTF-8
+        lc_ctype: en_US.UTF-8
+        template: template0
+
   when: "'db_nodes' in group_names"
 
 # --- KAFKA NODE ---
