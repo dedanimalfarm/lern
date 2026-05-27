@@ -2,6 +2,7 @@
 echo "Создаем 'утечку' дискового пространства..."
 # Создаем большой файл
 dd if=/dev/urandom of=/tmp/hidden_leak.dat bs=1M count=500 status=none
+sleep 2
 # Открываем его на чтение в фоновом процессе (tail -f)
 tail -f /tmp/hidden_leak.dat &>/dev/null &
 PID=$!
