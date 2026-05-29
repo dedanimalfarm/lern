@@ -4,3 +4,9 @@
     name: kafka
     state: restarted
     daemon_reload: yes
+
+- name: restart postgresql
+  systemd:
+    name: postgresql
+    state: restarted
+    daemon_reload: yes
