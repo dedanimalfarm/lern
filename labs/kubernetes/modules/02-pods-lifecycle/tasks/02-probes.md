@@ -5,7 +5,7 @@
 
 ## Шаги
 1. Запустить `manifests/probes`.
-2. Применить broken вариант из `broken/02-readiness-fail`.
+2. Применить broken вариант из `broken/scenario-01`.
 3. Проверить endpoints и события Pod.
 4. Вернуть корректный вариант из `solutions/02-readiness-fail`.
 
