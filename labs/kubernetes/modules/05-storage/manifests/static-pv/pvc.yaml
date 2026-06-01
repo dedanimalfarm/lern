@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: static-pvc-demo
+  namespace: lab
+spec:
+  # Тот же storageClassName, что и у static-pv-demo. Совпадение class + достаточная
+  # capacity + совместимый accessMode → PVC привязывается именно к этому PV.
+  # Пустая строка "" означала бы "том без класса"; здесь явно используем "manual".
+  storageClassName: manual
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      # Запрос <= capacity PV (1Gi). Если запросить больше — bind не произойдёт.
+      storage: 1Gi

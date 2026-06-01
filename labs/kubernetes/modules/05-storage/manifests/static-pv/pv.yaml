@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  # PV — кластерный (cluster-scoped) ресурс, namespace у него нет.
+  name: static-pv-demo
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+  - ReadWriteOnce
+  # Retain: после удаления PVC данные и сам PV сохраняются (перейдёт в Released),
+  # администратор разбирается с ними вручную. Противоположность — Delete.
+  persistentVolumeReclaimPolicy: Retain
+  # storageClassName: manual — НЕ ссылается на провижинер. Такой PV создаётся
+  # администратором заранее (статическое provisioning), а PVC с тем же classname
+  # к нему привязывается. Так связывают PV и PVC без StorageClass-контроллера.
+  storageClassName: manual
+  hostPath:
+    # hostPath годится только для одно-нодовых учебных кластеров.
+    # В проде статические PV — это NFS, iSCSI, FC, CSI-volume и т.п.
+    path: /tmp/k8s-lab-static-pv
+    type: DirectoryOrCreate

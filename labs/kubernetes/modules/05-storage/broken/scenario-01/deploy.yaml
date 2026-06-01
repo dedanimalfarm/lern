@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-demo
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage-demo
+  template:
+    metadata:
+      labels:
+        app: storage-demo
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        # Пишем в том, смонтированный из demo-pvc. Пока PVC не Bound,
+        # kubelet не может смонтировать том → Pod не выйдет из Pending/ContainerCreating.
+        command: ["sh", "-c", "while true; do date >> /data/app.log; sleep 5; done"]
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          # Этот PVC ссылается на несуществующий StorageClass (см. pvc.yaml рядом),
+          # поэтому остаётся Pending, и Pod вместе с ним не стартует.
+          claimName: demo-pvc

@@ -4,5 +4,8 @@ resources:
 - emptydir/pod.yaml
 - hostpath/pod.yaml
 - pvc/pvc.yaml
+- pvc/consumer.yaml
+- static-pv/pv.yaml
+- static-pv/pvc.yaml
 - statefulset/svc-headless.yaml
 - statefulset/sts.yaml
