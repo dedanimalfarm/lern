@@ -21,12 +21,24 @@
 
 # Зачем: Разрешить взаимодействие баз данных между собой и с приложением (reconciliation API).
 # Почему так: Применяется строго на `db_nodes`, блокируя доступ извне.
-- name: East-west порты БД (Postgres / MongoDB / Redis)
+- name: East-west порты БД (MongoDB / Redis)
   ufw:
     rule: allow
     port: "{{ item }}"
     proto: tcp
-  loop: ['5432', '27017', '6379']
+  loop: ['27017', '6379']
+  when: "'db_nodes' in group_names"
+
+# Зачем: Реализовать Zero-Trust для PostgreSQL на сетевом уровне — доступ только из WG overlay.
+# Почему так: Двойная проверка по `src` (10.100.0.0/24) и `interface` (wg0) защищает от спуфинга IP и от неверной маршрутизации через VNet.
+- name: Ingress postgres (overlay-only)
+  ufw:
+    rule: allow
+    port: '5432'
+    proto: tcp
+    src: '10.100.0.0/24'
+    direction: in
+    interface: wg0
   when: "'db_nodes' in group_names"
 
 # Зачем: etcd требует порты для клиентского API (2379) и общения пиров (2380).
