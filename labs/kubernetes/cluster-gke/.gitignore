@@ -1,0 +1,8 @@
+# Terraform state может содержать секреты (endpoint, токены) — НЕ коммитим.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+# tfvars оставляем в репо (в нём нет секретов, только ID проекта и размеры),
+# чтобы стенд был воспроизводим «как есть».
