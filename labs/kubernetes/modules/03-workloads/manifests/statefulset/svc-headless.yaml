@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: lab
+spec:
+  # clusterIP: None => headless Service. DNS отдаёт не один VIP, а адрес каждого
+  # Pod по стабильному имени web-0.web, web-1.web — основа идентичности StatefulSet.
+  clusterIP: None
+  selector:
+    app: web
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80

@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+  namespace: lab
+spec:
+  serviceName: web        # ссылка на headless Service (svc-headless.yaml) для DNS
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+          name: http
+        volumeMounts:
+        - name: data
+          mountPath: /usr/share/nginx/html
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+  # volumeClaimTemplates создаёт ОТДЕЛЬНЫЙ PVC на каждую реплику: data-web-0,
+  # data-web-1. storageClassName не указан => берётся default StorageClass
+  # кластера (на GKE — standard-rwo). Без default SC эти PVC зависнут в Pending.
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi

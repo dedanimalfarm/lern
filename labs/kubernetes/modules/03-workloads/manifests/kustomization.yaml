@@ -6,3 +6,5 @@ resources:
 - job/job.yaml
 - cronjob/cronjob.yaml
 - daemonset/ds.yaml
+- statefulset/svc-headless.yaml
+- statefulset/sts.yaml
