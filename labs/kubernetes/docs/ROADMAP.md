@@ -39,7 +39,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 |---|--------------|----------|-------|
 | 11 | **autoscaling** ✅ ГОТОВ `c9f0c86` | HPA/VPA/Cluster Autoscaler — прогнан вживую (scale-up 1→5 под нагрузкой) | ✅ |
 | 12 | **resource-management** | PriorityClass, preemption, requests/limits tuning, bin-packing | любой ✅ |
-| 13 | **resilience** | PodDisruptionBudget-паттерны, topologySpreadConstraints, multi-zone, anti-affinity | multi-zone кластер |
+| 13 | **resilience** ✅ ГОТОВ `ef90589` | topologySpread + antiAffinity + PDB + cordon/drain — прогнан на Kubespray (drain показал защиту PDB вживую) | ✅ |
 
 ## Уровень 3 — Security hardening
 
