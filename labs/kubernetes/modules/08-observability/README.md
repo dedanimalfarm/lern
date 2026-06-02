@@ -136,8 +136,10 @@ kubectl top pods -n lab
 # obs-demo-...    1m           2Mi
 ```
 
-> Нет вывода и ошибка `Metrics API not available` — значит metrics-server не
-> установлен (типично для свежего kind). На GKE он есть из коробки.
+> Сразу после старта пода возможно `metrics not available yet` — metrics-server
+> собирает данные с задержкой ~1-2 мин, просто подождите. Ошибка `Metrics API
+> not available` (без "yet") означает, что metrics-server не установлен (типично
+> для свежего kind); на GKE он есть из коробки.
 
 **Контрольные вопросы:**
 1. Что даёт `metrics-server` и чего он принципиально НЕ умеет?
@@ -167,9 +169,11 @@ kubectl -n lab get pod -l app=obs-broken
 # obs-broken-...   0/1   CrashLoopBackOff   3 (20s ago)   45s
 #                  ^ растущий back-off между рестартами
 
-# Логи последнего УПАВШЕГО запуска
+# Логи последнего УПАВШЕГО запуска. ВАЖНО: для очень короткого контейнера
+# (echo+exit за <1с) логи могут не успеть сохраниться — тогда будет
+# 'unable to retrieve container logs', и причину надёжнее брать из lastState ниже.
 kubectl -n lab logs -l app=obs-broken --previous --tail=2
-# fail
+# fail        (либо 'unable to retrieve...' если контейнер жил доли секунды)
 
 # Код и причина завершения
 kubectl -n lab get pod -l app=obs-broken \
