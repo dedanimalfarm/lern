@@ -1,0 +1,25 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-demo
+  namespace: lab
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hpa-demo
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        # держать среднюю утилизацию CPU около 50% от requests; превысит —
+        # HPA добавит реплики (до maxReplicas), упадёт — уберёт (до minReplicas).
+        type: Utilization
+        averageUtilization: 50
+  behavior:
+    scaleDown:
+      # притормозить «схлопывание» реплик, чтобы не дёргать нагрузку (стабилизация)
+      stabilizationWindowSeconds: 120

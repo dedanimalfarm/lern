@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpa-demo
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hpa-demo
+  template:
+    metadata:
+      labels:
+        app: hpa-demo
+    spec:
+      containers:
+      - name: php-apache
+        # классический CPU-bound образ из доков k8s: на каждый запрос крутит
+        # тяжёлую математику, поэтому удобно нагружать для демонстрации HPA.
+        image: registry.k8s.io/hpa-example
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            # requests.cpu ОБЯЗАТЕЛЕН для HPA по CPU-утилизации: процент считается
+            # как usage / requests. Без него HPA покажет targets <unknown>.
+            cpu: 200m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
