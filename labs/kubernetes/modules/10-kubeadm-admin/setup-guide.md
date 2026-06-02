@@ -269,7 +269,7 @@ sudo vi /etc/containerd/config.toml
 
 ```toml
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-  SystemdCgroup = false
+  SystemdCgroup = true
 ```
 
 33. Перезапускаем containerd на воркер-узле
