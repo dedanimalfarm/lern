@@ -6,9 +6,9 @@ metadata:
 spec:
   project: labs
   source:
-    repoURL: https://github.com/glebbykov/lern.git
+    repoURL: https://github.com/dedanimalfarm/lern.git
     targetRevision: main
-    path: k8s-new/k8s-labs/modules/09-helm-gitops/charts/wrong-path
+    path: labs/kubernetes/modules/09-helm-gitops/charts/wrong-path
     helm:
       releaseName: demo-app
   destination:

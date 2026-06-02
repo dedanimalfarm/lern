@@ -57,7 +57,7 @@ kubectl -n argocd get application demo-app -o jsonpath='{.spec.source.path}'
 <summary><strong>Подсказка 3</strong></summary>
 
 Правильный путь к чарту для этого сценария:
-`k8s-new/k8s-labs/modules/09-helm-gitops/charts/demo-app`
+`labs/kubernetes/modules/09-helm-gitops/charts/demo-app`
 
 Что написано в `app.yaml`? Чем отличается?
 
