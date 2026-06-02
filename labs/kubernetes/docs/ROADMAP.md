@@ -63,7 +63,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 
 | # | Новый модуль | Ключевое | Среда |
 |---|--------------|----------|-------|
-| 19 | **crd-operators** | CustomResourceDefinition, controller pattern, kubebuilder/operator-sdk, sample operator | любой ✅ |
+| 19 | **crd-operators** ✅ ГОТОВ `2b2c4f0` | CRD + схема/валидация + operator pattern (prometheus-operator) — прогнан на Kubespray | ✅ |
 | 20 | **batch-workflows** | Argo Workflows, Job parallelism/completions, indexed Jobs | любой ✅ |
 | 21 | **stateful-systems** | DB-операторы (CloudNativePG/Redis), backup, StatefulSet advanced | GKE + storage |
 
@@ -104,11 +104,12 @@ progressive delivery, backup/DR. Это и есть план ниже.
 
 ## Приоритизация (с чего начинать)
 
-**Phase 1 (наибольшая ценность, работает на текущем GKE):**
-- 11 autoscaling (HPA) — частый production-навык, демонстрируется сразу.
-- 14 pod-security-admission (Kyverno) — закрывает разрыв 07 до реальных политик.
-- 17 metrics-alerting (Prometheus/Grafana) — поднимает 08 до настоящего стека.
-- 19 crd-operators — фундамент понимания «как устроен сам K8s».
+**Phase 1 — ✅ ЗАВЕРШЕНА (все 4 прогнаны вживую на Kubespray+Calico):**
+- ✅ 11 autoscaling (HPA scale-up 1→5) `c9f0c86`
+- ✅ 14 pod-security-admission (PSA + VAP) `5aea74d`
+- ✅ 17 metrics-alerting (Prometheus/Grafana) `46be54c`
+- ✅ 19 crd-operators (CRD + operator pattern) `2b2c4f0`
+- (бонус из Phase 3) ✅ 15 network-policy-enforced (микросегментация на Calico) `350f848`
 
 **Phase 2:** 12, 13, 16, 18, 20, 25 (углубление reliability/observability/delivery).
 
