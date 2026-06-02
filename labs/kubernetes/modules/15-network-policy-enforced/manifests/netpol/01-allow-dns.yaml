@@ -1,0 +1,31 @@
+# ОБЯЗАТЕЛЬНО первым после default-deny: разрешить egress к DNS, иначе во всех
+# подах namespace ломается резолв имён (bad address).
+# ВАЖНО про среду: Kubespray включает nodelocaldns — поды резолвят через
+# link-local 169.254.25.10:53 (кэш на ноде), а НЕ через CoreDNS-под напрямую.
+# Разрешаем ОБА пути: ipBlock nodelocaldns + под CoreDNS (для kind/GKE без него).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: lab
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 169.254.25.10/32
+    ports:
+    - { protocol: UDP, port: 53 }
+    - { protocol: TCP, port: 53 }
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - { protocol: UDP, port: 53 }
+    - { protocol: TCP, port: 53 }

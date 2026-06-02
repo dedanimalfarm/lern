@@ -1,0 +1,12 @@
+# Базис Zero-Trust: закрыть ВЕСЬ ingress и egress для всех подов namespace.
+# Дальше открываем точечно (01..04).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: lab
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress

@@ -1,0 +1,20 @@
+# db (data): принимает ingress ТОЛЬКО от api на :80. Ни web, ни кто-либо ещё —
+# напрямую к db не достучится. Это и есть микросегментация.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-policy
+  namespace: lab
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api
+    ports:
+    - { protocol: TCP, port: 80 }
