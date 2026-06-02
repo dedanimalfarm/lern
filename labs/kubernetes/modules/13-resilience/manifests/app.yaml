@@ -1,0 +1,51 @@
+# Отказоустойчивое приложение: 3 реплики, РАВНОМЕРНО размазанные по нодам
+# (topologySpreadConstraints) и дополнительно отталкивающиеся друг от друга
+# (podAntiAffinity). Падение одной ноды не уносит весь сервис.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resilient-app
+  namespace: lab
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: resilient-app
+  template:
+    metadata:
+      labels:
+        app: resilient-app
+    spec:
+      # Не давать перекоса больше 1 пода между нодами. DoNotSchedule =
+      # жёстко: если равномерно не получается — Pending (а не «как-нибудь»).
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        # учитывать ТОЛЬКО ноды, на которые под реально может сесть. Иначе
+        # control-plane нода с taint (как в Kubespray) считается доменом с 0
+        # подов и ломает skew → лишние Pending. Honor исключает недоступные ноды.
+        nodeTaintsPolicy: Honor
+        labelSelector:
+          matchLabels:
+            app: resilient-app
+      affinity:
+        podAntiAffinity:
+          # мягко предпочитать РАЗНЫЕ ноды для реплик одного приложения
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: resilient-app
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 200m, memory: 128Mi }
+        securityContext:
+          allowPrivilegeEscalation: false

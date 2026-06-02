@@ -1,0 +1,30 @@
+# 3 реплики + ЖЁСТКИЙ podAntiAffinity (required) по hostname. На кластере из
+# 2 доступных worker-нод сядут только 2 реплики (на разные ноды), а 3-й
+# «разной» ноды не найдётся → она остаётся Pending.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resilient-app
+  namespace: lab
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: resilient-app
+  template:
+    metadata:
+      labels:
+        app: resilient-app
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: resilient-app
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80

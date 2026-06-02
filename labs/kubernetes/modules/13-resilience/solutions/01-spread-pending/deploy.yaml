@@ -1,0 +1,32 @@
+# Решение: сделать anti-affinity МЯГКИМ (preferred). Scheduler старается
+# развести реплики по нодам, но при нехватке «разных» нод всё равно посадит
+# под — все 3 реплики запустятся (на 2 нодах: 2/1).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resilient-app
+  namespace: lab
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: resilient-app
+  template:
+    metadata:
+      labels:
+        app: resilient-app
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: resilient-app
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80

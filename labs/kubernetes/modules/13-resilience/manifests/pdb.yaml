@@ -1,0 +1,12 @@
+# PodDisruptionBudget: при добровольных выселениях (drain ноды на обслуживание)
+# держать минимум 2 из 3 реплик живыми. Eviction, нарушающий это, отклоняется.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: resilient-app-pdb
+  namespace: lab
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: resilient-app
