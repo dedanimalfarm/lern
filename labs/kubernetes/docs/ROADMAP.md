@@ -45,7 +45,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 
 | # | Новый модуль | Ключевое | Среда |
 |---|--------------|----------|-------|
-| 14 | **pod-security-admission** | Pod Security Standards, Kyverno/OPA Gatekeeper, ValidatingAdmissionPolicy | любой ✅ |
+| 14 | **pod-security-admission** ✅ ГОТОВ `5aea74d` | PSA restricted + ValidatingAdmissionPolicy (CEL) — прогнан на Kubespray (bad-pod и `:latest` отклонены) | ✅ |
 | 15 | **network-policy-enforced** ✅ ГОТОВ `350f848` | микросегментация web→api→db — прогнан на Kubespray+Calico (web→db заблокировано) | Calico ✅ |
 | 16 | **secrets-management** | encryption-at-rest, external-secrets, sealed-secrets, Vault | GKE + внешний менеджер |
 
