@@ -21,6 +21,19 @@ kubectl top nodes >/dev/null 2>&1 && echo "metrics-server: OK" || echo "metrics-
 > Для живого прогона нужны рабочие ноды. Если кластер «припаркован» (0 нод),
 > верните их: в `cluster-gke/` — `terraform apply` (node_count=2).
 
+> **Портируемость (не только GKE).** HPA-ядро (объект HPA + scale-up по CPU)
+> работает на ЛЮБОМ кластере, но требует metrics-server:
+> - **GKE / k3s** — есть из коробки;
+> - **kind / kubeadm** — поставить вручную: `kubectl apply -f
+>   https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml`
+>   (для kind добавить контейнеру флаг `--kubelet-insecure-tls`);
+> - **minikube** — `minikube addons enable metrics-server`.
+>
+> **Cluster Autoscaler** (Часть 3) — только там, где есть автоскейл нод-пула
+> (GKE/EKS/AKS). На kind/одиночном kubeadm нод не добавит — поды останутся
+> `Pending` (HPA при этом всё равно скейлит до предела ёмкости). **VPA** ставится
+> отдельно на любом кластере.
+
 ---
 
 ## Стартовая проверка
