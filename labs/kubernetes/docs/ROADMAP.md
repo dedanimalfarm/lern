@@ -56,7 +56,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 
 | # | Новый модуль | Ключевое | Среда |
 |---|--------------|----------|-------|
-| 17 | **metrics-alerting** | Prometheus + Grafana + Alertmanager, kube-state-metrics, ServiceMonitor, PromQL | GKE (вернуть ноды) ✅ |
+| 17 | **metrics-alerting** ✅ ГОТОВ `46be54c` | Prometheus+Grafana+Alertmanager+exporters, ServiceMonitor, PromQL — прогнан на Kubespray (kube-prometheus-stack, target up=1) | ✅ |
 | 18 | **logs-tracing** | Loki/EFK, OpenTelemetry, Jaeger, distributed tracing | GKE ✅ |
 
 ## Уровень 5 — Extensibility & advanced workloads
