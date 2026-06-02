@@ -1,0 +1,11 @@
+# Namespace с включённым Pod Security Admission на уровне restricted.
+# enforce — блокирует несоответствующие поды; warn/audit — предупреждают/логируют.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lab-restricted
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

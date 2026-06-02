@@ -1,0 +1,26 @@
+# Под, СООТВЕТСТВУЮЩИЙ профилю restricted: non-root, drop ALL caps,
+# seccomp RuntimeDefault, no privilege escalation. Такой PSA пропустит.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good-pod
+  namespace: lab-restricted
+  labels:
+    app: good
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    ports:
+    - containerPort: 8080
+    securityContext:
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      capabilities:
+        drop: ["ALL"]
+      seccompProfile:
+        type: RuntimeDefault

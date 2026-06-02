@@ -1,0 +1,15 @@
+# Под, НАРУШАЮЩИЙ restricted: root-образ без securityContext, без drop caps,
+# без seccomp. В namespace lab-restricted PSA его ОТКЛОНИТ при создании.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-pod
+  namespace: lab-restricted
+  labels:
+    app: bad
+spec:
+  containers:
+  - name: app
+    image: nginx:1.27-alpine
+    ports:
+    - containerPort: 80
