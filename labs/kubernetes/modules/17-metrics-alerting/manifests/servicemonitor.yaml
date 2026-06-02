@@ -1,0 +1,17 @@
+# ServiceMonitor — декларативно говорит Prometheus-оператору «скрейпь этот сервис».
+# ВАЖНО: kube-prometheus-stack по умолчанию выбирает ServiceMonitor по label
+# release=<helm-release> (здесь kps) — без него target НЕ появится в Prometheus.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: metrics-app
+  namespace: lab
+  labels:
+    release: kps
+spec:
+  selector:
+    matchLabels: { app: metrics-app }
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics

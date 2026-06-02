@@ -1,0 +1,299 @@
+# Лабораторная работа 17: Метрики и алертинг (Prometheus + Grafana + Alertmanager)
+
+Цель: поднять полноценный observability-стек и научиться им пользоваться —
+собирать метрики (Prometheus), запрашивать их (PromQL), визуализировать
+(Grafana), подключать свои приложения (ServiceMonitor) и заводить алерты
+(PrometheusRule + Alertmanager). Это развитие модуля 08 (там был только
+`kubectl top`) до настоящего стека с историей и алертами.
+
+---
+
+## Предварительные требования
+
+```bash
+helm version --short    # нужен Helm
+kubectl get nodes       # нужны рабочие ноды (стек заметно потребляет RAM)
+```
+
+---
+
+## Часть 1: Установка kube-prometheus-stack
+
+### Теория для изучения перед частью
+
+- **Prometheus** — pull-модель: сам ходит и скрейпит `/metrics` целей по
+  расписанию, хранит time-series, отвечает на PromQL. В отличие от
+  metrics-server (только текущие CPU/RAM), Prometheus хранит ИСТОРИЮ.
+- **kube-prometheus-stack** ставит разом: Prometheus + **Grafana** (дашборды) +
+  **Alertmanager** (маршрутизация алертов) + **node-exporter** (метрики нод) +
+  **kube-state-metrics** (метрики объектов k8s) + **prometheus-operator**
+  (управляет всем через CRD).
+
+---
+
+**Цель:** установить стек и увидеть его компоненты.
+
+---
+
+### 1.1 helm install
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install kps prometheus-community/kube-prometheus-stack \
+  -n monitoring --create-namespace --wait
+
+kubectl -n monitoring get pods
+# kps-grafana-...                        Running
+# kps-kube-prometheus-stack-operator-... Running
+# prometheus-kps-...-0                   Running   (сам Prometheus, StatefulSet)
+# alertmanager-kps-...-0                 Running
+# kps-kube-state-metrics-...             Running
+# kps-prometheus-node-exporter-... (DaemonSet, по поду на ноду)
+```
+
+**Контрольные вопросы:**
+1. Чем pull-модель Prometheus отличается от push?
+2. За что отвечают node-exporter и kube-state-metrics?
+3. Чем Prometheus принципиально полнее metrics-server?
+
+---
+
+## Часть 2: PromQL
+
+### Теория для изучения перед частью
+
+- Типы метрик: **counter** (только растёт — запросы, ошибки; с ним используют
+  `rate()`), **gauge** (вверх/вниз — память, температура), **histogram**
+  (распределения — латентность).
+- PromQL: селекторы по labels (`up{job="..."}`), функции (`rate`, `sum`, `avg`),
+  агрегация `by (label)`. `rate(counter[1m])` — скорость роста за минуту.
+
+---
+
+**Цель:** выполнить запросы в Prometheus UI.
+
+---
+
+### 2.1 Запросы
+
+```bash
+# Проброс Prometheus UI на localhost:9090
+kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-prometheus 9090:9090 &
+sleep 2
+
+# Через API (или вкладка Graph в UI http://localhost:9090):
+curl -s 'http://localhost:9090/api/v1/query?query=up' | head -c 200
+# {"status":"success",...,"value":[...,"1"]}   <- живые таргеты
+
+# Полезные запросы:
+#   up                                              — все цели (1=жива)
+#   sum(rate(http_requests_total[1m]))              — rate запросов
+#   kube_pod_status_phase{namespace="lab"}          — фазы подов (kube-state-metrics)
+#   node_memory_MemAvailable_bytes                  — память нод (node-exporter)
+kill %1 2>/dev/null
+```
+
+**Контрольные вопросы:**
+1. Чем counter отличается от gauge и зачем `rate()`?
+2. Что вернёт `up` и как найти упавший таргет?
+3. Как агрегировать метрику по namespace через `by`?
+
+---
+
+## Часть 3: ServiceMonitor — подключить своё приложение
+
+### Теория для изучения перед частью
+
+- Prometheus-operator управляется через CRD: **ServiceMonitor** (скрейпить
+  Service), **PodMonitor** (скрейпить поды напрямую), **PrometheusRule** (алерты/
+  recording). Объявил CRD — оператор сам перенастроил Prometheus.
+- **Важно:** Prometheus выбирает ServiceMonitor по `serviceMonitorSelector`
+  (у kube-prometheus-stack — `release: kps`). Нет нужного label → таргета нет.
+
+---
+
+**Цель:** подключить demo-приложение к Prometheus.
+
+**Ресурсы:** `manifests/app.yaml` + `servicemonitor.yaml` + `prometheusrule.yaml`.
+
+---
+
+### 3.1 ServiceMonitor → таргет
+
+```bash
+kubectl -n lab apply -f manifests/app.yaml
+kubectl -n lab rollout status deploy/metrics-app --timeout=120s
+kubectl -n lab apply -f manifests/servicemonitor.yaml manifests/prometheusrule.yaml
+
+# Через ~30с таргет metrics-app появится UP:
+kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-prometheus 9090:9090 &
+sleep 3
+curl -s 'http://localhost:9090/api/v1/query?query=up{job="metrics-app"}' | grep -o '"value":\[[^]]*\]'
+# "value":[...,"1"]   <- наш таргет скрейпится
+kill %1 2>/dev/null
+```
+
+**Контрольные вопросы:**
+1. Что делает ServiceMonitor и кто его «исполняет»?
+2. Почему ServiceMonitor нужен label `release: kps`?
+3. Чем PodMonitor отличается от ServiceMonitor?
+
+---
+
+## Часть 4: Grafana и алерты
+
+### Теория для изучения перед частью
+
+- **Grafana** строит дашборды на основе datasource (Prometheus уже подключён в
+  стеке) — kube-prometheus-stack привозит готовые дашборды (ноды, поды, кластер).
+- **Alertmanager** принимает сработавшие алерты от Prometheus и маршрутизирует
+  (группировка, заглушки, получатели: Slack/email/PagerDuty).
+- **PrometheusRule** содержит `alert` (условие + `for` + labels/annotations) и
+  `record` (предвычисленные ряды).
+
+---
+
+### 4.1 Grafana
+
+```bash
+kubectl -n monitoring port-forward svc/kps-grafana 3000:80 &
+# http://localhost:3000  (admin / admin) -> Dashboards: Kubernetes / Compute Resources
+kill %1 2>/dev/null
+```
+
+### 4.2 Алерт
+
+```bash
+# Правило MetricsAppDown уже применено (prometheusrule.yaml). Проверим, что
+# Prometheus его видит (Status -> Rules или API):
+kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-prometheus 9090:9090 &
+sleep 2
+curl -s 'http://localhost:9090/api/v1/rules' | grep -o 'MetricsAppDown' | head -1
+kill %1 2>/dev/null
+# Если уронить metrics-app (replicas=0) -> через 1м алерт перейдёт в Firing.
+```
+
+**Контрольные вопросы:**
+1. Откуда Grafana берёт данные и что такое datasource?
+2. Что делает Alertmanager после срабатывания алерта в Prometheus?
+3. Из чего состоит правило `alert` и зачем поле `for`?
+
+---
+
+## Часть 5: Troubleshooting
+
+### Инцидент 1: таргет не появляется (ServiceMonitor без `release` label)
+
+Разобран в `broken/scenario-01/`. Суть: Prometheus берёт ServiceMonitor только с
+label `release: kps`; без него таргета нет. Лечение —
+`kubectl -n lab label servicemonitor metrics-app release=kps`.
+
+### Инцидент 2: таргет есть, но `up == 0` (NetworkPolicy блокирует scrape)
+
+Самый коварный: таргет ВИДЕН в Prometheus, но `up{job="metrics-app"} == 0` —
+скрейп не доходит. На кластере с enforced NetworkPolicy (Calico) частая причина —
+`default-deny` в namespace приложения: Prometheus (под из `monitoring`) не может
+достучаться до `/metrics`. Лечение — разрешить ingress к приложению от namespace
+`monitoring`:
+
+```yaml
+# ingress к metrics-app от подов из monitoring
+spec:
+  podSelector: { matchLabels: { app: metrics-app } }
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: monitoring } }
+    ports: [{ protocol: TCP, port: 8080 }]
+```
+
+> Проверено вживую: пока в `lab` висел `default-deny` из модуля 15, `up` был `0`;
+> после снятия политик (или добавления allow от `monitoring`) — `up` стал `1`.
+
+### Инцидент 3: PromQL даёт пустой результат
+
+```bash
+# Частые причины: опечатка в имени метрики/label, метрика ещё не собрана,
+# неверный job. Проверить, какие вообще метрики есть:
+# в UI: начните вводить имя — автодополнение; или /api/v1/label/__name__/values
+```
+
+**Контрольные вопросы:**
+1. Таргет не появился — где смотреть `serviceMonitorSelector` и что добавить?
+2. PromQL пуст — три возможные причины?
+3. Как узнать список доступных метрик?
+
+---
+
+## Проверка модуля
+
+```bash
+kubectl -n lab apply -f manifests/app.yaml
+kubectl -n lab apply -f manifests/servicemonitor.yaml
+kubectl -n lab rollout status deploy/metrics-app --timeout=120s
+
+bash verify/verify.sh
+# [OK] kube-prometheus-stack present (ns monitoring)
+# [OK] module 17 verified
+```
+
+`verify.sh`: namespace `lab` → `metrics-app` готов → есть `ServiceMonitor/metrics-app`
+→ установлен kube-prometheus-stack (ns monitoring + Prometheus). Если стек не
+установлен — мягкий `[WARN]`.
+
+---
+
+## Финальная карта ресурсов модуля
+
+| Ресурс | Что демонстрирует |
+|--------|-------------------|
+| kube-prometheus-stack (ns monitoring) | Prometheus/Grafana/Alertmanager/exporters |
+| `metrics-app` (Deployment+Service) | приложение, экспортящее `/metrics` |
+| `metrics-app` (ServiceMonitor) | декларативное подключение к Prometheus |
+| `metrics-app-rules` (PrometheusRule) | recording-rule + alert MetricsAppDown |
+
+---
+
+## Теоретические вопросы (итоговые)
+
+1. Опишите архитектуру kube-prometheus-stack (роль каждого компонента).
+2. Чем counter/gauge/histogram отличаются и какие функции PromQL к ним?
+3. Как ServiceMonitor связывает ваше приложение с Prometheus?
+4. Что делает Alertmanager и чем он отличается от самого Prometheus?
+5. Чем этот стек полнее, чем metrics-server из модуля 08?
+
+---
+
+## Шпаргалка
+
+```bash
+# === Стек ===
+kubectl -n monitoring get pods,svc
+kubectl -n monitoring get prometheus,servicemonitor,prometheusrule -A
+
+# === Доступ ===
+kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-prometheus 9090:9090
+kubectl -n monitoring port-forward svc/kps-grafana 3000:80      # admin/admin
+
+# === PromQL (через API) ===
+curl -s 'http://localhost:9090/api/v1/query?query=up' 
+curl -s 'http://localhost:9090/api/v1/targets' | grep -o '"health":"[a-z]*"'
+
+# === Своё приложение ===
+kubectl -n lab apply -f manifests/                 # app + ServiceMonitor + Rule
+kubectl -n monitoring get servicemonitor -A | grep metrics-app
+
+# === Уборка ===
+kubectl -n lab delete -k manifests/
+# helm uninstall kps -n monitoring   # снести весь стек
+```
+
+---
+
+## Уборка
+
+```bash
+kubectl -n lab delete -k manifests/
+# полностью снести стек (если больше не нужен):
+# helm uninstall kps -n monitoring && kubectl delete ns monitoring
+```

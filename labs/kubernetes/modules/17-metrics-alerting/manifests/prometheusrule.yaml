@@ -1,0 +1,24 @@
+# PrometheusRule — алерты и recording-правила декларативно. Подхватывается
+# оператором по label release=kps (как и ServiceMonitor).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: metrics-app-rules
+  namespace: lab
+  labels:
+    release: kps
+spec:
+  groups:
+  - name: metrics-app
+    rules:
+    # recording rule: суммарный rate запросов по приложению
+    - record: job:http_requests:rate1m
+      expr: sum(rate(http_requests_total{job="metrics-app"}[1m]))
+    # alert: цель metrics-app недоступна > 1 мин
+    - alert: MetricsAppDown
+      expr: up{job="metrics-app"} == 0
+      for: 1m
+      labels: { severity: warning }
+      annotations:
+        summary: "metrics-app target is down"
+        description: "Prometheus не может скрейпить metrics-app более минуты."

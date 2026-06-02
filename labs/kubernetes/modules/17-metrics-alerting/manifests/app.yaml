@@ -1,0 +1,37 @@
+# Demo-приложение, экспортирующее Prometheus-метрики на :8080/metrics
+# (классический prometheus-example-app: отдаёт http_requests_total и пр.).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-app
+  namespace: lab
+  labels: { app: metrics-app }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: metrics-app }
+  template:
+    metadata:
+      labels: { app: metrics-app }
+    spec:
+      containers:
+      - name: app
+        image: quay.io/brancz/prometheus-example-app:v0.5.0
+        ports:
+        - { name: metrics, containerPort: 8080 }
+        securityContext:
+          allowPrivilegeEscalation: false
+        resources:
+          requests: { cpu: 20m, memory: 32Mi }
+          limits: { cpu: 100m, memory: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metrics-app
+  namespace: lab
+  labels: { app: metrics-app }
+spec:
+  selector: { app: metrics-app }
+  ports:
+  - { name: metrics, port: 8080, targetPort: metrics }
