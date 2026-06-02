@@ -1,0 +1,46 @@
+# CustomResourceDefinition — расширяет Kubernetes API своим типом WebApp.
+# После применения `kubectl get webapp` работает так же, как для встроенных типов.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: webapps.lab.example.com
+spec:
+  group: lab.example.com
+  names:
+    kind: WebApp
+    plural: webapps
+    singular: webapp
+    shortNames: ["wa"]
+    categories: ["all"]
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required: ["image", "replicas"]   # валидация: эти поля обязательны
+            properties:
+              image:
+                type: string
+              replicas:
+                type: integer
+                minimum: 1
+                maximum: 10                    # валидация диапазона
+              host:
+                type: string
+          status:
+            type: object
+            properties:
+              availableReplicas:
+                type: integer
+    additionalPrinterColumns:                  # колонки в `kubectl get webapp`
+    - { name: Image, type: string, jsonPath: .spec.image }
+    - { name: Replicas, type: integer, jsonPath: .spec.replicas }
+    - { name: Age, type: date, jsonPath: .metadata.creationTimestamp }
+    subresources:
+      status: {}                               # отдельный /status subresource

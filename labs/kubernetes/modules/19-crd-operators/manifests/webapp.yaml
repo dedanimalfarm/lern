@@ -1,0 +1,10 @@
+# Экземпляр нашего кастомного ресурса (Custom Resource). Валиден по схеме CRD.
+apiVersion: lab.example.com/v1
+kind: WebApp
+metadata:
+  name: my-webapp
+  namespace: lab
+spec:
+  image: nginx:1.27-alpine
+  replicas: 3
+  host: my-webapp.local
