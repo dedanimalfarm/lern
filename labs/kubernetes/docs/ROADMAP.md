@@ -37,7 +37,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 
 | # | Новый модуль | Ключевое | Среда |
 |---|--------------|----------|-------|
-| 11 | **autoscaling** | HPA (по CPU/custom), VPA, Cluster Autoscaler | GKE (autoscaler есть) ✅ |
+| 11 | **autoscaling** ✅ ГОТОВ `c9f0c86` | HPA/VPA/Cluster Autoscaler — прогнан вживую (scale-up 1→5 под нагрузкой) | ✅ |
 | 12 | **resource-management** | PriorityClass, preemption, requests/limits tuning, bin-packing | любой ✅ |
 | 13 | **resilience** | PodDisruptionBudget-паттерны, topologySpreadConstraints, multi-zone, anti-affinity | multi-zone кластер |
 
@@ -46,7 +46,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 | # | Новый модуль | Ключевое | Среда |
 |---|--------------|----------|-------|
 | 14 | **pod-security-admission** | Pod Security Standards, Kyverno/OPA Gatekeeper, ValidatingAdmissionPolicy | любой ✅ |
-| 15 | **network-policy-enforced** | реальный enforcement NetworkPolicy (egress/ingress, default-deny) | нужен Calico/Cilium/Dataplane V2 ⚠️ |
+| 15 | **network-policy-enforced** ✅ ГОТОВ `350f848` | микросегментация web→api→db — прогнан на Kubespray+Calico (web→db заблокировано) | Calico ✅ |
 | 16 | **secrets-management** | encryption-at-rest, external-secrets, sealed-secrets, Vault | GKE + внешний менеджер |
 
 > ⚠️ Модуль 15 не отработает на текущем GKE (без Dataplane V2). Варианты: пересоздать
