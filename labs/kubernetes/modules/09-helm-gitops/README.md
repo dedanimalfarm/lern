@@ -16,9 +16,9 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 helm version --short 2>/dev/null || echo "helm не установлен — поставьте для Части 1"
 
 # Argo CD (Часть 2) опционален: манифесты можно проверить dry-run и без него,
-# но для РЕАЛЬНОГО sync нужен установленный Argo CD:
-#   kubectl create ns argocd
-#   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# но для РЕАЛЬНОГО sync нужен установленный Argo CD. Ставьте пиннутым скриптом
+# (он использует --server-side, иначе большой CRD applicationsets не применится):
+#   bash ../../scripts/bootstrap/06-install-argocd.sh
 kubectl get ns argocd 2>/dev/null || echo "argocd не установлен — dry-run манифестов всё равно сработает"
 ```
 
@@ -113,9 +113,45 @@ kubectl apply --dry-run=client -f gitops/argocd/app.yaml
 # error: no matches for kind "Application" ... => Argo CD не установлен (ок)
 ```
 
-> При установленном Argo CD `kubectl apply -f gitops/argocd/` создаст
-> `Application`, и контроллер сам синхронизирует chart из Git в namespace `lab`
-> (`automated` + `selfHeal` откатывают ручные правки).
+### 2.2 Реальный прогон с Argo CD
+
+```bash
+# 1) Поставить Argo CD (пиннутый, idempotent). ВАЖНО: server-side apply —
+#    CRD applicationsets > 256KB не влезает в last-applied-аннотацию обычного apply.
+bash ../../scripts/bootstrap/06-install-argocd.sh
+# (под капотом: kubectl apply -n argocd --server-side -f .../v3.4.3/manifests/install.yaml)
+
+# 2) Создать AppProject (границы) и Application (что/как синхронизировать)
+kubectl apply -f gitops/argocd/project.yaml   # appproject.argoproj.io/labs
+kubectl apply -f gitops/argocd/app.yaml        # application.argoproj.io/demo-app
+
+# 3) Контроллер сам синхронизирует chart из Git в ns lab (syncPolicy.automated)
+kubectl -n argocd get application demo-app \
+  -o jsonpath='sync={.status.sync.status} health={.status.health.status} rev={.status.sync.revision}{"\n"}'
+# sync=Synced health=Progressing rev=4d8c64b...   <- Synced = состояние совпало с Git
+```
+
+> ✅ **Прогнано на нашем Kubespray-кластере (Argo CD v3.4.3):** Application `demo-app`
+> → **Synced** с ревизии `main`; в ns `lab` появились Deployment/Service/ConfigMap/Ingress
+> прямо из Git. Приложение реально отвечает: `wget -qO- http://demo-app/` →
+> `<title>Welcome to nginx!</title>`.
+
+**selfHeal вживую (откат drift):**
+
+```bash
+# Удаляем управляемый ресурс «руками» — Argo CD вернёт его (selfHeal: true)
+kubectl -n lab delete deploy demo-app
+# через ~10-20с deployment снова есть и Ready=1/1 — контроллер устранил drift:
+kubectl -n lab get deploy demo-app
+```
+
+> **health=Progressing — это НЕ сбой GitOps.** Так помечен Ingress `demo-app`
+> (`ingress.enabled: true` в chart): Argo CD считает Ingress Healthy только когда у
+> него есть `status.loadBalancer.ingress` (адрес), а на кластере нет
+> ingress-controller (см. модуль 04, Часть 3) — адрес не выдаётся, поэтому
+> Progressing. Сам workload Healthy, sync=Synced. Чтобы довести до Healthy —
+> поставьте ingress-controller или `helm.parameters: ingress.enabled=false` в
+> Application. `prune: true` удалит из кластера то, что убрали из Git (полный GitOps).
 
 **Контрольные вопросы:**
 1. Что является source of truth в GitOps и как идёт деплой?
