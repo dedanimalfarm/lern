@@ -14,3 +14,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: lab
+  # syncPolicy ОБЯЗАТЕЛЕН в решении: инцидент — неверный path, но «починка» только
+  # пути дала бы Application БЕЗ автоматизации. Тогда после правки path в Git
+  # ArgoCD не синхронизировался бы сам, а ручные drift'ы не откатывались бы —
+  # это уже не GitOps. Восстанавливаем automated/prune/selfHeal как в эталоне
+  # gitops/argocd/app.yaml (см. README: «КАК — syncPolicy»).
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
