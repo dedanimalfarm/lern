@@ -622,6 +622,18 @@ bash verify/verify.sh
 
 ---
 
+## Практические задания (отработка)
+
+> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+
+1. Сделайте RollingUpdate с `maxSurge=1/maxUnavailable=0`, понаблюдайте смену ReplicaSet, затем `rollout undo`.
+2. CronJob: триггерните Job вручную (`create job --from=cronjob/...`), смените `schedule`, проверьте `concurrencyPolicy`.
+3. Удалите `web-0` StatefulSet — убедитесь, что вернулось ТО ЖЕ имя и подключился ТОТ ЖЕ PVC `data-web-0`.
+4. Добавьте DaemonSet `nodeSelector` на метку и посмотрите, как меняется `DESIRED`.
+5. Запустите Job с `completions: 4, parallelism: 2, completionMode: Indexed`, найдите `JOB_COMPLETION_INDEX` в подах.
+
+---
+
 ## Шпаргалка
 
 ```bash

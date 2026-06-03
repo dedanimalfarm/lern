@@ -286,6 +286,18 @@ bash verify/verify.sh
 
 ---
 
+## Практические задания (отработка)
+
+> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+
+1. Прогоните `cordon → drain --ignore-daemonsets → uncordon` на worker-ноде, наблюдая переезд подов.
+2. Воспроизведите блокировку drain через PDB (`minAvailable: 1`, `replicas: 1`); разблокируйте (maxUnavailable / scale 2).
+3. По SSH на control-plane найдите static-pod манифесты и убедитесь, что etcd — systemd-сервис (а не static-под) на Kubespray.
+4. Посмотрите сроки сертификатов (`kubeadm certs check-expiration`) и объясните, что сломается при истечении kubelet-cert.
+5. Удалите static-под через `kubectl` и объясните, почему он возвращается (mirror-под).
+
+---
+
 ## Шпаргалка
 
 ```bash

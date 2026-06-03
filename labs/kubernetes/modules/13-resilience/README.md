@@ -224,6 +224,18 @@ bash verify/verify.sh
 
 ---
 
+## Практические задания (отработка)
+
+> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+
+1. Разверните приложение с `topologySpreadConstraints` и убедитесь, что реплики на РАЗНЫХ нодах.
+2. Воспроизведите `Pending` с `requiredDuringScheduling` antiAffinity на 2 нодах; смягчите до `preferred`.
+3. Создайте PDB и посчитайте `ALLOWED DISRUPTIONS`; сделайте `drain` и убедитесь, что PDB защищает доступность.
+4. Сравните `minAvailable` и `maxUnavailable` в PDB на одном приложении.
+5. Симулируйте «потерю ноды» (cordon+drain) и проследите, что сервис не упал.
+
+---
+
 ## Шпаргалка
 
 ```bash

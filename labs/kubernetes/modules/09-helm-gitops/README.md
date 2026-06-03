@@ -342,6 +342,18 @@ CD (мягкий `[WARN]`). Итог — `[OK] module 09 verified`.
 
 ---
 
+## Практические задания (отработка)
+
+> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+
+1. Переопределите values через `--set` и `-f`; покажите, что `--set` выигрывает.
+2. Сломайте `source.path` в Argo Application и прочитайте `ComparisonError` в `.status.conditions`.
+3. Проверьте selfHeal: удалите управляемый Deployment руками — Argo вернёт его; найдите событие.
+4. Доведите `demo-app` до `Healthy` (ingress-nginx есть) и сверьте по двум осям `sync`/`health`.
+5. Через `kubectl -n argocd ... -o yaml` найдите `.status.resources[]` и определите «недозревший» ресурс.
+
+---
+
 ## Шпаргалка
 
 ```bash

@@ -352,6 +352,18 @@ bash verify/verify.sh
 
 ---
 
+## Практические задания (отработка)
+
+> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+
+1. Спровоцируйте `CrashLoopBackOff` и достаньте причину из `logs --previous` и `lastState.terminated`.
+2. Соберите «ленту проблем»: `get events --sort-by=.lastTimestamp` + найдите компакцию (`x.. over ..`).
+3. Сравните `kubectl top pods` с `describe node` (Allocated) — объясните разницу «usage vs requests».
+4. Выведите `conditions` пода и Deployment через jsonpath; сопоставьте с порядком созревания пода.
+5. Найдите OOMKilled-под по `lastState.reason` одной командой по всему namespace.
+
+---
+
 ## Шпаргалка
 
 ```bash

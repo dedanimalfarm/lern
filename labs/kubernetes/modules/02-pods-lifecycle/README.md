@@ -615,6 +615,18 @@ endpoints in ns/lab`.
 
 ---
 
+## Практические задания (отработка)
+
+> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+
+1. Соберите под, который уходит в `OOMKilled` (низкий `limits.memory` + нагрузка), подтвердите по `lastState.terminated.reason`.
+2. Init-контейнер: сделайте под, который ЖДЁТ доступности сервиса (`nslookup`/`nc`) перед стартом основного.
+3. Добавьте `startupProbe` «медленному» старту и объясните, чем он спасает Java/ML-приложения от ложного liveness-рестарта.
+4. Создайте 3 пода Guaranteed/Burstable/BestEffort и проверьте `qosClass` каждого (`-o jsonpath`).
+5. Поймайте graceful shutdown: `preStop` + `terminationGracePeriodSeconds`, посмотрите задержку при `delete`.
+
+---
+
 ## Шпаргалка
 
 ```bash

@@ -340,6 +340,18 @@ bash verify/verify.sh
 
 ---
 
+## Практические задания (отработка)
+
+> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+
+1. Подключите своё приложение через ServiceMonitor (label `release: kps`) и найдите его target `up=1`.
+2. Воспроизведите «target не появился» (нет label `release: kps`) и почините.
+3. Напишите PromQL с `rate(counter[5m])` и `histogram_quantile`; покажите разницу instant vs range vector.
+4. Заведите PrometheusRule-алерт с `for: 1m`, уроните приложение и проследите Inactive→Pending→Firing.
+5. Найдите в Grafana дашборд по нодам/подам и сопоставьте с `kubectl top`.
+
+---
+
 ## Шпаргалка
 
 ```bash

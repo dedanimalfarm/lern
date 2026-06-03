@@ -321,6 +321,18 @@ cert-manager — `[WARN]` (Части 1-2 от него не зависят).
 
 ---
 
+## Практические задания (отработка)
+
+> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+
+1. Разведите трафик по host (a/b.lab.local) и по path (с `rewrite-target`); проверьте curl'ом через контроллер.
+2. Сгенерируйте self-signed cert (openssl) + Secret tls и включите HTTPS; убедитесь `curl -v`, что отдаётся ВАШ cert.
+3. cert-manager: повесьте аннотацию `cluster-issuer` на Ingress и убедитесь, что Secret создаётся САМ.
+4. Воспроизведите Ingress без ADDRESS (неверный `ingressClassName`) и почините.
+5. Поймайте отказ admission «host ... already defined», повесив TLS на уже занятый host+path.
+
+---
+
 ## Шпаргалка
 
 ```bash

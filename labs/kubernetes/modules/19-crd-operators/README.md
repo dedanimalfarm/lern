@@ -357,6 +357,18 @@ bash verify/verify.sh
 
 ---
 
+## Практические задания (отработка)
+
+> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+
+1. Создайте CR с нарушением схемы (replicas=99 / без image) и прочитайте отказ admission.
+2. Докажите server-side pruning: добавьте в CR поле вне схемы и убедитесь, что оно вырезано.
+3. Запустите учебный контроллер (`controller/app-controller.sh`) и проверьте reconcile: создайте WebApp → появились Deployment+Service.
+4. Обновите `spec.replicas` у WebApp и убедитесь, что контроллер масштабировал Deployment.
+5. Удалите WebApp и подтвердите каскадное удаление Deployment/Service через `ownerReferences`.
+
+---
+
 ## Шпаргалка
 
 ```bash
