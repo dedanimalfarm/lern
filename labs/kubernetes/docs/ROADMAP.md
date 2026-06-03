@@ -71,7 +71,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 
 | # | Новый модуль | Ключевое | Среда |
 |---|--------------|----------|-------|
-| 22 | **ingress-tls-gateway** | cert-manager, TLS termination, Gateway API | GKE + ingress-controller |
+| 22 | **ingress-tls** ✅ ГОТОВ `938b97e` | L7 host/path routing + TLS termination (ручной + cert-manager) — прогнан на Kubespray (ingress-nginx, HTTPS с self-signed и cert-manager-cert); Gateway API — на будущее | ingress-controller ✅ |
 | 23 | **service-mesh** | Istio/Linkerd: mTLS, traffic shifting, retries, mesh-observability | GKE (вернуть ноды) |
 
 ## Уровень 7 — Delivery & GitOps advanced
