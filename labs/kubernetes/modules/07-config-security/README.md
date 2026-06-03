@@ -39,10 +39,21 @@ kubectl -n lab get serviceaccount default
   образа — один образ, разный конфиг под окружения.
 - **Три способа инъекции:** отдельные env (`valueFrom.configMapKeyRef`), все
   ключи разом (`envFrom.configMapRef`), файлы (`volume` с `configMap`).
-- **Обновление:** значения, проброшенные как **env**, фиксируются на старте
-  контейнера — изменение ConfigMap НЕ долетит без рестарта пода. Через **volume**
-  файлы обновляются в работающем поде (с задержкой), но приложение должно само
-  перечитать.
+
+**env vs volume — что выбрать:**
+
+| | env / envFrom | volume (файлы) |
+|---|---|---|
+| Обновление без рестарта пода | ✗ фиксируется на старте | ✓ файлы обновляются (~до минуты) |
+| Что видит приложение | переменные окружения | файлы (нужно перечитать самому) |
+| Удобно для | флаги, URL, мелкие значения | большие/целые файлы (`nginx.conf`, сертификаты) |
+| Атомарность обновления | — | ✓ (k8s меняет через symlink-swap, нет «полу-обновления») |
+| Риск утечки | env видны в дочерних процессах/`inspect` | чуть лучше изолированы |
+
+- **Лимит и иммутабельность.** ConfigMap (и Secret) ≤ **1 MiB** (ограничение
+  объекта в etcd) — большие файлы туда не класть. `immutable: true` запрещает
+  правки (только пересоздать) и РАЗГРУЖАЕТ kube-apiserver: kubelet перестаёт
+  следить за изменениями (полезно при тысячах подов).
 
 ---
 
@@ -90,6 +101,17 @@ kubectl -n lab exec deploy/config-demo -- env | grep -E "APP_MODE|FEATURE_FLAG|L
 - **Реальная защита:** RBAC на `secrets`, encryption-at-rest в etcd
   (EncryptionConfiguration), внешние менеджеры (Vault, Cloud Secret Manager),
   не коммитить Secret в git.
+
+- **`data` vs `stringData` при создании.** `data` — значения уже в base64 (кодируешь
+  сам). `stringData` — значения ПЛЕЙН-текстом, apiserver сам закодирует при
+  сохранении (удобно писать руками); поле write-only — в `get -o yaml` вернётся
+  уже как `data` (base64).
+
+- **Почему Secret-as-env рискованнее Secret-as-volume.** Значение в env:
+  наследуется ДОЧЕРНИМИ процессами; видно в `/proc/<pid>/environ`; всплывает в
+  `crictl/docker inspect` и часто в крэш-дампах/логах приложения. Том с Secret
+  изолирован лучше (только файл, права 0400, можно `defaultMode`). Для самого
+  чувствительного — монтировать томом, не пихать в env.
 
 ---
 
@@ -142,6 +164,32 @@ kubectl -n lab get secret app-secret-lab -o jsonpath='{.data.PASSWORD}' | base64
   пользователь, группа). Право = `apiGroups` × `resources` × `verbs`.
 - **Least privilege:** выдавать минимум — конкретные verbs на конкретные ресурсы
   в конкретном namespace. `*` на всё — антипаттерн.
+
+**Цепочка авторизации пода (кто на что имеет право):**
+
+```
+Pod (spec.serviceAccountName: pod-reader)
+   │  работает от
+   ▼
+ServiceAccount/pod-reader ──(subject)──> RoleBinding ──(roleRef)──> Role
+                                                                      │
+            ЗАПРОС к API проверяется: subject есть в binding? ◄───────┤
+            роль разрешает verb на resource в apiGroup?               │
+                                                                      ▼
+                                   rules: apiGroups[""] × resources["pods"] × verbs[get,list,watch]
+```
+
+**Дефолтные ClusterRole (агрегированные, есть в любом кластере) — не изобретать своё:**
+
+| ClusterRole | Что даёт | Кому |
+|-------------|----------|------|
+| `view` | read-only почти всё в ns, **КРОМЕ secrets** | аудиторы, read-дашборды |
+| `edit` | read/write workloads (deploy/svc/cm/secret), **НЕ** RBAC/quota | разработчики |
+| `admin` | `edit` + управление Role/RoleBinding/quota В ns | владелец namespace |
+| `cluster-admin` | **ВСЁ** в кластере (god-mode) | только админы кластера |
+
+> Привязал `view`/`edit`/`admin` к SA через RoleBinding — и не пишешь правила
+> руками. `cluster-admin` через ClusterRoleBinding — крайне осторожно.
 
 ---
 
@@ -196,7 +244,25 @@ kubectl -n lab auth can-i --list --as=system:serviceaccount:lab:pod-reader | gre
   `capabilities` (drop ALL), `seccompProfile`.
 - **Pod Security Standards:** `privileged` (без ограничений), `baseline`
   (разумный минимум), `restricted` (жёстко: non-root, drop caps, RO fs). Включаются
-  лейблами на namespace (`pod-security.kubernetes.io/enforce`).
+  лейблами на namespace (`pod-security.kubernetes.io/enforce`). Полевое сравнение
+  профилей и принудительный enforce — в модуле 14 (PSA + ValidatingAdmissionPolicy).
+
+**Паттерн capabilities «drop ALL + добавить минимум»** (требование `restricted`):
+
+```yaml
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    drop: ["ALL"]                  # снять ВСЕ линукс-capability (даже у root в контейнере)
+    add:  ["NET_BIND_SERVICE"]     # вернуть ТОЛЬКО нужное (напр. bind на порт <1024)
+  seccompProfile: { type: RuntimeDefault }
+```
+
+> Linux capabilities дробят всемогущество root на ~40 флагов (`NET_ADMIN`,
+> `SYS_TIME`, …). Контейнеру почти всегда нужно 0-1 из них — поэтому безопасный
+> дефолт: снять ВСЕ, потом добавить точечно. `drop:[ALL]` сильнее, чем
+> `runAsNonRoot`: ограничивает даже процессы, что всё же стартовали от root.
 
 ---
 
@@ -330,9 +396,11 @@ bash verify/verify.sh
 3. Покажите одной командой, что base64 в Secret обратим.
 
 ### Блок 2: RBAC
-4. Опишите цепочку SA → (Cluster)Role → (Cluster)RoleBinding.
+4. Опишите цепочку Pod → SA → RoleBinding → Role (где проверяется право?).
 5. Как `auth can-i --as=...` помогает аудировать права?
 6. Чем опасен `*` в RBAC и как выглядит least privilege?
+7. Назовите дефолтные ClusterRole view/edit/admin — что даёт каждый и почему
+   `view` НЕ включает secrets?
 
 ### Блок 3: securityContext
 7. Что гарантирует и чего НЕ гарантирует `runAsNonRoot: true`?
