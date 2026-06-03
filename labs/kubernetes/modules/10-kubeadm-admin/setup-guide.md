@@ -166,14 +166,22 @@ kubeadm join 10.130.0.10:6443 --token bjm5jo.nak9kc6lsljurn1a \
 ```bash
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) /etc/kubernetes/admin.conf
-export KUBECONFIG=/etc/kubernetes/admin.conf
+# chown именно КОПИИ ($HOME/.kube/config), а НЕ системного /etc/kubernetes/admin.conf:
+# системный файл должен оставаться root:root 0600 — его читают компоненты
+# control-plane (apiserver/kubelet через kubeadm). Сменив его владельца на обычного
+# пользователя, вы и ослабляете доступ к кластеру (любой $USER читает админ-кредлы),
+# и расходитесь с эталонной инструкцией kubeadm. kubectl по умолчанию берёт
+# ~/.kube/config, поэтому отдельный `export KUBECONFIG=...` здесь не нужен.
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
 19. Устанавливаем сетевой плагин Calico для поддержки сетей в кластере
 
 ```bash
-kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+# URL запиннен на конкретную версию: домен docs.projectcalico.org устарел
+# (301 -> архивное зеркало) и был непиннутым. Берём манифест прямо из репозитория
+# проекта по тегу версии — воспроизводимо и не зависит от редиректов.
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/calico.yaml
 ```
 
 20. Проверяем состояние узлов кластера
