@@ -204,10 +204,51 @@ kubectl -n monitoring get pods | grep operator
 # Prometheus. Это reconcile в действии (вы это видели в модуле 17).
 ```
 
+### 3.2 Свой контроллер для WebApp (reconcile вживую)
+
+CRD `WebApp` сам по себе ничего не разворачивает. Сделаем его «живым»: учебный
+контроллер `controller/app-controller.sh` (reconcile-петля на `kubectl`+`jq`, без
+kopf/controller-runtime) для каждого `WebApp X` создаёт `Deployment X-deploy`
+(образ/реплики из `spec`) + `Service X-svc`, пишет `status.availableReplicas`, а на
+созданные объекты вешает `ownerReferences` → их КАСКАДНО снесёт GC при удалении CR.
+
+```bash
+# 1) Запустить контроллер на control-машине (использует текущий KUBECONFIG)
+bash controller/app-controller.sh &          # Ctrl+C / kill — остановить
+#    [webapp-controller] reconciled my-webapp: my-webapp-deploy(replicas=3,...) + my-webapp-svc
+
+# 2) Создать новый CR — контроллер сам развернёт Deployment+Service
+kubectl apply -f - <<'EOF'
+apiVersion: lab.example.com/v1
+kind: WebApp
+metadata: { name: test-webapp, namespace: lab }
+spec: { replicas: 2, image: nginx:alpine }
+EOF
+kubectl -n lab get deploy test-webapp-deploy svc/test-webapp-svc    # появились сами
+kubectl -n lab get webapp test-webapp -o jsonpath='{.status.availableReplicas}{"\n"}'  # контроллер пишет status
+
+# 3) Изменить spec — reconcile применит к Deployment (level-triggered)
+kubectl -n lab patch webapp test-webapp --type=merge -p '{"spec":{"replicas":3}}'
+kubectl -n lab get deploy test-webapp-deploy -w     # реплики -> 3
+
+# 4) Удалить CR — Deployment и Service уйдут САМИ (ownerReferences -> GC)
+kubectl -n lab delete webapp test-webapp
+kubectl -n lab get deploy,svc -l app=test-webapp    # пусто
+```
+
+> ✅ **Прогнано на Kubespray:** create → `test-webapp-deploy`(2)+`test-webapp-svc`;
+> `replicas:3` → масштаб до 3; смена `image` → обновился Deployment; delete CR →
+> deploy+svc снесены каскадно (через `ownerReferences`, см. теорию 3.x). Это и есть
+> оператор-паттерн в миниатюре. **Прод-версия:** запускать контроллер как Pod в
+> кластере с ServiceAccount+RBAC (на `webapps`,`deployments`,`services`) и
+> использовать `--watch`/informers вместо poll; писать на Go (controller-runtime/
+> Kubebuilder) или Python (kopf).
+
 **Контрольные вопросы:**
 1. Чем CRD без контроллера отличается от оператора?
 2. Что такое reconcile loop и какие три шага он делает?
-3. Приведите два реальных оператора и что они автоматизируют.
+3. Как `ownerReferences` обеспечивают удаление Deployment/Service при удалении CR?
+4. Приведите два реальных оператора и что они автоматизируют.
 
 ---
 
