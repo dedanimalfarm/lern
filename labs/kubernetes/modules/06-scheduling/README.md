@@ -24,10 +24,13 @@ kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
 упадёт. Выполните перед развёртыванием:
 
 ```bash
-# Запомним имена двух нод
-NODE_A=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
-NODE_B=$(kubectl get nodes -o jsonpath='{.items[1].metadata.name}')
-echo "NODE_A=$NODE_A  NODE_B=$NODE_B"
+# Запомним имена двух WORKER-нод. ВАЖНО: исключаем control-plane — на ней по
+# умолчанию стоит taint node-role.kubernetes.io/control-plane:NoSchedule, и под
+# без toleration туда НЕ сядет. Без фильтра `items[0]` часто = control-plane
+# (так на нашем Kubespray: items[0]=k8s-cp-1) -> select-by-label повис бы в Pending.
+NODE_A=$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane' -o jsonpath='{.items[0].metadata.name}')
+NODE_B=$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane' -o jsonpath='{.items[1].metadata.name}')
+echo "NODE_A=$NODE_A  NODE_B=$NODE_B"   # обе должны быть worker-нодами (не *-cp-*)
 
 # 1) label disktype=ssd — нужен для select-by-label (nodeSelector)
 kubectl label node "$NODE_A" disktype=ssd --overwrite

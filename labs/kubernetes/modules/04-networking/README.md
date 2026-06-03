@@ -40,10 +40,13 @@ kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
 ## Стартовая проверка
 
 ```bash
-# CoreDNS — резолвер кластера (Часть 2 на него опирается)
-kubectl -n kube-system get svc kube-dns
-# NAME       TYPE        CLUSTER-IP   PORT(S)
-# kube-dns   ClusterIP   10.96.0.10   53/UDP,53/TCP   <- адрес DNS кластера
+# CoreDNS — резолвер кластера (Часть 2 на него опирается). ВНИМАНИЕ: имя Service
+# отличается по дистрибутивам: kubeadm/kind/GKE — `kube-dns` (legacy-алиас), а
+# Kubespray — `coredns`. Поэтому ищем по СТАБИЛЬНОЙ метке k8s-app=kube-dns:
+kubectl -n kube-system get svc -l k8s-app=kube-dns
+# NAME      TYPE        CLUSTER-IP   PORT(S)
+# coredns   ClusterIP   10.233.0.3   53/UDP,53/TCP,9153/TCP   <- адрес DNS кластера
+# (на kubeadm/GKE строка была бы `kube-dns ... 10.96.0.10`)
 
 # Какой CNI и умеет ли он NetworkPolicy (важно для Части 4)
 kubectl -n kube-system get pods | grep -E "calico|cilium|netd|dataplane" || \
@@ -130,7 +133,8 @@ kubectl -n kube-system get ds -l k8s-app=kube-proxy 2>/dev/null | head -2
 
 ### Теория для изучения перед частью
 
-- **CoreDNS** (Service `kube-dns`, обычно `10.96.0.10`) резолвит имена сервисов:
+- **CoreDNS** (Service `kube-dns` на kubeadm/GKE, `coredns` на Kubespray; метка
+  `k8s-app=kube-dns` общая) резолвит имена сервисов:
   `<svc>.<ns>.svc.cluster.local` → ClusterIP.
 - **Search domains.** В `/etc/resolv.conf` пода прописаны суффиксы
   (`<ns>.svc.cluster.local`, `svc.cluster.local`, `cluster.local`), поэтому
@@ -159,14 +163,18 @@ kubectl -n lab run dnscheck --image=busybox:1.36 --restart=Never -i --rm -- \
 ### 2.2 Search domains и короткие имена
 
 ```bash
-# Изнутри пода в ns lab короткого имени достаточно — сработают search-домены
+# Изнутри пода в ns lab короткого имени достаточно — сработают search-домены.
+# Берём именно успешный ответ через grep (НЕ `tail -3`: busybox-nslookup из-за
+# ndots:5 перебирает ВСЕ search-домены, и в хвосте обычно стоят NXDOMAIN от лишних
+# доменов — на облачных нодах к ним добавляются ещё и *.internal провайдера).
 kubectl -n lab run dnscheck --image=busybox:1.36 --restart=Never -i --rm -- \
-  sh -c 'cat /etc/resolv.conf; echo ---; nslookup net-demo | tail -3'
-# nameserver 10.96.0.10
-# search lab.svc.cluster.local svc.cluster.local cluster.local
+  sh -c 'cat /etc/resolv.conf; echo ---; nslookup net-demo 2>&1 | grep -A1 "net-demo.lab.svc"'
+# nameserver 169.254.25.10            <- на Kubespray это nodelocaldns (на kubeadm/GKE 10.96.0.10)
+# search lab.svc.cluster.local svc.cluster.local cluster.local ...
 # options ndots:5
 # ---
-# Name: net-demo.lab.svc.cluster.local   <- короткое имя достроилось до FQDN
+# Name:    net-demo.lab.svc.cluster.local   <- короткое имя достроилось до FQDN
+# Address: 10.233.x.y                        <- ClusterIP сервиса
 ```
 
 **Контрольные вопросы:**
