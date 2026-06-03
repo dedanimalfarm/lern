@@ -7,8 +7,12 @@ source "$ROOT_DIR/scripts/verify/helpers.sh"
 need_bin kubectl
 require_namespace lab-restricted
 
-# namespace должен ПРИНУДИТЕЛЬНО применять restricted
-ENF=$(kubectl get ns lab-restricted -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' 2>/dev/null || true)
+# namespace должен ПРИНУДИТЕЛЬНО применять restricted.
+# go-template + index с КАВЫЧКАМИ-ключом портабельнее jsonpath: ключ метки содержит
+# точки (pod-security.kubernetes.io/enforce), а экранирование `\.` в jsonpath-пути
+# ведёт себя по-разному между версиями kubectl/шеллами. index трактует ключ как
+# строковый литерал — без экранирования. Отсутствует метка -> "<no value>" (тоже != restricted).
+ENF=$(kubectl get ns lab-restricted -o go-template='{{index .metadata.labels "pod-security.kubernetes.io/enforce"}}' 2>/dev/null || true)
 [[ "$ENF" == "restricted" ]] || fail "lab-restricted enforce='$ENF', expected 'restricted'"
 
 # соответствующий под должен быть запущен
