@@ -251,14 +251,20 @@ spec:
 ```bash
 kubectl -n lab apply -f manifests/ingress/ingress.yaml
 kubectl -n lab get ingress net-demo
-# NAME       CLASS   HOSTS            ADDRESS        PORTS
-# net-demo   nginx   net-demo.local   <зависит>      80
+# NAME       CLASS   HOSTS            ADDRESS      PORTS
+# net-demo   nginx   net-demo.local   10.10.0.4    80     <- ADDRESS = internal-IP ноды (наш ingress-nginx)
 ```
 
-> ADDRESS появится, ТОЛЬКО если в кластере есть ingress-controller класса
-> `nginx`. На «голом» GKE его нет (там класс `gce`) — Ingress будет без адреса.
-> Поставить контроллер: `helm install ingress-nginx ingress-nginx/ingress-nginx`.
-> Проверка после получения адреса: `curl -H 'Host: net-demo.local' http://<ADDRESS>/`.
+> ADDRESS появится, ТОЛЬКО если в кластере есть ingress-controller класса `nginx`.
+> У нас он установлен (`scripts/bootstrap/03-install-ingress.sh` — ingress-nginx
+> baremetal/NodePort с `--report-node-internal-ip-address`), поэтому ADDRESS =
+> internal-IP ноды контроллера. На «голом» GKE класс был бы `gce`; без контроллера
+> Ingress остаётся без адреса. Проверка маршрутизации (через NodePort контроллера):
+> ```bash
+> NP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.spec.ports[0].nodePort}')
+> # из пода: wget -qO- --header 'Host: net-demo.local' http://ingress-nginx-controller.ingress-nginx/
+> # -> Welcome to nginx; чужой Host -> 404 (default backend). Снаружи нужен firewall на NodePort.
+> ```
 
 **Контрольные вопросы:**
 1. Чем NodePort отличается от LoadBalancer по способу внешнего доступа?

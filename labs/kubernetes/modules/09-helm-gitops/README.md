@@ -198,13 +198,14 @@ kubectl apply -f gitops/argocd/app.yaml        # application.argoproj.io/demo-ap
 # 3) Контроллер сам синхронизирует chart из Git в ns lab (syncPolicy.automated)
 kubectl -n argocd get application demo-app \
   -o jsonpath='sync={.status.sync.status} health={.status.health.status} rev={.status.sync.revision}{"\n"}'
-# sync=Synced health=Progressing rev=4d8c64b...   <- Synced = состояние совпало с Git
+# sync=Synced health=Healthy rev=<sha>...   <- Synced = совпало с Git; Healthy = все ресурсы здоровы
 ```
 
 > ✅ **Прогнано на нашем Kubespray-кластере (Argo CD v3.4.3):** Application `demo-app`
 > → **Synced** с ревизии `main`; в ns `lab` появились Deployment/Service/ConfigMap/Ingress
 > прямо из Git. Приложение реально отвечает: `wget -qO- http://demo-app/` →
-> `<title>Welcome to nginx!</title>`.
+> `<title>Welcome to nginx!</title>`. С установленным ingress-nginx Ingress
+> получает ADDRESS (internal-IP ноды), и Application становится **Healthy**.
 
 **selfHeal вживую (откат drift):**
 
@@ -215,13 +216,15 @@ kubectl -n lab delete deploy demo-app
 kubectl -n lab get deploy demo-app
 ```
 
-> **health=Progressing — это НЕ сбой GitOps.** Так помечен Ingress `demo-app`
-> (`ingress.enabled: true` в chart): Argo CD считает Ingress Healthy только когда у
-> него есть `status.loadBalancer.ingress` (адрес), а на кластере нет
-> ingress-controller (см. модуль 04, Часть 3) — адрес не выдаётся, поэтому
-> Progressing. Сам workload Healthy, sync=Synced. Чтобы довести до Healthy —
-> поставьте ingress-controller или `helm.parameters: ingress.enabled=false` в
-> Application. `prune: true` удалит из кластера то, что убрали из Git (полный GitOps).
+> **Про health Ingress.** Argo CD считает Ingress Healthy только когда у него есть
+> `status.loadBalancer.ingress` (ADDRESS). У нас стоит **ingress-nginx** (baremetal,
+> с `--report-node-internal-ip-address`, см. `scripts/bootstrap/03-install-ingress.sh`),
+> поэтому Ingress `demo-app` получает internal-IP ноды и Application — `Healthy`.
+> ⚠️ Если ingress-controller НЕ установлен (или это cloud-вариант с LB в `<pending>`),
+> Ingress останется без адреса, и Application честно зависнет в `Progressing` — это НЕ
+> сбой GitOps (`sync=Synced`, workload Healthy), а лишь «недозревший» Ingress. Тогда —
+> поставить контроллер или `helm.parameters: ingress.enabled=false`.
+> `prune: true` удалит из кластера то, что убрали из Git (полный GitOps).
 
 **Контрольные вопросы:**
 1. Что является source of truth в GitOps и как идёт деплой?
