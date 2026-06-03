@@ -1,0 +1,17 @@
+# Заполняет CPU целевой ноды. 3 реплики x 300m = 900m. Вместе с системными
+# requests (~375m) почти исчерпывают 1400m allocatable -> места для high-prio нет.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: lab-low-app, namespace: lab }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: lab-low-app } }
+  template:
+    metadata: { labels: { app: lab-low-app } }
+    spec:
+      priorityClassName: lab-low
+      nodeSelector: { lab-prio: target }       # запин на размеченную ноду (детерминизм)
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources: { requests: { cpu: 300m }, limits: { cpu: 300m } }

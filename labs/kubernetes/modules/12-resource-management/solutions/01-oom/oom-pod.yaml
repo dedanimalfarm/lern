@@ -1,0 +1,13 @@
+# РЕШЕНИЕ: limits.memory подняты до реального footprint (256Mi > 100Mi нагрузки) ->
+# контейнер укладывается в лимит и работает до конца timeout (Completed).
+apiVersion: v1
+kind: Pod
+metadata: { name: mem-hog, namespace: lab }
+spec:
+  restartPolicy: Never
+  containers:
+  - name: hog
+    image: polinux/stress:1.0.4
+    command: ["stress"]
+    args: ["--vm","1","--vm-bytes","100M","--vm-hang","0","--timeout","30s"]
+    resources: { requests: { memory: 64Mi }, limits: { memory: 256Mi } }

@@ -1,0 +1,30 @@
+# Три QoS-класса. Класс назначается АВТОМАТИЧЕСКИ по requests/limits:
+#  Guaranteed  — requests == limits по ВСЕМ ресурсам и контейнерам;
+#  Burstable   — заданы, но не равны (или только часть);
+#  BestEffort  — requests/limits НЕ заданы вовсе.
+# При нехватке памяти на ноде kubelet выселяет в порядке BestEffort -> Burstable -> Guaranteed.
+apiVersion: v1
+kind: Pod
+metadata: { name: qos-guaranteed, namespace: lab, labels: { demo: qos } }
+spec:
+  containers:
+  - name: c
+    image: nginx:1.27-alpine
+    resources: { requests: { cpu: 100m, memory: 64Mi }, limits: { cpu: 100m, memory: 64Mi } }
+---
+apiVersion: v1
+kind: Pod
+metadata: { name: qos-burstable, namespace: lab, labels: { demo: qos } }
+spec:
+  containers:
+  - name: c
+    image: nginx:1.27-alpine
+    resources: { requests: { cpu: 50m, memory: 32Mi }, limits: { cpu: 200m, memory: 128Mi } }
+---
+apiVersion: v1
+kind: Pod
+metadata: { name: qos-besteffort, namespace: lab, labels: { demo: qos } }
+spec:
+  containers:
+  - name: c
+    image: nginx:1.27-alpine

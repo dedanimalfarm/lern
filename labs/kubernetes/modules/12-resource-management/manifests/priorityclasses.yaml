@@ -1,0 +1,16 @@
+# PriorityClass задаёт ВАЖНОСТЬ пода (число): при нехватке места scheduler может
+# ВЫСЕЛИТЬ (preempt) поды с меньшим priority, чтобы запустить под с большим.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: { name: lab-low }
+value: 100
+globalDefault: false
+description: "Низкий приоритет (жертва preemption)"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: { name: lab-high }
+value: 1000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority    # по умолчанию: вытесняет менее приоритетных
+description: "Высокий приоритет (вытесняет lab-low при нехватке места)"

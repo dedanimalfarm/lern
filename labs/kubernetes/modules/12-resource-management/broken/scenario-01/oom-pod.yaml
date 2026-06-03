@@ -1,0 +1,13 @@
+# СЛОМАНО: контейнеру нужно ~100Mi, а limits.memory=32Mi. cgroup убивает процесс
+# при превышении лимита памяти -> OOMKilled (memory НЕсжимаема: не throttle, а kill).
+apiVersion: v1
+kind: Pod
+metadata: { name: mem-hog, namespace: lab }
+spec:
+  restartPolicy: Never
+  containers:
+  - name: hog
+    image: polinux/stress:1.0.4
+    command: ["stress"]
+    args: ["--vm","1","--vm-bytes","100M","--vm-hang","0","--timeout","300s"]
+    resources: { requests: { memory: 32Mi }, limits: { memory: 32Mi } }

@@ -1,0 +1,12 @@
+# Требует 300m на той же ноде, где места уже нет -> scheduler ВЫСЕЛЯЕТ один lab-low
+# под и ставит этот. Видно: high-prio Running, один lab-low-app -> Pending.
+apiVersion: v1
+kind: Pod
+metadata: { name: lab-high-pod, namespace: lab, labels: { app: lab-high-pod } }
+spec:
+  priorityClassName: lab-high
+  nodeSelector: { lab-prio: target }
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.9
+    resources: { requests: { cpu: 300m }, limits: { cpu: 300m } }
