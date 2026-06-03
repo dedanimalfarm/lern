@@ -32,12 +32,32 @@ kubectl get nodes -o wide
 - **`cordon`** помечает ноду `SchedulingDisabled` — новые поды на неё не едут,
   но текущие работают.
 - **`drain`** = cordon + аккуратно ВЫСЕЛЯЕТ поды (через Eviction API), уважая
-  `PodDisruptionBudget`. `--ignore-daemonsets` (их не выселить),
-  `--delete-emptydir-data` (подтвердить потерю emptyDir).
+  `PodDisruptionBudget`.
 - **`PodDisruptionBudget` (PDB)** задаёт минимум живых реплик
   (`minAvailable`) / максимум недоступных (`maxUnavailable`). Eviction,
   нарушающий PDB, ОТКЛОНЯЕТСЯ — `drain` будет ждать.
 - **`uncordon`** возвращает ноду в планирование.
+
+**Жизненный цикл `drain` (почему это безопаснее, чем `delete pod`):**
+
+```
+kubectl drain NODE:
+   1. cordon -> SchedulingDisabled (новые поды сюда не едут)
+   2. на КАЖДЫЙ под — Eviction API (не grubый delete!):
+        ├─ DaemonSet-под?      -> пропустить (его всё равно вернёт DS-контроллер)
+        ├─ нарушит PDB?        -> ОТКАЗ -> drain ЖДЁТ и повторяет (не рвёт доступность)
+        └─ ок -> graceful: SIGTERM -> terminationGracePeriodSeconds (30с) -> SIGKILL
+   3. контроллер (Deployment/STS) пересоздаёт под на ДРУГОЙ ноде
+   (нода пуста -> можно ребутать/обновлять ОС/kubelet)
+```
+
+| Флаг `drain` | Зачем |
+|--------------|-------|
+| `--ignore-daemonsets` | DS-поды нельзя выселить (DS вернёт сразу) — пропустить, иначе drain не пойдёт |
+| `--delete-emptydir-data` | подтвердить ПОТЕРЮ данных emptyDir выселяемых подов |
+| `--grace-period=N` | переопределить graceful-таймаут пода |
+| `--force` | ⚠️ выселить и «ничьи» поды (без контроллера) — они НЕ пересоздадутся, пропадут |
+| `--disable-eviction` | ⚠️ delete вместо Eviction API — ИГНОРИРУЕТ PDB (только аварийно) |
 
 ---
 
@@ -87,6 +107,28 @@ kubectl -n lab get pdb
 - В API они видны как «mirror pods» (read-only отражение). Удалить их через
   `kubectl` нельзя — нужно убрать манифест с диска.
 
+| | static pod | обычный pod |
+|---|---|---|
+| Откуда | файл в `/etc/kubernetes/manifests/` на ноде | объект через apiserver (Deployment/…) |
+| Кто запускает | сам **kubelet** (напрямую) | scheduler выбирает ноду, kubelet запускает |
+| Управление | правка файла на хосте | `kubectl`/apiserver |
+| В API | mirror-под (read-only) | полноценный объект |
+| Удаление | убрать файл (kubelet заметит и снесёт) | `kubectl delete` |
+| Имя | `<name>-<nodeName>` (напр. `kube-apiserver-k8s-cp-1`) | `<name>-<hash>` |
+
+> **Chicken-and-egg бутстрапа.** Откуда возьмётся ПЕРВЫЙ `kube-apiserver`, если
+> обычные поды планирует scheduler, который сам общается через apiserver, которого
+> ещё нет? Разрыв круга — **static pods**: kubelet поднимает apiserver/etcd/
+> scheduler/controller-manager ПРЯМО из файлов, без apiserver и scheduler. Так
+> control-plane «бутстрапит сам себя», а уже потом начинает обслуживать обычные поды.
+
+> ⚠️ **Нюанс нашего кластера (Kubespray).** Здесь как mirror-поды видны только
+> `kube-apiserver-k8s-cp-1`, `kube-scheduler-k8s-cp-1`, `kube-controller-manager-k8s-cp-1`
+> — а **etcd запущен systemd-сервисом** (`systemctl status etcd` на cp-ноде), НЕ
+> static-подом, поэтому `etcd.yaml` в `/etc/kubernetes/manifests/` может
+> отсутствовать. Это вариативность дистрибутива: «ванильный» kubeadm держит etcd
+> static-подом, Kubespray по умолчанию — отдельным сервисом.
+
 ---
 
 **Цель (на kubeadm-хосте):** найти static pods и их источник.
@@ -122,6 +164,31 @@ sudo journalctl -u kubelet -n 100 --no-pager
   сертификаты). Они имеют срок (обычно 1 год) и требуют ротации.
 - `kubeadm certs check-expiration` показывает сроки; `kubeadm certs renew`
   обновляет. kubeconfig'и (`/etc/kubernetes/*.conf`) встраивают клиентские сертификаты.
+
+**Каталог PKI (`/etc/kubernetes/pki/`) — кто кому доверяет:**
+
+| Сертификат | Роль | Подписан |
+|------------|------|----------|
+| `ca.crt`/`ca.key` | КОРНЕВОЙ CA кластера | self-signed |
+| `apiserver.crt` | серверный TLS apiserver | `ca` |
+| `apiserver-kubelet-client` | apiserver → kubelet (logs/exec) | `ca` |
+| `etcd/ca` + `etcd/server`/`peer` | ОТДЕЛЬНЫЙ PKI etcd | `etcd/ca` |
+| `apiserver-etcd-client` | apiserver → etcd | `etcd/ca` |
+| `front-proxy-ca` + `front-proxy-client` | aggregation layer (расширения API) | `front-proxy-ca` |
+| клиентские в `*.conf` (`admin.conf`, kubelet) | КТО ходит в apiserver | `ca` |
+
+**Сценарии истечения (что сломается):**
+
+| Истёк | Симптом |
+|-------|---------|
+| `apiserver.crt` | apiserver не отвечает по TLS → `kubectl` падает с x509 |
+| клиентский в `admin.conf` | `kubectl` → `Unauthorized` / x509 |
+| kubelet client cert | нода `NotReady` (kubelet не аутентифицируется к apiserver) |
+| любой etcd cert | apiserver теряет хранилище → кластер «ослеп» |
+
+> Срок по умолчанию — **1 год**. `kubeadm upgrade` авто-ротирует сертификаты —
+> поэтому регулярный upgrade сам спасает от протухания. Вручную:
+> `kubeadm certs renew all` + рестарт static pods (или ребут kubelet).
 
 ---
 
