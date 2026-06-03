@@ -1,0 +1,23 @@
+# «НАИВНОЕ» приложение — типичные анти-паттерны (специально для аудита):
+# :latest, 1 реплика, без resources/probes/securityContext, секрет в открытом env.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: shop, namespace: lab, labels: { app: shop } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: shop } }
+  template:
+    metadata: { labels: { app: shop } }
+    spec:
+      containers:
+      - name: web
+        image: nginx:latest                 # :latest — невоспроизводимо
+        ports: [{ containerPort: 80 }]
+        env:
+        - { name: DB_PASSWORD, value: "PlainTextPass123" }   # секрет в открытом виде
+        # нет resources, нет probes, нет securityContext (root)
+---
+apiVersion: v1
+kind: Service
+metadata: { name: shop, namespace: lab }
+spec: { selector: { app: shop }, ports: [{ port: 80, targetPort: 80 }] }

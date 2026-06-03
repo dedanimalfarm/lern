@@ -1,0 +1,56 @@
+# HARDENED приложение — проходит все 11 критериев аудита.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: shop-html, namespace: lab }
+data: { index.html: "shop OK (hardened)\n" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: shop, namespace: lab, labels: { app: shop } }
+spec:
+  replicas: 2                                   # (1) переживает потерю пода
+  selector: { matchLabels: { app: shop } }
+  template:
+    metadata: { labels: { app: shop } }
+    spec:
+      topologySpreadConstraints:                # (3) разносим по нодам
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector: { matchLabels: { app: shop } }
+      containers:
+      - name: web
+        image: nginxinc/nginx-unprivileged:1.27-alpine   # (7) запиннен + non-root (порт 8080)
+        ports: [{ containerPort: 8080 }]
+        env:
+        - name: DB_PASSWORD                     # (10) секрет через secretKeyRef, не plaintext
+          valueFrom: { secretKeyRef: { name: shop-db, key: password } }
+        readinessProbe: { httpGet: { path: /, port: 8080 }, periodSeconds: 5 }   # (4)
+        livenessProbe:  { httpGet: { path: /, port: 8080 }, periodSeconds: 10 }
+        resources:                              # (5) requests+limits
+          requests: { cpu: 50m, memory: 32Mi }
+          limits:   { cpu: 200m, memory: 64Mi }
+        securityContext:                        # (6) hardening
+          runAsNonRoot: true
+          runAsUser: 101
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: { drop: ["ALL"] }
+          seccompProfile: { type: RuntimeDefault }
+        volumeMounts:                           # ROfs -> пишущие пути на emptyDir
+        - { name: html, mountPath: /usr/share/nginx/html }
+        - { name: cache, mountPath: /var/cache/nginx }
+        - { name: run, mountPath: /var/run }
+        - { name: tmp, mountPath: /tmp }
+      volumes:
+      - { name: html, configMap: { name: shop-html } }
+      - { name: cache, emptyDir: {} }
+      - { name: run, emptyDir: {} }
+      - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: shop, namespace: lab, labels: { app: shop } }
+spec:
+  selector: { app: shop }
+  ports: [{ name: http, port: 80, targetPort: 8080 }]

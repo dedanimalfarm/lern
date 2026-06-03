@@ -1,0 +1,27 @@
+# (9) default-deny + точечные allow (DNS + ingress к shop). Cross-ref модули 04/15.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny, namespace: lab }
+spec: { podSelector: {}, policyTypes: [Ingress, Egress] }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-dns, namespace: lab }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+  - to: [{ ipBlock: { cidr: 169.254.25.10/32 } }]
+    ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+  - to: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }, podSelector: { matchLabels: { k8s-app: kube-dns } } }]
+    ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-shop, namespace: lab }
+spec:
+  podSelector: { matchLabels: { app: shop } }
+  policyTypes: [Ingress]
+  ingress:
+  - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: ingress-nginx } } }, { podSelector: {} }]
+    ports: [{ protocol: TCP, port: 8080 }]

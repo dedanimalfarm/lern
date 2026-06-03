@@ -1,0 +1,9 @@
+# (11) ServiceMonitor — Prometheus собирает метрики. В ПРОДЕ приложение ОБЯЗАНО
+# отдавать /metrics (здесь nginx без exporter — ServiceMonitor существует как
+# критерий аудита; для реальных метрик добавьте nginx-prometheus-exporter sidecar).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata: { name: shop, namespace: lab, labels: { app: shop, release: kps } }
+spec:
+  selector: { matchLabels: { app: shop } }
+  endpoints: [{ port: http, interval: 30s, path: /metrics }]

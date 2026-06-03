@@ -1,0 +1,6 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: shop, namespace: lab }
+spec:
+  minAvailable: 1                    # (2) при drain не уведут обе реплики разом
+  selector: { matchLabels: { app: shop } }
