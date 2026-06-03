@@ -11,6 +11,8 @@
 ## Предварительные требования
 
 ```bash
+# kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
+export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl -n lab delete deploy,svc,hpa,pod --all --ignore-not-found 2>/dev/null
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
 

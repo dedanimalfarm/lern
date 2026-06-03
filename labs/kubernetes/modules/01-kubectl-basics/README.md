@@ -11,6 +11,8 @@
 ## Предварительные требования
 
 ```bash
+# kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
+export KUBECONFIG=/root/.kube/kubespray.conf
 # 1) Рабочий кластер и kubectl, который в него смотрит.
 #    Подойдёт любой кластер, который РЕАЛЬНО запускает контейнеры:
 #    kind, minikube, k3s/k3d, Docker Desktop или облачный (GKE/EKS/AKS).

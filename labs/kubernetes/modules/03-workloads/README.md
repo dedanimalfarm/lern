@@ -11,6 +11,8 @@ StatefulSet vs Job» под конкретный сценарий.
 ## Предварительные требования
 
 ```bash
+# kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
+export KUBECONFIG=/root/.kube/kubespray.conf
 # 1) Кластер, который реально запускает контейнеры (kind/minikube/k3s/GKE).
 kubectl version --output=yaml | head -5
 

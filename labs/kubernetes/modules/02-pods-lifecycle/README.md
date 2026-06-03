@@ -11,6 +11,8 @@
 ## Предварительные требования
 
 ```bash
+# kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
+export KUBECONFIG=/root/.kube/kubespray.conf
 # 1) Кластер, который реально запускает контейнеры (kind/minikube/k3s/GKE).
 #    Пробы и OOM требуют настоящего kubelet — нужен реальный запуск контейнеров.
 kubectl version --output=yaml | head -5

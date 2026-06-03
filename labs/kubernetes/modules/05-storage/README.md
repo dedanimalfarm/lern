@@ -15,6 +15,8 @@ storage-подсистемы.
 ## Предварительные требования
 
 ```bash
+# kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
+export KUBECONFIG=/root/.kube/kubespray.conf
 # 1) Рабочий кластер и kubectl, который в него смотрит
 kubectl version
 kubectl cluster-info

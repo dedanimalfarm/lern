@@ -16,6 +16,8 @@
 ## Предварительные требования
 
 ```bash
+# kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
+export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl get nodes -o wide
 # Для Части 1 (drain/PDB) достаточно любого кластера с >=1 нодой.
 # Для Частей 2-3 (static pods, certs) нужен доступ по SSH на control-plane хост.

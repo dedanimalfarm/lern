@@ -11,6 +11,8 @@
 ## Предварительные требования
 
 ```bash
+# kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
+export KUBECONFIG=/root/.kube/kubespray.conf
 helm version --short    # нужен Helm
 kubectl get nodes       # нужны рабочие ноды (стек заметно потребляет RAM)
 ```

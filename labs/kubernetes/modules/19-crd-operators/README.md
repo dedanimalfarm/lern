@@ -11,6 +11,8 @@
 ## Предварительные требования
 
 ```bash
+# kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
+export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl get ns lab >/dev/null 2>&1 || kubectl create ns lab
 kubectl version -o json 2>/dev/null | grep -i gitVersion | head -1
 ```

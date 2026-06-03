@@ -10,6 +10,8 @@ chart, ставите release и читаете причину sync-фейла.
 ## Предварительные требования
 
 ```bash
+# kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
+export KUBECONFIG=/root/.kube/kubespray.conf
 # helm нужен для Части 1
 helm version --short 2>/dev/null || echo "helm не установлен — поставьте для Части 1"
 
