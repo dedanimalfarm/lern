@@ -1,0 +1,46 @@
+# Часть 4: Vault (DEV-режим — НЕ для прода: in-memory, root-токен "root", unseal'ен
+# автоматически) + Postgres (бэкенд для динамических кредов database-engine).
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: vault, namespace: lab, labels: { app: vault } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: vault } }
+  template:
+    metadata: { labels: { app: vault } }
+    spec:
+      containers:
+      - name: vault
+        image: hashicorp/vault:1.18
+        args: ["server","-dev","-dev-listen-address=0.0.0.0:8200"]
+        env:
+        - { name: VAULT_DEV_ROOT_TOKEN_ID, value: "root" }
+        ports: [{ containerPort: 8200 }]
+        securityContext: { capabilities: { add: ["IPC_LOCK"] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: vault, namespace: lab }
+spec: { selector: { app: vault }, ports: [{ port: 8200, targetPort: 8200 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: pg, namespace: lab, labels: { app: pg } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: pg } }
+  template:
+    metadata: { labels: { app: pg } }
+    spec:
+      containers:
+      - name: pg
+        image: postgres:16-alpine
+        env:
+        - { name: POSTGRES_PASSWORD, value: "rootpass" }
+        - { name: POSTGRES_DB, value: "appdb" }
+        ports: [{ containerPort: 5432 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: pg, namespace: lab }
+spec: { selector: { app: pg }, ports: [{ port: 5432, targetPort: 5432 }] }

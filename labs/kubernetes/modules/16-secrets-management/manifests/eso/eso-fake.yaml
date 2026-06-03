@@ -1,0 +1,23 @@
+# Часть 3: External Secrets Operator. SecretStore описывает ВНЕШНИЙ источник
+# (здесь provider `fake` — статичные значения, для демо без реального Vault/cloud).
+# ExternalSecret тянет ключи из источника и СИНХРОНИЗИРУЕТ их в обычный k8s Secret.
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata: { name: fake-store, namespace: lab }
+spec:
+  provider:
+    fake:
+      data:
+      - { key: "/db/username", value: "fake-user" }
+      - { key: "/db/password", value: "fake-pass-123" }
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata: { name: db-from-eso, namespace: lab }
+spec:
+  refreshInterval: 15s
+  secretStoreRef: { name: fake-store, kind: SecretStore }
+  target: { name: db-from-eso }     # сюда ESO положит синхронизированный Secret
+  data:
+  - { secretKey: username, remoteRef: { key: "/db/username" } }
+  - { secretKey: password, remoteRef: { key: "/db/password" } }
