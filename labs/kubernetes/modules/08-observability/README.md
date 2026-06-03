@@ -38,6 +38,22 @@ kubectl top nodes 2>/dev/null && echo "metrics-server: OK" || echo "metrics-serv
   `Available`, `Progressing`) с `status`/`reason`/`message`. Это «итог», а
   events — «история».
 
+- **Компакция events.** Повторяющиеся события (одинаковые `involvedObject` +
+  `reason` + `message`) НЕ плодятся по одному — apiserver их СХЛОПЫВАЕТ: растёт
+  поле `count`, а `firstTimestamp`/`lastTimestamp` держат диапазон. Поэтому в
+  `describe` видно `Warning BackOff 5m (x12 over 8m)` — одно событие со счётчиком,
+  а не 12 строк. TTL по умолчанию ~1ч (`--event-ttl` на apiserver) — events НЕ
+  архив, а быстро тающая лента.
+
+- **Каталог conditions по типам ресурсов** (что смотреть на чём):
+
+| Ресурс | Ключевые conditions |
+|--------|---------------------|
+| Pod | `PodScheduled` → `Initialized` → `ContainersReady` → `Ready` (порядок «созревания») |
+| Deployment | `Available` (есть min реплик), `Progressing` (идёт rollout) |
+| Node | `Ready`, `MemoryPressure`, `DiskPressure`, `PIDPressure` |
+| PVC/PV | не conditions, а `phase`: `Pending`/`Bound`/`Released` |
+
 ---
 
 **Цель:** собрать таймлайн и текущее состояние demo-нагрузки.
@@ -78,6 +94,28 @@ kubectl -n lab describe pod -l app=obs-demo | sed -n '/Events:/,$p'
   `-f` (поток), `-l <selector>` (по подам).
 - **Структурированные логи** (`key=value` или JSON) машинно-разбираемы — проще
   фильтровать и агрегировать.
+
+**Откуда `kubectl logs` берёт данные (путь лога):**
+
+```
+контейнер: stdout/stderr
+   │  пишет
+   ▼
+CRI (containerd) ──> файл на НОДЕ: /var/log/pods/<ns>_<pod>_<uid>/<container>/N.log
+                          │
+   kubectl logs ──> kube-apiserver ──> kubelet (на той ноде) ──> читает этот файл
+```
+
+- **`--previous` (`-p`).** Читает лог ПРЕДЫДУЩЕГО завершённого запуска контейнера
+  (kubelet хранит его до удаления пода/ротации). Нужен при CrashLoop: обычный
+  `logs` покажет НОВЫЙ (уже перезапущенный) контейнер, где причины падения нет.
+  Не сработает, если предыдущего запуска не было или лог уже ротирован/контейнер
+  жил доли секунды (тогда причину берут из `lastState.terminated`, см. Часть 4).
+- **Ограничения `kubectl logs`.** (1) Логи живут С ПОДОМ — удалили под/ноду, логов
+  нет (нет центрального хранилища). (2) Хранится только последняя ротация
+  (`containerLogMaxSize` ~10Mi × `containerLogMaxFiles` ~5). (3) Нет поиска/
+  агрегации по многим подам и времени. Для этого нужен лог-стек (Loki/ELK) —
+  собирает логи с нод в БД ДО того, как под умрёт.
 
 ---
 
@@ -120,6 +158,36 @@ kubectl -n lab logs deploy/obs-demo --tail=20 | grep 'level=info'
 - Для истории/алертов/дашбордов нужен Prometheus + Grafana — metrics-server их не
   заменяет.
 
+**Пайплайн метрик (откуда берётся `kubectl top`):**
+
+```
+kubelet/cAdvisor на КАЖДОЙ ноде (эндпойнт /metrics/resource)
+        │  scrape ~15с
+        ▼
+metrics-server (агрегирует, держит В ПАМЯТИ только последние точки)
+        │  регистрирует Metrics API
+        ▼
+metrics.k8s.io  ──>  kubectl top  /  HPA (Resource-метрики)
+```
+
+**metrics-server vs Prometheus** (часто путают — это РАЗНЫЕ инструменты):
+
+| | metrics-server | Prometheus |
+|---|---|---|
+| Что отдаёт | CPU/RAM здесь-и-сейчас | временные ряды (история) |
+| Хранение | в памяти, последние точки | TSDB на диске (дни/недели) |
+| Метрики | только Resource (CPU/RAM) | любые (app, kube-state, node-exporter) |
+| Запросы | нет, просто значения | PromQL |
+| Потребители | `kubectl top`, HPA | дашборды, алерты, HPA (custom/external) |
+
+**Три уровня Metrics API** (важно для HPA — модуль 11):
+
+| API | Кто реализует | Что меряет | Пример |
+|-----|---------------|------------|--------|
+| `metrics.k8s.io` (Resource) | metrics-server | CPU/RAM подов/нод | `kubectl top`, HPA по CPU |
+| `custom.metrics.k8s.io` (Custom) | Prometheus Adapter | app-метрики на k8s-объектах | HPA по RPS |
+| `external.metrics.k8s.io` (External) | адаптер к внешней системе | вне кластера | HPA по длине очереди SQS |
+
 ---
 
 **Цель:** снять текущую нагрузку.
@@ -151,6 +219,33 @@ kubectl top pods -n lab
 ---
 
 ## Часть 4: Troubleshooting и runbook
+
+### Теория: каталог состояний пода + механика back-off
+
+Большинство инцидентов — это одно из типовых состояний. Распознал → знаешь первую
+команду:
+
+| Состояние | Что значит | Первая команда / где причина |
+|-----------|------------|------------------------------|
+| `Pending` | не запланирован | `describe pod` → Events: `FailedScheduling` (Insufficient cpu/taint) |
+| `ContainerCreating` (надолго) | образ/том/секрет не готовы | `describe pod` → Events (pull/mount/secret) |
+| `ErrImagePull`/`ImagePullBackOff` | образ не тянется | `describe` → имя/тег/registry/доступ |
+| `CrashLoopBackOff` | контейнер падает и рестартует | `logs --previous`; `lastState.terminated` |
+| `CreateContainerConfigError` | нет ConfigMap/Secret или невалид securityContext | `describe pod` → Events |
+| `OOMKilled` (в `lastState`) | превышен `limits.memory` | `lastState.reason=OOMKilled` → поднять limit / чинить утечку |
+| `Completed` / `Error` | контейнер ЗАВЕРШИЛСЯ (exit 0 / ≠0) | `exitCode` (норма для Job; беда для сервиса) |
+| `Terminating` (зависло) | finalizer / долгий graceful | `describe` → `finalizers`, `terminationGracePeriodSeconds` |
+| `Evicted` | вытеснен по давлению ноды | `describe node` → `DiskPressure`/`MemoryPressure` |
+
+- **Back-off у CrashLoop растёт ЭКСПОНЕНЦИАЛЬНО:** kubelet рестартует упавший
+  контейнер через `10s → 20s → 40s → 80s → 160s → 300s` и дальше держит ПОТОЛОК
+  **300с (5 мин)**. Счётчик сбрасывается, если контейнер проработал стабильно
+  ~10 мин. Поэтому `RESTARTS` растёт, а паузы между рестартами всё длиннее.
+- **OOMKilled vs Evicted** (частая путаница): OOMKilled — cgroup убил ОДИН
+  контейнер за превышение `limits.memory` (exit 137), под остаётся; Evicted —
+  kubelet выселил ВЕСЬ под из-за нехватки ресурсов на НОДЕ (node pressure).
+
+---
 
 ### Инцидент 1: `CrashLoopBackOff`
 
@@ -245,10 +340,15 @@ bash verify/verify.sh
 ## Теоретические вопросы (итоговые)
 
 1. Сопоставьте сигналы: events / conditions / logs / metrics — что даёт каждый?
-2. Почему для диагностики нужны все четыре, а не один?
-3. Чем `metrics-server` ограничен против Prometheus?
-4. Как отличить проблему приложения от проблемы ноды/кластера?
-5. Зачем нужен runbook и как он снижает MTTR?
+2. Почему для диагностики нужны все четыре, а не один? Как apiserver схлопывает
+   повторяющиеся events (`count`/`lastTimestamp`)?
+3. Опишите путь лога от stdout до `kubectl logs`. Зачем `--previous` и три
+   ограничения `kubectl logs` (почему нужен Loki/ELK)?
+4. Чем `metrics-server` ограничен против Prometheus? Назовите три уровня Metrics
+   API и кто их реализует.
+5. Как растёт интервал back-off у CrashLoopBackOff (и где потолок)? Чем OOMKilled
+   отличается от Evicted?
+6. Как отличить проблему приложения от проблемы ноды/кластера? Зачем нужен runbook?
 
 ---
 
