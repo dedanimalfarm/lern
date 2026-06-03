@@ -20,8 +20,10 @@ kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
 kubectl top nodes >/dev/null 2>&1 && echo "metrics-server: OK" || echo "metrics-server НЕ готов — HPA по ресурсам не отработает"
 ```
 
-> Для живого прогона нужны рабочие ноды. Если кластер «припаркован» (0 нод),
-> верните их: в `cluster-gke/` — `terraform apply` (node_count=2).
+> Для живого прогона нужны рабочие ноды. Наш Kubespray-кластер «паркуется»
+> остановкой VM (`gcloud compute instances stop k8s-cp-1 k8s-w-1 k8s-w-2
+> --zone us-central1-a`); вернуть — `... instances start ...`, после чего
+> обновить внешние IP в kubeconfig/inventory (`cluster-kubespray/gen-inventory.sh`).
 
 > **Портируемость (не только GKE).** HPA-ядро (объект HPA + scale-up по CPU)
 > работает на ЛЮБОМ кластере, но требует metrics-server:
