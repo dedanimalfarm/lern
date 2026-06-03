@@ -25,7 +25,7 @@ kubectl -n lab get all
 #    создаёт PVC. Проверим, что класс по умолчанию есть:
 kubectl get storageclass
 # NAME                 PROVISIONER             ... DEFAULT
-# standard-rwo (default) pd.csi.storage.gke.io ... true     <- на GKE; на kind — standard
+# local-path (default) rancher.io/local-path   ... true     <- наш Kubespray; на GKE было бы standard-rwo
 ```
 
 > Если default StorageClass нет — Часть 4 (StatefulSet с томами) не привяжет PVC
@@ -38,9 +38,10 @@ kubectl get storageclass
 ```bash
 # Сколько нод — столько Pod создаст DaemonSet (Часть 3)
 kubectl get nodes
-# NAME                 STATUS   ROLES    AGE   VERSION
-# gke-...-b02f         Ready    <none>   1h    v1.35.x
-# gke-...-hj1s         Ready    <none>   1h    v1.35.x   <- 2 ноды => DaemonSet даст 2 Pod
+# NAME       STATUS   ROLES           AGE   VERSION
+# k8s-cp-1   Ready    control-plane   ...   v1.36.1
+# k8s-w-1    Ready    <none>          ...   v1.36.1
+# k8s-w-2    Ready    <none>          ...   v1.36.1   <- DaemonSet даст под на КАЖДУЮ schedulable-ноду
 
 # Какие workload-типы вообще есть в API
 kubectl api-resources | grep -E "deployments|statefulsets|daemonsets|jobs|cronjobs"
@@ -68,6 +69,29 @@ kubectl api-resources | grep -E "deployments|statefulsets|daemonsets|jobs|cronjo
 - **История и откат.** Deployment хранит прошлые ReplicaSet (`revisionHistoryLimit`),
   поэтому `rollout undo` откатывает без пересоздания ресурса. `change-cause`
   (аннотация `kubernetes.io/change-cause`) подписывает ревизию в истории.
+
+**Иерархия владения (ownerReferences) и что делает rollout:**
+
+```
+Deployment/workload-demo  (ты редактируешь ЭТО)
+   │ владеет (ownerReference), по одному RS на версию template
+   ├── ReplicaSet -<hash-v1>   replicas=0   ◄── старая версия, держится для отката
+   └── ReplicaSet -<hash-v2>   replicas=2
+          │ владеет
+          ├── Pod -<hash-v2>-xxxxx
+          └── Pod -<hash-v2>-yyyyy
+
+rollout v1->v2: НОВЫЙ RS поднимается (+maxSurge), старый ужимается (-maxUnavailable),
+                пока новый не станет полным, старый — 0. undo: просто меняет местами.
+```
+
+```yaml
+# стратегия в манифесте Deployment (значения по умолчанию — 25%/25%):
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 25%, maxUnavailable: 25% }
+```
 
 ---
 
@@ -176,6 +200,30 @@ kubectl -n lab get deploy workload-demo \
 - Завершившиеся поды Job НЕ удаляются автоматически (если нет `ttlSecondsAfterFinished`) —
   это нужно, чтобы можно было прочитать их логи.
 
+**Cron-выражение (5 полей `schedule`):**
+
+```
+┌─ минута (0-59)
+│ ┌─ час (0-23)
+│ │ ┌─ день месяца (1-31)
+│ │ │ ┌─ месяц (1-12)
+│ │ │ │ ┌─ день недели (0-6, 0=вс)
+* * * * *
+```
+
+| schedule | Когда |
+|----------|-------|
+| `*/5 * * * *` | каждые 5 минут (наш `print-time-cron`) |
+| `0 * * * *` | в начале каждого часа |
+| `0 3 * * *` | каждый день в 03:00 |
+| `0 0 * * 0` | каждое воскресенье в полночь |
+| `*/15 9-17 * * 1-5` | каждые 15 мин, 9–17ч, пн–пт |
+
+- **Indexed Completion** (`completionMode: Indexed`). Для параллельной обработки с
+  «номерами»: каждый под получает `JOB_COMPLETION_INDEX` (0..completions-1) — удобно
+  раздать шарды/части входа без внешней координации (vs дефолтный `NonIndexed`, где
+  поды равнозначны).
+
 ---
 
 **Цель:** запустить разовый Job и периодический CronJob, прочитать результат.
@@ -243,6 +291,19 @@ kubectl -n lab logs job/cron-manual-1
 - `updateStrategy` (`RollingUpdate`/`OnDelete`) управляет тем, как
   обновляются поды DaemonSet.
 
+**DaemonSet vs обычное планирование** (почему `replicas` нет):
+
+| | Deployment-под | DaemonSet-под |
+|---|---|---|
+| Сколько | задаёшь `replicas` | по 1 на КАЖДУЮ подходящую ноду (считает контроллер) |
+| Выбор ноды | **scheduler** (Filter+Score) | нода ФИКСИРОВАНА (`spec.nodeName` ставит DS) — scheduler не выбирает |
+| Новая нода добавлена | ничего | DS сразу добавляет под на неё |
+| Сужение нод | — | `spec.template.spec.nodeSelector`/`nodeAffinity` ограничивают, на какие ноды ставить |
+
+> DaemonSet всё же уважает `taints`: чтобы под поехал на control-plane (taint
+> `NoSchedule`), template нужен `tolerations` на этот taint. Системные DS (CNI,
+> kube-proxy) их имеют — поэтому есть на всех нодах, включая мастер.
+
 ---
 
 **Цель:** раскатать DaemonSet и убедиться, что Pod появился на каждой ноде.
@@ -290,6 +351,22 @@ kubectl -n lab get pods -l app=node-agent -o wide
   `web-0.web.<ns>.svc.cluster.local` — без него нет адресуемой идентичности.
 - Отличие от Deployment: там поды взаимозаменяемы и имена случайны; здесь они
   именованы и «прилипают» к своему тому. (Глубоко тома/PV/PVC — в модуле 05.)
+
+- **Порядок операций (по умолчанию `OrderedReady`):**
+
+```
+scale-up:     web-0 (ждём Ready) -> web-1 (ждём Ready) -> web-2 ...   (по возрастанию)
+scale-down:   ... web-2 -> web-1 -> web-0                              (в ОБРАТНОМ порядке)
+rolling update: тоже с конца (web-N первым) -> к web-0
+```
+
+  Зачем: для кворумных систем (БД, etcd) важно поднимать/гасить узлы предсказуемо,
+  по одному. `podManagementPolicy: Parallel` отключает ожидание — все поды
+  создаются/удаляются разом (когда строгий порядок не нужен, ради скорости).
+- **При отказе ноды** StatefulSet НЕ пересоздаёт под автоматически (в отличие от
+  Deployment): пока неясно, жив ли `web-0` где-то ещё, поднять второй `web-0` с тем
+  же томом нельзя (риск split-brain/порчи данных). Под висит `Terminating`/`Unknown`,
+  пока нода не вернётся или его не удалят принудительно.
 
 ---
 
@@ -539,6 +616,9 @@ bash verify/verify.sh
 9. Какие три гарантии даёт StatefulSet по сравнению с Deployment?
 10. Зачем StatefulSet headless Service и что он даёт по DNS?
 11. Что случится с `data-web-0` при удалении и пересоздании Pod `web-0`?
+12. В каком порядке StatefulSet поднимает и ГАСИТ поды (OrderedReady)? Что меняет
+    `podManagementPolicy: Parallel`?
+13. Почему StatefulSet НЕ пересоздаёт под при отказе ноды автоматически?
 
 ---
 
