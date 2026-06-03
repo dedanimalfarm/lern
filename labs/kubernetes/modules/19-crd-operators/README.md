@@ -31,6 +31,27 @@ kubectl version -o json 2>/dev/null | grep -i gitVersion | head -1
 - CRD — фундамент «Kubernetes как платформа»: операторы, GitOps-инструменты,
   service mesh — все добавляют свои CRD.
 
+**Версионирование CRD** (`spec.versions[]` — у нас одна `v1`, но их может быть много):
+
+| Поле версии | Что значит |
+|-------------|------------|
+| `served: true` | версия ОТДАЁТСЯ через API (можно `get/apply` по этому `apiVersion`) |
+| `storage: true` | в КАКОМ формате CR лежит в etcd. **Ровно ОДНА** версия = storage |
+| `deprecated: true` (+`deprecationWarning`) | версия помечена устаревшей — kubectl печатает warning |
+
+```yaml
+# наш crd.yaml: одна версия, она же и served, и storage
+versions:
+- name: v1
+  served: true
+  storage: true       # <- единственное хранилище
+```
+
+> При нескольких версиях (v1alpha1 → v1) одна — `storage`, остальные — только
+> `served`, а между ними нужна **conversion**-стратегия (`spec.conversion`:
+> `None` если поля совместимы, или `Webhook` для нетривиальной конвертации).
+> Так API эволюционирует без поломки старых клиентов.
+
 ---
 
 **Цель:** зарегистрировать тип `WebApp`.
@@ -69,6 +90,31 @@ kubectl api-resources | grep -i webapp
 - Полезное в CRD: `additionalPrinterColumns` (колонки в `kubectl get`),
   `subresources.status` (отдельный `/status`), `subresources.scale` (`kubectl scale`),
   `shortNames`, `categories` (попадание в `kubectl get all`).
+
+**Схема — это и есть валидация (фрагмент нашего `crd.yaml`):**
+
+```yaml
+openAPIV3Schema:
+  type: object
+  properties:
+    spec:
+      type: object
+      required: ["image", "replicas"]   # без них apply ОТКЛОНЯЕТСЯ ("Required value")
+      properties:
+        image:    { type: string }
+        replicas: { type: integer, minimum: 1, maximum: 10 }   # 99 -> "Invalid value: should be <= 10"
+        host:     { type: string }
+    status:                              # пишется контроллером, не пользователем
+      type: object
+      properties: { availableReplicas: { type: integer } }
+```
+
+- **Server-side pruning (структурные схемы, `apiextensions.k8s.io/v1`).** Поля CR,
+  которых НЕТ в схеме, apiserver МОЛЧА ВЫРЕЗАЕТ при сохранении (не просто
+  игнорирует — их не будет в etcd). Это защищает от опечаток (`replcas: 3` не
+  «потеряется тихо», а исчезнет — и валидация `required` поймает отсутствие
+  `replicas`). Чтобы РАЗРЕШИТЬ произвольные поля в поддереве — явно
+  `x-kubernetes-preserve-unknown-fields: true`.
 
 ---
 
@@ -110,6 +156,32 @@ kubectl apply -f broken/scenario-01/bad-webapp.yaml
   «увидел желаемое (CR) → привёл фактическое к нему → записал status».
 - **CRD + контроллер = оператор.** Операторы инкапсулируют эксплуатационные
   знания (как развернуть/бэкапить/обновить БД и т.п.).
+
+**Reconcile loop по шагам** (что делал бы контроллер WebApp):
+
+```
+   watch WebApp/Deployment ──> очередь ──> Reconcile(ns/name):
+        │                                      │
+        │   1. observe DESIRED: прочитать CR WebApp (spec.image, spec.replicas)
+        │   2. observe ACTUAL:  есть ли уже Deployment <name>? какой у него стейт?
+        │   3. diff:            spec.replicas=3, а Deployment=1  → расхождение
+        │   4. act (идемпотентно): create/update Deployment под spec (3 реплики)
+        │   5. write STATUS:    status.availableReplicas = факт (subresource /status)
+        └────────────── повтор на КАЖДОЕ изменение CR или managed-ресурса ◄──┘
+```
+
+- **Идемпотентность + level-triggered.** Reconcile вызывается на ЛЮБОЕ изменение и
+  должен давать тот же итог независимо от того, сколько раз вызван и что было
+  раньше (реагирует на ТЕКУЩЕЕ состояние = level, а не на «событие» = edge). Поэтому
+  потеря события не страшна — следующий reconcile всё выровняет.
+- **ownerReferences.** Контроллер ставит на созданный Deployment `ownerReference`
+  на свой WebApp. Тогда удаление WebApp каскадно удаляет Deployment (garbage
+  collector по owner-цепочке) — без ручной уборки. (Так же `Deployment`→`ReplicaSet`
+  →`Pod` из модуля 03.)
+- **finalizers.** Если при удалении CR нужно прибрать ВНЕШНЕЕ (облачный LB, запись в
+  СУБД), контроллер вешает на CR `finalizer`. Тогда `delete` лишь ставит
+  `deletionTimestamp`, объект «висит» `Terminating`, пока контроллер не сделает
+  cleanup и не СНИМЕТ finalizer — только потом apiserver реально удаляет CR.
 
 ---
 
@@ -156,6 +228,30 @@ kubectl api-resources --api-group=lab.example.com
 ---
 
 ## Часть 5: Troubleshooting
+
+### Теория: методология диагностики CRD/CR
+
+Проблемы делятся на три слоя — определи слой, тогда ясна команда:
+
+```
+Что не так?
+ ├─ CR не СОЗДАЁТСЯ (apply падает)
+ │     ├─ "Invalid value" / "Required value"  -> СХЕМА (openAPIV3Schema): чини CR под required/min/max
+ │     └─ "no matches for kind WebApp"          -> CRD не применён / не та group-version
+ │            kubectl get crd | grep example.com ; kubectl api-resources --api-group=lab.example.com
+ │
+ ├─ CR создан, но НИЧЕГО НЕ ПРОИСХОДИТ (нет подов)
+ │     -> это норма БЕЗ контроллера: CRD = только запись. Нужен оператор (Часть 3).
+ │        Если оператор есть: смотри ЕГО логи и status CR:
+ │        kubectl -n lab get webapp my-webapp -o jsonpath='{.status}' ; kubectl logs <operator-pod>
+ │
+ └─ CR не УДАЛЯЕТСЯ (висит Terminating)
+       -> finalizer не снят (контроллер мёртв/не дочистил внешнее):
+          kubectl get webapp my-webapp -o jsonpath='{.metadata.finalizers}'
+          (крайняя мера — убрать finalizer вручную: kubectl patch ... -p '{"metadata":{"finalizers":[]}}' --type=merge)
+```
+
+---
 
 ### Инцидент 1: CR отклонён схемой
 
@@ -210,10 +306,13 @@ bash verify/verify.sh
 ## Теоретические вопросы (итоговые)
 
 1. Что регистрирует CRD и что появляется автоматически после этого?
-2. Где и как валидируется Custom Resource?
-3. Чем CRD без контроллера отличается от оператора?
-4. Опишите reconcile loop оператора.
-5. Зачем нужны `subresources.status`/`scale` и `additionalPrinterColumns`?
+2. Версии CRD: чем `served` отличается от `storage` и сколько может быть каждой?
+3. Где и как валидируется Custom Resource? Что делает server-side pruning с полем,
+   которого нет в схеме?
+4. Чем CRD без контроллера отличается от оператора?
+5. Опишите reconcile loop по шагам. Что значит «идемпотентный, level-triggered»?
+6. Зачем `ownerReferences` (каскадное удаление) и `finalizers` (Terminating)?
+7. Зачем нужны `subresources.status`/`scale` и `additionalPrinterColumns`?
 
 ---
 
