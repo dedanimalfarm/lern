@@ -17,7 +17,13 @@ spec:
       - name: php-apache
         # классический CPU-bound образ из доков k8s: на каждый запрос крутит
         # тяжёлую математику, поэтому удобно нагружать для демонстрации HPA.
-        image: registry.k8s.io/hpa-example
+        # ПИН ПО ДАЙДЖЕСТУ намеренно: у hpa-example нет версионного тега, а голое
+        # `registry.k8s.io/hpa-example` = `:latest` — анти-паттерн (ломает иммутабельность
+        # и предсказуемость кэша), который запрещает наш же модуль 14
+        # (ValidatingAdmissionPolicy no-latest-tag режет :latest/без-тега в ns lab).
+        # Дайджест иммутабелен и проходит VAP. Обновлять:
+        #   docker buildx imagetools inspect registry.k8s.io/hpa-example  (или `crane digest`).
+        image: registry.k8s.io/hpa-example@sha256:581697a37f0e136db86d6b30392f0db40ce99c8248a7044c770012f4e8491544
         ports:
         - containerPort: 80
         resources:
