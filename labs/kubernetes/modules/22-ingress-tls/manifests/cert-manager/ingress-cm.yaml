@@ -1,0 +1,22 @@
+# Ingress с АННОТАЦИЕЙ cert-manager: ingress-shim увидит её + spec.tls.secretName и
+# САМ создаст Certificate, а cert-manager выпустит сертификат в Secret auto-tls —
+# без ручного openssl. Это и есть автоматизация TLS (production-паттерн).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auto-tls
+  namespace: lab
+  annotations:
+    cert-manager.io/cluster-issuer: selfsigned-issuer
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts: [auto.lab.local]
+    secretName: auto-tls          # cert-manager создаст этот Secret САМ
+  rules:
+  - host: auto.lab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend: { service: { name: web-b, port: { number: 80 } } }

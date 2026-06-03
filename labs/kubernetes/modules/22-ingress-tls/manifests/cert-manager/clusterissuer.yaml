@@ -1,0 +1,10 @@
+# Часть 3: cert-manager. ClusterIssuer — «выдаватель» сертификатов (кластерный,
+# виден из всех namespace). SelfSigned — самый простой: каждый сертификат
+# подписывает сам себя (без внешнего CA / Let's Encrypt — работает офлайн, годится
+# для внутренних демо). В проде вместо него — ACME (Let's Encrypt) или CA-issuer.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}

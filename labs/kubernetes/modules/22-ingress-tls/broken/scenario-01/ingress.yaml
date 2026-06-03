@@ -1,0 +1,17 @@
+# СЛОМАНО: ingressClassName указывает на несуществующий класс. Наш контроллер
+# (класс nginx) такой Ingress ИГНОРИРУЕТ -> ADDRESS не появляется, маршрут не
+# работает (curl -> default backend 404 или connection refused).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: broken-routing
+  namespace: lab
+spec:
+  ingressClassName: nginx-does-not-exist     # <-- нет такого IngressClass
+  rules:
+  - host: broken.lab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend: { service: { name: web-a, port: { number: 80 } } }

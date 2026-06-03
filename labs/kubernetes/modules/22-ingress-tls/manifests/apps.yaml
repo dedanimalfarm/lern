@@ -1,0 +1,78 @@
+# Два бэкенда с РАЗНЫМ контентом — чтобы по ответу было видно, куда Ingress
+# смаршрутизировал запрос (web-a vs web-b). Контент задаётся ConfigMap'ом,
+# смонтированным в корень nginx.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-a-html
+  namespace: lab
+data:
+  index.html: "hello from web-a\n"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-a
+  namespace: lab
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: web-a } }
+  template:
+    metadata: { labels: { app: web-a } }
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports: [{ containerPort: 80 }]
+        volumeMounts:
+        - { name: html, mountPath: /usr/share/nginx/html }
+      volumes:
+      - name: html
+        configMap: { name: web-a-html }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-a
+  namespace: lab
+spec:
+  selector: { app: web-a }
+  ports: [{ port: 80, targetPort: 80 }]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-b-html
+  namespace: lab
+data:
+  index.html: "hello from web-b\n"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-b
+  namespace: lab
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: web-b } }
+  template:
+    metadata: { labels: { app: web-b } }
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports: [{ containerPort: 80 }]
+        volumeMounts:
+        - { name: html, mountPath: /usr/share/nginx/html }
+      volumes:
+      - name: html
+        configMap: { name: web-b-html }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-b
+  namespace: lab
+spec:
+  selector: { app: web-b }
+  ports: [{ port: 80, targetPort: 80 }]

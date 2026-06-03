@@ -1,0 +1,46 @@
+# Часть 1: маршрутизация L7 БЕЗ TLS. ingressClassName обязателен — связывает Ingress
+# с нашим контроллером (класс nginx). Два приёма роутинга:
+#
+# (1) HOST-based: разные хосты -> разные бэкенды.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-routing
+  namespace: lab
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: a.lab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend: { service: { name: web-a, port: { number: 80 } } }
+  - host: b.lab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend: { service: { name: web-b, port: { number: 80 } } }
+---
+# (2) PATH-based на ОДНОМ хосте: /a -> web-a, /b -> web-b. Аннотация rewrite-target
+# перезаписывает путь в `/`, иначе бэкенд-nginx искал бы файл /a (и вернул 404).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-paths
+  namespace: lab
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: paths.lab.local
+    http:
+      paths:
+      - path: /a
+        pathType: Prefix
+        backend: { service: { name: web-a, port: { number: 80 } } }
+      - path: /b
+        pathType: Prefix
+        backend: { service: { name: web-b, port: { number: 80 } } }

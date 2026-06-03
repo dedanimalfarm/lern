@@ -1,0 +1,15 @@
+# РЕШЕНИЕ: ingressClassName: nginx (имя реального IngressClass, см. `kubectl get ingressclass`).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: broken-routing
+  namespace: lab
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: broken.lab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend: { service: { name: web-a, port: { number: 80 } } }

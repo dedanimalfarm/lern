@@ -1,0 +1,24 @@
+# Часть 2: TLS termination на Ingress. Контроллер расшифровывает HTTPS и проксирует
+# в бэкенд по HTTP. `spec.tls[].secretName` указывает на Secret типа
+# kubernetes.io/tls (tls.crt + tls.key), а hosts — для каких имён этот сертификат.
+# Используем ОТДЕЛЬНЫЙ host secure.lab.local (не пересекается с web-routing из
+# Части 1 — иначе ingress-nginx отверг бы дубль host+path на admission).
+# Secret secure-tls создаётся ОТДЕЛЬНО (openssl + `kubectl create secret tls`,
+# см. README) — приватный ключ НЕ хранится в репозитории.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: secure-tls
+  namespace: lab
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts: [secure.lab.local]
+    secretName: secure-tls
+  rules:
+  - host: secure.lab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend: { service: { name: web-a, port: { number: 80 } } }
