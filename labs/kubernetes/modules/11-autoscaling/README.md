@@ -64,6 +64,20 @@ kubectl api-resources | grep horizontalpodautoscaler
 - **`autoscaling/v2`** поддерживает несколько метрик, `Pods`/`Object`/`External`
   типы и `behavior` (политики/окна стабилизации scale-up/down).
 
+**Формула на числах** (цель 50%, как в нашем `hpa.yaml`):
+
+| currentReplicas | currentValue (CPU) | расчёт | desired |
+|:---:|:---:|:---|:---:|
+| 1 | 0% (нет нагрузки) | `ceil(1 × 0/50)` → 0, но не ниже `minReplicas` | **1** |
+| 1 | 180% | `ceil(1 × 180/50)` = ceil(3.6) | **4** |
+| 4 | 90% | `ceil(4 × 90/50)` = ceil(7.2) = 8, но `maxReplicas=5` | **5** (потолок) |
+| 5 | 50% | `ceil(5 × 50/50)` = 5 — у цели, стабильно | **5** |
+
+> **Зона нечувствительности (tolerance).** HPA НЕ реагирует, пока отношение
+> `currentValue/targetValue` в пределах ±10% от 1.0 (флаг
+> `--horizontal-pod-autoscaler-tolerance=0.1`). Т.е. при цели 50% реакции не будет
+> на 45–55% — это гасит «дребезг» вокруг цели.
+
 ---
 
 **Цель:** повесить HPA на Deployment и убедиться, что метрика читается.
@@ -101,6 +115,26 @@ kubectl -n lab get hpa hpa-demo
 - **Стабилизация:** чтобы не «дёргать» нагрузку, scale-down притормаживается окном
   (`behavior.scaleDown.stabilizationWindowSeconds`, по умолчанию 300с). Scale-up
   быстрее scale-down — это сознательный выбор.
+
+**Асимметрия scale-up vs scale-down на таймлайне:**
+
+```
+CPU% │      ┌──────────────┐ нагрузка
+ 180 │      │              │
+  50 │──────┘              └────────────── цель
+     │
+repl │      ▲ scale-UP за ~15-60с          ▼ scale-DOWN только ПОСЛЕ окна
+   5 │      ┌───────────────────────────┐  стабилизации (default 300с)
+   1 │──────┘                           └──────────── вниз медленно
+     └──────┬──────────────────┬────────┬───────────────────────> t
+          нагрузка↑         нагрузка↓   +окно 300с: HPA берёт МАКСИМУМ
+                                        рекомендаций за окно -> только потом режет
+```
+
+> **Почему асимметрия.** Вверх — быстро, чтобы не уронить сервис под пиком. Вниз —
+> с задержкой: кратковременный провал нагрузки не должен убить реплики, которые
+> тут же снова понадобятся (flapping). В окне scale-down HPA берёт НАИБОЛЬШУЮ из
+> рекомендаций — поэтому единичный провал до 0% не схлопнет реплики мгновенно.
 
 ---
 
@@ -146,14 +180,22 @@ kubectl -n lab get hpa hpa-demo -w
 
 ### Теория для изучения перед частью
 
-- **HPA** — горизонтально (больше ПОДОВ). **VPA** — вертикально (меняет
-  `requests`/`limits` подов; обычно пересоздаёт под). HPA и VPA по ОДНОЙ метрике
-  (CPU) одновременно конфликтуют — не сочетать.
-- **Cluster Autoscaler (CA)** масштабирует НОДЫ: видит `Pending`-поды (которым не
-  хватило места) и добавляет ноды в автоскейл-пул; пустые ноды убирает. На
-  managed (GKE/EKS) включается на node pool.
-- Цепочка: рост нагрузки → HPA добавляет поды → не хватило нод → поды `Pending`
-  → CA добавляет ноды → поды стартуют.
+**Три уровня автоскейла — что масштабируют и чем триггерятся:**
+
+| | **HPA** | **VPA** | **Cluster Autoscaler** |
+|---|---|---|---|
+| Объект | `replicas` (Deployment/STS) | `requests`/`limits` пода | число **НОД** в пуле |
+| Направление | горизонтально (больше подов) | вертикально (жирнее под) | инфраструктура |
+| Триггер | метрика выше/ниже цели | факт. потребление vs requests | `Pending`-поды / пустые ноды |
+| Реакция | +/− поды (живо) | пересоздать под с новыми requests | +/− ноды (минуты) |
+| Где работает | любой кластер + metrics-server | ставится отдельно (VPA CRD) | managed/автоскейл-пул (GKE/EKS/AKS) |
+| Сочетаемость | — | ⚠️ HPA+VPA по ОДНОЙ метрике (CPU) конфликтуют | дополняет HPA |
+
+- ⚠️ **HPA и VPA нельзя по одной метрике:** HPA добавляет поды (снижая среднюю
+  утилизацию), VPA по той же утилизации раздувает requests — они «воюют». VPA
+  допустим вместе с HPA только по РАЗНЫМ метрикам (напр. VPA по RAM, HPA по CPU).
+- **Цепочка:** рост нагрузки → HPA добавляет поды → не хватило нод → поды `Pending`
+  → CA добавляет ноды → поды стартуют. (HPA масштабирует «спрос», CA — «ёмкость».)
 
 ---
 
@@ -178,6 +220,41 @@ kubectl get events -A | grep -iE "TriggeredScaleUp|NotTriggerScaleUp" | tail -3
 ---
 
 ## Часть 4: Troubleshooting
+
+### Теория: дерево диагностики HPA `<unknown>`
+
+`<unknown>` в TARGETS значит «HPA не смог получить/посчитать метрику». Причин
+несколько — отсекать по порядку:
+
+```
+HPA TARGETS = <unknown>/50% ?
+   │
+   ├─ kubectl top pods -n lab
+   │     ├─ "Metrics API not available" ──> НЕТ metrics-server          → Инцидент 2
+   │     └─ числа есть ──┐
+   │                     ▼
+   ├─ у пода задан requests.cpu?
+   │     kubectl -n lab get deploy hpa-demo \
+   │       -o jsonpath='{.spec.template.spec.containers[0].resources.requests}'
+   │     ├─ пусто ──> НЕТ requests.cpu (процент не от чего считать) → Инцидент 1
+   │     └─ есть ──┐
+   │               ▼
+   ├─ поды Running и Ready?  (метрики берутся только с Ready-подов)
+   │     ├─ нет ──> чинить под (CrashLoop/Pending/ErrImagePull) — см. модуль 02/08
+   │     └─ да ──┐
+   │             ▼
+   └─ под создан только что? ──> подожди 15-60с (первый scrape metrics-server)
+```
+
+| Симптом | Команда | Что искать |
+|---------|---------|------------|
+| `<unknown>` в TARGETS | `kubectl -n lab describe hpa hpa-demo` | `FailedGetResourceMetric` / `unable to compute` |
+| нет источника метрик | `kubectl top pods -n lab` | `Metrics API not available` |
+| нет requests | `kubectl -n lab get deploy hpa-demo -o jsonpath='{..resources.requests}'` | пустой вывод |
+| не масштабирует | `kubectl -n lab describe hpa hpa-demo` → Events | `SuccessfulRescale` vs `FailedGetScale` |
+| реплики выросли, но `Pending` | `kubectl -n lab describe pod -l app=hpa-demo` | `FailedScheduling: Insufficient cpu` |
+
+---
 
 ### Инцидент 1: HPA показывает `<unknown>/50%` — нет `requests.cpu`
 
