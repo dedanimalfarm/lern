@@ -1,3 +1,13 @@
+# Доступ к приложению net-demo при включённом default-deny (ingress+egress).
+#
+# КЛЮЧЕВОЙ ПРИНЦИП NetworkPolicy: поток A->B разрешён, только если ОБА конца его
+# пропускают — у backend B открыт ingress от A, И у клиента A открыт egress к B.
+# default-deny закрывает обе стороны, поэтому одного ingress-правила к net-demo
+# НЕ хватает: клиентский под упрётся в свой собственный egress-deny (wget повиснет,
+# хотя DNS уже резолвится). Нужны ДВА правила ниже.
+---
+# Правило 1 (ingress): к подам net-demo пускаем входящий трафик на :80 от любого
+# пода namespace (podSelector: {}). Это «открыли дверь» на стороне backend.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -12,6 +22,28 @@ spec:
   ingress:
   - from:
     - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 80
+---
+# Правило 2 (egress): любому поду namespace разрешаем исходящий трафик к подам
+# net-demo на :80. Это «выпустили клиента» на стороне источника. Без него
+# default-deny (policyTypes Egress) глушит запрос клиента ещё до net-demo.
+# (DNS-egress уже разрешён отдельно в allow-dns; здесь — только доступ к app.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-egress
+  namespace: lab
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: net-demo
     ports:
     - protocol: TCP
       port: 80

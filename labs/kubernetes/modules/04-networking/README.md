@@ -11,7 +11,12 @@
 ## Предварительные требования
 
 ```bash
-# 1) Кластер, реально запускающий контейнеры (kind/minikube/k3s/GKE).
+# 0) kubeconfig (наш self-managed кластер развёрнут через Kubespray):
+export KUBECONFIG=/root/.kube/kubespray.conf
+
+# 1) Кластер, реально запускающий контейнеры (Kubespray/kind/minikube/k3s/GKE).
+#    ВАЖНО для Части 4: enforcement NetworkPolicy есть только при CNI с поддержкой
+#    (наш Kubespray — Calico, режет реально; голый kind/managed GKE — нет).
 kubectl version --output=yaml | head -5
 
 # 2) Чистый namespace lab (важно: убрать ресурсы прошлых модулей)
@@ -287,7 +292,10 @@ kubectl -n kube-system get pods | grep -E "calico|cilium|dataplane|netd" \
 kubectl -n lab apply -f manifests/netpol/default-deny.yaml
 # Разрешить egress к CoreDNS (иначе сломается резолв имён)
 kubectl -n lab apply -f manifests/netpol/allow-dns.yaml
-# Разрешить ingress к net-demo на :80 от подов namespace
+# Разрешить доступ к net-demo на :80. ВНИМАНИЕ: это ДВЕ политики (см. файл):
+#   allow-app-ingress — ingress К net-demo (открыли дверь у backend);
+#   allow-app-egress  — egress ОТ клиента к net-demo (выпустили источник).
+# При default-deny на egress одного ingress-правила мало — нужны обе стороны.
 kubectl -n lab apply -f manifests/netpol/allow-app.yaml
 
 kubectl -n lab get netpol
@@ -295,31 +303,52 @@ kubectl -n lab get netpol
 # default-deny        <none>         ...
 # allow-dns           <none>         ...
 # allow-app-ingress   app=net-demo   ...
+# allow-app-egress    <none>         ...
 ```
+
+> ⚠️ **Среда (nodelocaldns).** На Kubespray (и kubeadm с localdns) включён
+> **nodelocaldns** — DNS-кэш на каждой ноде, слушающий link-local `169.254.25.10:53`.
+> Поды резолвят имена через НЕГО, а не через под CoreDNS напрямую. Поэтому наш
+> `allow-dns.yaml` разрешает egress :53 ДВУМЯ путями: `ipBlock 169.254.25.10/32`
+> (nodelocaldns) **и** под `k8s-app=kube-dns` (CoreDNS — для kind/GKE без localdns).
+> Если оставить только второе правило — на Kubespray DNS под default-deny останется
+> сломанным (`nslookup` → `bad address`), хотя селектор CoreDNS-пода верный.
+> Узнать адрес localdns на своём кластере: `kubectl -n kube-system get cm nodelocaldns
+> -o yaml | grep -m1 -oE '169\.254\.[0-9.]+'` (или смотрите `__PILLAR__` в Corefile).
 
 ### 4.2 Проверка эффекта (если enforcement есть)
 
 ```bash
-# На кластере С enforcement: до allow-app curl к net-demo из чужого пода ВИСНЕТ
-# (default-deny режет ingress), после allow-app — проходит:
+# На кластере С enforcement: до default-deny curl к net-demo из чужого пода идёт
+# (всё разрешено), после default-deny — ВИСНЕТ. allow-app возвращает доступ,
+# но ТОЛЬКО с обеими политиками (ingress К net-demo + egress ОТ клиента):
 kubectl -n lab run t --image=busybox:1.36 --restart=Never -i --rm -- \
-  wget -qO- --timeout=4 http://net-demo/ | head -1
-# с работающим NetworkPolicy и allow-app -> ответ nginx;
-# без allow-app (только default-deny) -> timeout.
+  wget -qO- --timeout=4 http://net-demo/ | grep -i title
+# default-deny + allow-dns (без allow-app)         -> timeout (egress клиента закрыт);
+# + только allow-app-ingress                       -> ВСЁ РАВНО timeout (egress закрыт!);
+# + allow-app-ingress И allow-app-egress           -> <title>Welcome to nginx!</title>.
 ```
 
-> ✅ **Проверено на нашем Kubespray-кластере (Calico):** до `default-deny` запрос
-> к `net-demo` проходит (`<title>Welcome to nginx!</title>`), после — РЕАЛЬНО
-> блокируется (под-клиент завершается с ошибкой, трафик/DNS режется). Это и есть
-> enforcement. Если на ВАШЕМ кластере политики НЕ режут трафик — значит CNI без
-> поддержки (managed GKE без Dataplane V2, голый kind): объекты создаются, но
-> трафик не фильтруется.
+> ✅ **Проверено на нашем Kubespray-кластере (Calico), вживую:**
+> - до `default-deny` — `<title>Welcome to nginx!</title>`;
+> - после `default-deny` (+`allow-dns`) — DNS резолвится (`net-demo` → ClusterIP),
+>   но `wget` к net-demo **виснет** (`download timed out`);
+> - +`allow-app` (обе политики) — снова `Welcome to nginx!`;
+> - убрать ТОЛЬКО `allow-app-egress` — опять `timeout`. Это доказывает: на
+>   egress-enforced default-deny поток разрешают **обе** стороны.
+>
+> ⚠️ **Частая ошибка:** открыть только ingress у backend и удивляться, почему
+> клиент всё равно не достучался — у него закрыт собственный egress. Если на
+> ВАШЕМ кластере политики вообще НЕ режут трафик — значит CNI без поддержки
+> (managed GKE без Dataplane V2, голый kind): объекты создаются, но не действуют.
 
 **Контрольные вопросы:**
 1. Что разрешено между подами по умолчанию, до любой NetworkPolicy?
 2. Как устроен default-deny и почему он — основа Zero-Trust?
 3. Почему при default-deny обязательно нужен явный allow к CoreDNS?
 4. От чего зависит, БУДЕТ ли NetworkPolicy реально применяться?
+5. Почему при default-deny на egress одного ingress-правила к backend мало?
+   Какие ДВЕ политики нужны, чтобы клиент достучался до net-demo?
 
 ---
 
@@ -372,8 +401,10 @@ kubectl -n lab get endpoints net-demo -o wide
 # Диагностика — посмотреть, какие политики висят и что они режут:
 kubectl -n lab get netpol
 kubectl -n lab describe netpol default-deny
-# Решение: добавить allow-dns (egress :53 к kube-dns) и нужные allow-правила.
-# Урок: default-deny без allow-dns ломает резолв — DNS разрешают всегда первым.
+# Решение: добавить allow-dns (egress :53) и нужные allow-правила.
+# Урок 1: default-deny без allow-dns ломает резолв — DNS разрешают всегда первым.
+# Урок 2: при nodelocaldns (Kubespray) egress :53 нужен к 169.254.25.10/32, а не
+#         только к поду CoreDNS — иначе резолв останется сломанным (см. note в 4.1).
 ```
 
 ### Бонус: диагностика цепочки Ingress → Service → Endpoints → Pod
@@ -423,7 +454,7 @@ ns/lab`.
 | `net-demo` | Deployment×2 + Service(ClusterIP) | selector→Endpoints, балансировка |
 | `net-demo-nodeport` | Service(NodePort) | внешний порт 30080 на нодах |
 | `net-demo` | Ingress | L7-роутинг по host/path (нужен контроллер) |
-| `default-deny`/`allow-dns`/`allow-app-ingress` | NetworkPolicy | allow-list модель (нужен CNI-enforcement) |
+| `default-deny`/`allow-dns`/`allow-app-ingress`/`allow-app-egress` | NetworkPolicy | allow-list модель: DNS + доступ к app в ОБА конца (нужен CNI-enforcement) |
 
 ---
 
@@ -451,6 +482,8 @@ ns/lab`.
 9. Что разрешено по умолчанию и что меняет default-deny?
 10. Почему политику для DNS добавляют первой после default-deny?
 11. От чего зависит, заработает ли NetworkPolicy вообще?
+12. Поток A→B при default-deny: чьи политики (A, B или обеих) должны его
+    пропустить? Почему «открыть ingress у backend» без egress у клиента не работает?
 
 ---
 
