@@ -83,6 +83,39 @@ kubectl -n kube-system get pods
   *cluster + user + namespace = context*. Активный контекст определяет, КУДА и
   ОТ КОГО летят запросы.
 
+**Архитектура кластера (кто где):**
+
+```
+          ┌──────────────── CONTROL-PLANE (k8s-cp-1) ───────────────┐
+ kubectl  │  kube-apiserver ──────────────> etcd (ИСТОЧНИК ИСТИНЫ)  │
+ ──REST──>┤        ▲     ▲                                          │
+          │        │     └─ kube-scheduler (выбирает ноду для Pod)  │
+          │        └──────── controller-manager (reconcile-петли)   │
+          └──────────┬───────────────────────────────────────────────┘
+                     │ apiserver — единственный, кто пишет в etcd; ноды «тянут» задания
+          ┌──────────▼ WORKER-НОДЫ (k8s-w-1 / k8s-w-2) ──────────────┐
+          │  kubelet (запускает контейнеры через containerd)         │
+          │  kube-proxy (правила Service на ноде)   CNI (Pod IP)     │
+          └──────────────────────────────────────────────────────────┘
+```
+
+**Путь запроса внутри apiserver** (где «рождаются» ошибки доступа):
+
+```
+kubectl apply ──HTTP──> kube-apiserver:
+   1. Authentication — КТО ты   (cert / token / OIDC)        -> 401 если не опознан
+   2. Authorization  — МОЖНО ли (RBAC: verb × resource)      -> 403 Forbidden (модуль 07)
+   3. Admission      — мутация + валидация (PSA, VAP, webhook -> модуль 14)
+   4. Validation + persist — записать объект в etcd
+   <- ответ. Дальше scheduler/контроллеры РЕАГИРУЮТ на изменение (reconcile).
+```
+
+**API group/version.** Каждый ресурс адресуется как `group/version` + `Kind`:
+core-группа (пустая) — `Pod`/`Service` (`apiVersion: v1`); именованные группы —
+`Deployment` (`apps/v1`), `Job` (`batch/v1`), `Ingress` (`networking.k8s.io/v1`).
+`kubectl api-versions` — список включённых group/version; `kubectl api-resources`
+показывает, какой ресурс в какой группе и его `apiVersion` для манифеста.
+
 ---
 
 **Цель:** увидеть, что `kubectl` — это API-клиент, и научиться читать, в какой
@@ -181,6 +214,9 @@ kubectl explain pod.spec.containers --recursive | head -30
   нет.
 - **Контекст несёт namespace по умолчанию.** Можно «прибить» рабочий namespace к
   контексту, чтобы не писать `-n` в каждой команде.
+- **Навигация по namespace:** `-n <ns>` — конкретный; `-A`/`--all-namespaces` —
+  ПО ВСЕМ сразу (добавляет колонку NAMESPACE) — незаменимо для «где вообще этот под
+  по всему кластеру»: `kubectl get pods -A`, `kubectl get pods -A | grep -v Running`.
 
 ---
 
@@ -282,6 +318,18 @@ kubectl get pods            # эквивалент kubectl -n lab get pods
 - **Императивно vs декларативно.** `kubectl create/run` — императивно (разово
   «сделай»). `kubectl apply -f` — декларативно (привести к описанному в файле);
   именно так работают в GitOps и проде.
+
+| | Императивно (`create`/`run`/`edit`/`scale`) | Декларативно (`apply -f`) |
+|---|---|---|
+| Что говоришь | «сделай действие» | «приведи к ЭТОМУ состоянию» |
+| Повторный запуск | падает (`AlreadyExists`) | идемпотентно (`unchanged`) |
+| Источник истины | твоя память/история команд | файл (можно в git) |
+| Слияние правок | перезатирает | 3-way merge (бережёт чужие поля) |
+| Когда | быстрый эксперимент, генерация YAML (`--dry-run=client -o yaml`) | прод, GitOps, CI |
+
+> Хорошая практика: императивом ГЕНЕРИРУЮТ стартовый YAML
+> (`kubectl create deploy x --image=… --dry-run=client -o yaml > deploy.yaml`),
+> а живут уже на `apply -f`.
 
 ---
 
@@ -418,9 +466,25 @@ kubectl -n lab apply -f manifests/app/deploy.yaml
 - **Форматы вывода.** `-o wide` (доп. колонки), `-o yaml` (полный объект как в
   etcd), `-o jsonpath`/`-o custom-columns` (точечно вытащить поле),
   `--show-labels`, `-w` (следить в реальном времени).
+
+| Формат | Что даёт | Когда |
+|--------|----------|-------|
+| (по умолчанию) | таблица | беглый обзор |
+| `-o wide` | + IP, нода, образ | «где сидит / какой образ» |
+| `-o yaml` | ВЕСЬ объект (spec+status+managedFields) | разбор/копирование манифеста |
+| `-o jsonpath='{...}'` | одно поле/срез | скрипты (`{.status.podIP}`) |
+| `-o custom-columns=…` | свои колонки | таблица под задачу |
+| `--show-labels` / `-L key` | labels | отбор по меткам |
+| `-w` | поток изменений | следить за раскаткой |
+
 - **Доступ внутрь.** `exec` (выполнить в контейнере), `logs --previous`
   (логи прошлого, упавшего контейнера), `port-forward` (пробросить порт
   локально, не создавая Service).
+- **`kubectl debug` (ephemeral containers, GA 1.25).** Когда в поде нет shell
+  (distroless) или под крашится — `kubectl debug -it <pod> --image=busybox
+  --target=<container>` подсаживает ВРЕМЕННЫЙ контейнер в тот же namespace пода
+  (видит его процессы/сеть), не пересоздавая под. Для отладки ноды —
+  `kubectl debug node/<node> -it --image=busybox`.
 
 ---
 
