@@ -35,6 +35,42 @@ kubectl get ns argocd 2>/dev/null || echo "argocd не установлен — 
 - **Release** — установленный экземпляр chart; обновляется идемпотентно через
   `helm upgrade --install`.
 
+**Go-template — мини-справочник** (всё это реально есть в `templates/deployment.yaml`):
+
+| Конструкция | Что делает | Где в chart |
+|-------------|------------|-------------|
+| `{{ .Values.x }}` | значение из `values.yaml` (или `--set`) | `replicas: {{ .Values.replicaCount }}` |
+| `{{ .Release.Name }}` | имя релиза (из `helm install <name>`) | `name: {{ .Release.Name }}` |
+| `{{ .Chart.Name }}` | имя chart из `Chart.yaml` | `app.kubernetes.io/name: {{ .Chart.Name }}` |
+| `{{- if .Values.probes.enabled }}…{{- end }}` | условный блок (рендерится только если true) | блок probes; весь `ingress.yaml` |
+| `{{- with .Values.securityContext }}…{{- end }}` | сменить контекст: внутри `.` = этот объект | блок securityContext |
+| `{{ toYaml .Values.resources | indent 10 }}` | объект → YAML c отступом 10 пробелов | блок `resources:` |
+| `{{-` … | срезать пробел/перевод строки слева (чистые отступы) | перед `if`/`with` |
+
+```yaml
+# фрагмент templates/deployment.yaml — видно, как values становятся манифестом
+spec:
+  replicas: {{ .Values.replicaCount }}          # <- .Values.replicaCount (1)
+  template:
+    spec:
+      containers:
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"   # nginx:1.27-alpine
+        {{- if .Values.probes.enabled }}         # блок probes только если enabled
+        readinessProbe: { httpGet: { path: {{ .Values.probes.readiness.path }}, port: http } }
+        {{- end }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}        # объект resources как YAML
+```
+
+> Для крупных chart'ов повторяющиеся куски (labels, имена) выносят в именованные
+> шаблоны `_helpers.tpl` и подключают через `{{ include "name" . }}`. В этом
+> минимальном demo их НЕТ — labels продублированы прямо в шаблонах (так нагляднее).
+
+- **Приоритет values (кто кого перебивает, слева направо — последнее ВЫИГРЫВАЕТ):**
+  `values.yaml` chart'а  →  `-f my-values.yaml`  →  `--set key=val`.
+  То есть `--set replicaCount=2` перебьёт и `values.yaml`, и `-f`. Несколько `-f`
+  применяются по порядку; несколько `--set` — тоже (правый побеждает).
+
 ---
 
 **Цель:** проверить и установить chart `demo-app`.
@@ -88,6 +124,40 @@ kubectl -n lab get deploy demo-app -o jsonpath='{.spec.replicas}{"\n"}'   # 2
 - **Argo CD `Application`** описывает ЧТО синхронизировать (`repoURL`, `path`,
   `targetRevision`, namespace) и КАК (`syncPolicy`: `automated`/`prune`/
   `selfHeal`). **`AppProject`** задаёт границы (репозитории, namespaces, ресурсы).
+
+**Архитектура Argo CD (что реально стоит в ns `argocd`, v3.4.3 — 7 компонентов):**
+
+```
+            Git (source of truth)
+               │  репо + path + targetRevision
+               ▼
+   ┌──────────── ns argocd ─────────────────────────────────────────┐
+   │  repo-server          → клонирует Git, РЕНДЕРИТ манифесты        │
+   │                         (helm template / kustomize build)       │
+   │  application-controller→ сравнивает desired(Git) ↔ live(кластер),│ ──┐
+   │                         считает sync/health, делает apply        │   │ kube-apiserver
+   │  redis                → кэш отрендеренного/diff                   │   ▼
+   │  server (API/UI)  dex(SSO)  applicationset  notifications        │  ns lab (Deployment/Svc/…)
+   └─────────────────────────────────────────────────────────────────┘
+```
+
+**Sync-loop:** опрос Git каждые ~3 мин (или webhook) → repo-server рендерит →
+controller диффит Git↔кластер. Совпало → `Synced`; разошлось → `OutOfSync` и (при
+`automated`) `apply`. `selfHeal` реагирует на drift В КЛАСТЕРЕ (ручной `kubectl
+edit/delete`) и возвращает к Git; `prune` удаляет из кластера то, что убрали из Git.
+
+**Две независимые оси статуса** (их часто путают):
+
+| Sync status | Значение | | Health status | Значение |
+|-------------|----------|-|---------------|----------|
+| `Synced` | кластер = Git | | `Healthy` | все ресурсы здоровы |
+| `OutOfSync` | есть расхождение | | `Progressing` | ещё разворачивается / ждёт условие (Deploy не Available, Ingress без адреса) |
+| `Unknown` | не смог сравнить (ошибка `path`/repo) | | `Degraded` | ресурс в ошибке (CrashLoop, failed) |
+| | | | `Missing` | ресурс из Git отсутствует в кластере |
+
+> Поэтому `Synced` + `Progressing` — нормальное промежуточное состояние, НЕ ошибка
+> sync (как наш Ingress без контроллера: состояние совпало с Git, но ресурс не
+> «дозрел» до Healthy). См. 2.2.
 
 ---
 
@@ -163,6 +233,40 @@ kubectl -n lab get deploy demo-app
 
 ## Часть 3: Troubleshooting
 
+### Системная методология (по двум осям статуса)
+
+Не угадывать, а читать sync и health — они указывают РАЗНЫЕ классы проблем:
+
+```
+kubectl -n argocd get application <app>        # 1) посмотреть SYNC и HEALTH
+        │
+        ├─ SYNC=Unknown / OutOfSync ──> проблема СРАВНЕНИЯ/рендера (Git, не кластер):
+        │     kubectl -n argocd get application <app> -o jsonpath='{.status.conditions}'
+        │     # ComparisonError -> неверный path/repoURL/targetRevision
+        │     # логи рендера:  kubectl -n argocd logs deploy/argocd-repo-server | tail
+        │
+        └─ SYNC=Synced, но HEALTH ≠ Healthy ──> проблема САМОГО РЕСУРСА в кластере:
+              ├─ Degraded     -> ресурс в ошибке: kubectl -n <dest-ns> describe <res>
+              │                   (CrashLoop, ErrImagePull, failed Job …)
+              └─ Progressing  -> какой ресурс «не дозрел»: смотри его условия
+                  # частая причина: Deployment не Available, Ingress без адреса
+                  # логи самого sync: kubectl -n argocd logs sts/argocd-application-controller
+```
+
+**Опционально через `argocd` CLI** (если поставлен бинарь и сделан `argocd login`):
+
+```bash
+argocd app get demo-app          # дерево ресурсов + sync/health построчно
+argocd app diff demo-app         # ЧЕМ кластер отличается от Git (до sync)
+argocd app sync demo-app         # принудительная синхронизация
+argocd app logs demo-app         # логи приложения через Argo CD
+```
+
+> Без CLI всё то же доступно через `kubectl -n argocd get application <app> -o yaml`
+> (раздел `.status`: `sync`, `health`, `resources[]`, `conditions[]`).
+
+---
+
 ### Инцидент 1: Argo CD не синхронизирует — неверный `path`
 
 Оформлен в `broken/scenario-01/`: `spec.source.path` указывает на несуществующий
@@ -223,10 +327,15 @@ CD (мягкий `[WARN]`). Итог — `[OK] module 09 verified`.
 ## Теоретические вопросы (итоговые)
 
 1. Обязательная структура Helm chart и роль элементов.
-2. Как templating связывает `values.yaml` и манифесты?
-3. В чём суть GitOps и что такое drift?
-4. Как `Application`/`AppProject` описывают и ограничивают деплой?
-5. Три типовые причины sync-фейла в Argo CD.
+2. Как templating связывает `values.yaml` и манифесты? Что делают `toYaml`,
+   `{{- if }}`, `{{- with }}`?
+3. Приоритет values: что перебьёт что между `values.yaml`, `-f file`, `--set`?
+4. В чём суть GitOps и что такое drift? Как `selfHeal` и `prune` его устраняют?
+5. Назовите 4 компонента Argo CD и роль каждого в sync-loop.
+6. Чем **sync**-статус отличается от **health**-статуса? Может ли быть
+   `Synced` + `Progressing` одновременно и почему это не ошибка?
+7. Как `Application`/`AppProject` описывают и ограничивают деплой?
+8. Три типовые причины sync-фейла и как их различить по `sync`/`health`.
 
 ---
 
