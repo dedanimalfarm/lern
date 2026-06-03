@@ -38,7 +38,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 | # | Новый модуль | Ключевое | Среда |
 |---|--------------|----------|-------|
 | 11 | **autoscaling** ✅ ГОТОВ `c9f0c86` | HPA/VPA/Cluster Autoscaler — прогнан вживую (scale-up 1→5 под нагрузкой) | ✅ |
-| 12 | **resource-management** | PriorityClass, preemption, requests/limits tuning, bin-packing | любой ✅ |
+| 12 | **resource-management** ✅ ГОТОВ `c7e1338` | QoS-классы + PriorityClass/preemption + limits enforcement (CPU throttle vs Memory OOM) — прогнан на Kubespray (preemption вживую: high-prio вытеснил low-prio, событие Preempted) | любой ✅ |
 | 13 | **resilience** ✅ ГОТОВ `ef90589` | topologySpread + antiAffinity + PDB + cordon/drain — прогнан на Kubespray (drain показал защиту PDB вживую) | ✅ |
 
 ## Уровень 3 — Security hardening
