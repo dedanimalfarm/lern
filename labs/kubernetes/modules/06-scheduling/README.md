@@ -73,6 +73,29 @@ kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.tai
 - Labels на ноды вешают руками (`kubectl label node`) или их выставляет облако
   (например `topology.kubernetes.io/zone`, `node.kubernetes.io/instance-type`).
 
+**Пайплайн планировщика (две фазы):**
+
+```
+Pod (Pending) ──> SCHEDULER
+   │
+   1. FILTER (предикаты): отсеять НЕподходящие ноды
+   │     • хватает requests.cpu/memory?   • проходит nodeSelector/nodeAffinity?
+   │     • taints толерируются?           • свободны hostPort?
+   │     └─> «годные» ноды (feasible)
+   2. SCORE (приоритеты): оценить годные 0..100
+   │     • LeastAllocated (свободнее = выше)  • BalancedAllocation  • вес preferred-affinity
+   3. BIND: лучшая нода -> pod.spec.nodeName -> kubelet запускает контейнеры
+   │
+   └─ если после FILTER годных НЕТ -> Pod остаётся Pending + событие FailedScheduling
+```
+
+```yaml
+# nodeSelector в манифесте пода (это и есть фаза FILTER по label):
+spec:
+  nodeSelector:
+    disktype: ssd        # сядет ТОЛЬКО на ноду с этим label; нет такой -> Pending
+```
+
 ---
 
 **Цель:** «приклеить» Pod к ноде по label.
@@ -109,13 +132,47 @@ kubectl -n lab get pod -l app=select-by-label -o wide
 
 ### Теория для изучения перед частью
 
-- **taint** «отталкивает» поды от ноды. Эффекты: `NoSchedule` (новые поды без
-  toleration не сядут), `PreferNoSchedule` (избегать по возможности),
-  `NoExecute` (вытеснить уже запущенные поды без toleration).
-- **toleration** на Pod — «разрешение» сесть на ноду с конкретным taint. Это НЕ
-  принуждение (под не обязан садиться именно туда), а снятие запрета.
+- **taint** «отталкивает» поды от ноды. **toleration** на Pod — «разрешение» сесть
+  на ноду с конкретным taint. Это НЕ принуждение (под не обязан садиться именно
+  туда), а снятие запрета.
 - Применение: выделенные ноды (GPU, dedicated), защита control-plane (там стоят
   системные taint'ы).
+
+**Три эффекта taint:**
+
+| Эффект | Новые поды БЕЗ toleration | Уже запущенные поды без toleration |
+|--------|---------------------------|------------------------------------|
+| `NoSchedule` | не сядут | остаются работать |
+| `PreferNoSchedule` | избегаются (мягко, сядут если выбора нет) | остаются |
+| `NoExecute` | не сядут | **ВЫСЕЛЯЮТСЯ** (с `tolerationSeconds` — через паузу) |
+
+```yaml
+# toleration на поде — снимает запрет конкретного taint (dedicated=lab:NoSchedule):
+spec:
+  tolerations:
+  - key: dedicated
+    operator: Equal      # Equal (key=value) или Exists (любое value по ключу)
+    value: lab
+    effect: NoSchedule
+```
+
+**Каталог системных taint'ов** (ставятся автоматически — полезно узнавать в `describe node`):
+
+| Taint | Когда появляется | Ставит |
+|-------|------------------|--------|
+| `node-role.kubernetes.io/control-plane:NoSchedule` | на control-plane | kubeadm/Kubespray |
+| `node.kubernetes.io/not-ready:NoExecute` | нода NotReady | node-controller |
+| `node.kubernetes.io/unreachable:NoExecute` | потеряна связь с kubelet | node-controller |
+| `node.kubernetes.io/memory-pressure` / `disk-pressure` / `pid-pressure` | давление ресурсов | kubelet |
+| `node.kubernetes.io/unschedulable:NoSchedule` | `kubectl cordon` | kubectl |
+
+> **Паттерн «выделенная нода» (toleration + nodeSelector ВМЕСТЕ).** toleration лишь
+> РАЗРЕШАЕТ сесть на tainted-ноду, но не ведёт туда. Чтобы под ГАРАНТИРОВАННО попал
+> на неё — добавляют ещё и nodeSelector/affinity на ту же ноду:
+> ```yaml
+> tolerations: [{ key: dedicated, operator: Equal, value: gpu, effect: NoSchedule }]
+> nodeSelector: { dedicated: gpu }   # taint отгоняет ЧУЖИХ, selector ведёт СВОИХ
+> ```
 
 ---
 
@@ -170,6 +227,30 @@ kubectl -n lab get pod -l app=taint-toleration-demo -o wide
   подов (по их labels), в пределах `topologyKey` (нода/зона/регион).
   Классика: anti-affinity, чтобы реплики не оказались на одной ноде.
 
+```yaml
+# nodeAffinity (required) — как nodeSelector, но с операторами In/NotIn/Exists/Gt/Lt:
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - { key: disktype, operator: In, values: ["ssd", "nvme"] }   # ssd ИЛИ nvme
+```
+
+**`topologyKey` = по какому label определяется «домен» разнесения:**
+
+```
+topologyKey: kubernetes.io/hostname        -> домен = НОДА  (реплики на разные ноды)
+topologyKey: topology.kubernetes.io/zone   -> домен = ЗОНА  (реплики на разные зоны)
+
+  [zone-a:  node1  node2]      [zone-b:  node3]
+   anti-affinity по hostname: репл.1->node1, репл.2->node2, репл.3->node3
+   anti-affinity по zone:     не больше 1 реплики на зону (переживёт падение зоны)
+```
+
+- **`IgnoredDuringExecution`** во всех именах: правило проверяется ТОЛЬКО при
+  планировании; если ноды переразметили уже после запуска — под НЕ выселяется.
+
 ---
 
 **Цель:** понять разницу required/preferred и разнести реплики.
@@ -217,6 +298,19 @@ affinity:
 ## Часть 4: ResourceQuota и LimitRange
 
 ### Теория для изучения перед частью
+
+- **`requests` vs `limits` (фундамент).** `requests` — ГАРАНТИЯ: scheduler ищет
+  ноду, где столько СВОБОДНО (фаза Filter), и резервирует. `limits` — ПОТОЛОК:
+  cgroup не даёт превысить. Разница по ресурсам:
+
+| | CPU (compressible) | Memory (incompressible) |
+|---|--------------------|--------------------------|
+| превышение `limits` | **throttle** (тормозят, под жив) | **OOMKilled** (контейнер убит, exit 137) |
+| роль `requests` | сколько ядра гарантировано + база для HPA% | сколько ОЗУ гарантировано |
+
+  QoS-класс пода зависит от requests/limits: `Guaranteed` (requests==limits) >
+  `Burstable` (заданы, но не равны) > `BestEffort` (не заданы) — в таком порядке
+  поды и выселяют при нехватке. (Подробнее QoS/OOM — модуль 02.)
 
 - **ResourceQuota** ограничивает СУММАРНОЕ потребление namespace: общий
   `requests.cpu/memory`, `limits.cpu/memory`, число объектов (`pods`, `services`).
