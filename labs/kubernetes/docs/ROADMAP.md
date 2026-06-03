@@ -47,7 +47,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 |---|--------------|----------|-------|
 | 14 | **pod-security-admission** ✅ ГОТОВ `5aea74d` | PSA restricted + ValidatingAdmissionPolicy (CEL) — прогнан на Kubespray (bad-pod и `:latest` отклонены) | ✅ |
 | 15 | **network-policy-enforced** ✅ ГОТОВ `350f848` | микросегментация web→api→db — прогнан на Kubespray+Calico (web→db заблокировано) | Calico ✅ |
-| 16 | **secrets-management** | encryption-at-rest, external-secrets, sealed-secrets, Vault | GKE + внешний менеджер |
+| 16 | **secrets-management** ✅ ГОТОВ `de6069a` | encryption-at-rest (etcd plaintext по SSH) + Sealed Secrets + External Secrets Operator + Vault DYNAMIC secrets через VSO — всё прогнано на Kubespray (динамические postgres-креды генерятся on-demand) | ✅ |
 
 > ⚠️ Модуль 15 не отработает на текущем GKE (без Dataplane V2). Варианты: пересоздать
 > кластер с `datapath_provider=ADVANCED_DATAPATH`, либо kind + Calico.
