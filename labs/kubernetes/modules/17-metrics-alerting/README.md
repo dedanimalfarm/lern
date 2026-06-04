@@ -106,6 +106,54 @@ kubectl -n monitoring get pods
 | **histogram** | бакеты `_bucket` + `_sum`/`_count` | `apiserver_request_duration_seconds_bucket` | `histogram_quantile(0.95, ...)` |
 | **summary** | предвычисленные квантили | `..._sum` / `..._count` | `rate(sum)/rate(count)` |
 
+#### rate() vs irate() — сглаживание против резкости
+
+Обе считают «скорость роста counter за окно», но по-разному выбирают точки:
+
+| | `rate(c[5m])` | `irate(c[5m])` |
+|---|---|---|
+| По каким точкам | по ВСЕМ точкам окна (усреднение) | только по ДВУМ последним в окне |
+| Поведение | сглаженный тренд | мгновенная, «дёрганая» скорость |
+| Реакция на всплеск | размазывает по окну | ловит, но шумит |
+| Где применять | **алерты и графики** (стабильность) | дебаг короткого всплеска вручную |
+
+- Эмпирика: окно `[Nm]` бери ≥ 4× scrape-интервала (у нас scrape ~30с ⇒ окно
+  `[2m]` и больше), иначе rate «промахивается» между точками и даёт дыры.
+- `rate`/`irate` корректно переживают **сброс counter** при рестарте процесса
+  (детектируют падение значения и не дают отрицательную скорость).
+
+#### Проблема кардинальности (cardinality) — почему Prometheus падает по памяти
+
+**Кардинальность = число уникальных временных рядов** (одна комбинация
+`__name__` + всех label-значений = один ряд в TSDB, держится в RAM). Каждый
+новый набор меток порождает НОВЫЙ ряд. Метрика с меткой высокой мощности
+(`user_id`, `request_id`, `pod` в крупном кластере) взрывает память.
+
+**Reality на нашем Prometheus** (kube-prometheus-stack):
+
+```bash
+kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-prometheus 9090:9090 &
+# Всего активных рядов в head-блоке:
+curl -s 'http://localhost:9090/api/v1/query?query=prometheus_tsdb_head_series'
+#   ~81 569 рядов
+
+# Топ метрик по числу рядов (вкладка Status → TSDB Status, или API):
+curl -s http://localhost:9090/api/v1/status/tsdb   # seriesCountByMetricName
+#   apiserver_request_body_size_bytes_bucket   7200   <- гистограмма-лидер
+#   apiserver_request_duration_seconds_bucket  6680
+#   etcd_request_duration_seconds_bucket       4380
+# Топ меток по числу значений (labelValueCountByLabelName):
+#   __name__ 2127,  name 873,  le 336,  resource 334
+```
+
+> Что показывают числа: топ по рядам — **гистограммы** (`_bucket`). У гистограммы
+> ряды множатся как `кол-во le-бакетов × verb × resource × code` — отсюда 7200
+> рядов у ОДНОЙ метрики. Метка `le` сама даёт 336 значений. Вывод-правило:
+> **не клади в метрику метку с неограниченным числом значений** (id запроса,
+> email, полный URL). Лечится `metric_relabel_configs` (drop лишних меток на
+> scrape) и осторожностью с гистограммами. `Status → TSDB Status` в UI — первое,
+> куда смотреть, когда Prometheus раздувается по RAM или OOMKilled.
+
 ---
 
 **Цель:** выполнить запросы в Prometheus UI.
