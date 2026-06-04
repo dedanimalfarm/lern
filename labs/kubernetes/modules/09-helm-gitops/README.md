@@ -71,6 +71,45 @@ spec:
   То есть `--set replicaCount=2` перебьёт и `values.yaml`, и `-f`. Несколько `-f`
   применяются по порядку; несколько `--set` — тоже (правый побеждает).
 
+#### Helm-хуки: запуск действий вокруг install/upgrade
+
+Хук — обычный манифест (чаще `Job`) с аннотацией `helm.sh/hook`. Helm вырывает
+его из общего apply и запускает в нужный момент релиза — для миграций БД,
+прогрева, бэкапа перед апгрейдом.
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install      # когда запускать
+    "helm.sh/hook-weight": "-5"                  # порядок внутри фазы (меньше = раньше)
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers: [{ name: migrate, image: myapp:1.0, command: ["./migrate.sh"] }]
+```
+
+| Хук | Когда | Типичная задача |
+|---|---|---|
+| `pre-install` | до рендера/apply ресурсов при первой установке | создать схему БД |
+| `post-install` | после того как ресурсы созданы | прогрев, регистрация |
+| `pre-upgrade` / `post-upgrade` | до / после `helm upgrade` | миграция БД, smoke-тест |
+| `pre-delete` / `post-delete` | до / после `helm uninstall` | бэкап, очистка внешних ресурсов |
+| `test` | по `helm test` | проверка живости релиза |
+
+- **`hook-weight`** упорядочивает хуки одной фазы (целое, по возрастанию).
+- **`hook-delete-policy`** убирает Job хука: `hook-succeeded` (после успеха),
+  `before-hook-creation` (удалить прошлый перед новым запуском), `hook-failed`.
+- **Helm ЖДЁТ** завершения хука (`Job` → `Complete`) перед следующей фазой; упавший
+  `pre-upgrade` отменяет апгрейд. Это отличает хук от обычного `Job` в `templates/`,
+  который применяется вместе со всем и не блокирует релиз.
+- Argo CD НЕ исполняет Helm-хуки как Helm — он мапит их на свои фазы (см. ниже
+  sync-waves/hooks).
+
 ---
 
 **Цель:** проверить и установить chart `demo-app`.
@@ -158,6 +197,37 @@ edit/delete`) и возвращает к Git; `prune` удаляет из кла
 > Поэтому `Synced` + `Progressing` — нормальное промежуточное состояние, НЕ ошибка
 > sync (как наш Ingress без контроллера: состояние совпало с Git, но ресурс не
 > «дозрел» до Healthy). См. 2.2.
+
+#### Sync-waves и хуки Argo CD: порядок применения ресурсов
+
+По умолчанию Argo CD применяет все ресурсы разом, но сложный деплой требует
+ПОРЯДКА: CRD → namespace/ConfigMap → Deployment → миграция → Ingress. Порядок
+задаёт аннотация `argocd.argoproj.io/sync-wave` (целое; меньше = раньше):
+
+```
+wave -1: CustomResourceDefinition, Namespace   ◄── фундамент
+wave  0: ConfigMap, Secret, ServiceAccount      (default, если аннотации нет)
+wave  1: Deployment, StatefulSet, Service
+wave  2: Ingress, HPA                            ◄── зависят от готового сервиса
+```
+
+```yaml
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+```
+
+- **Внутри одной волны** Argo всё равно соблюдает встроенный порядок по kind
+  (namespaces и CRD раньше потребителей). Волны добавляют ЯВНЫЙ порядок поверх.
+- Argo ЖДЁТ, пока ресурсы текущей волны не станут **Healthy**, прежде чем перейти
+  к следующей — поэтому в волну ставят Job-миграцию перед Deployment приложения.
+- **Sync-фазы и хуки Argo** (аналог Helm-хуков, аннотация `argocd.argoproj.io/hook`):
+  `PreSync` (до основного sync — миграции), `Sync` (основная волна), `PostSync`
+  (после Healthy — smoke-тест), `SyncFail` (если sync упал). `hook-delete-policy`
+  убирает Job хука как в Helm.
+- Helm-хуки чарта Argo CD КОНВЕРТИРУЕТ: `pre-install/pre-upgrade` → `PreSync`,
+  `post-*` → `PostSync`, `test` → отдельно. Поэтому Helm-чарт с хуками работает и
+  под Argo, но через его фазовую модель, а не через `helm`.
 
 ---
 
