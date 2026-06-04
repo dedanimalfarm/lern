@@ -72,6 +72,35 @@ kubectl -n kube-system get pods | grep -E "calico|cilium|netd|dataplane" || \
   ноде), `LoadBalancer` (внешний облачный балансировщик), `ExternalName`
   (CNAME на внешний DNS).
 
+**kube-proxy: iptables vs IPVS (важно для масштаба):**
+
+| | iptables (по умолчанию) | IPVS |
+|---|---|---|
+| Структура | цепочки правил, линейный обход | хеш-таблица |
+| Поиск backend | O(n) по числу правил | O(1) |
+| Деградация | заметна на ~1000+ Service (минуты на пересборку) | держит десятки тысяч |
+| Балансировка | случайная (statistic) | алгоритмы (rr, lc, wrr…) |
+| Когда | дефолт, до ~1000 сервисов | большие кластеры |
+
+> ⚠️ **Наш кластер.** Хотя дефолт k8s — iptables, Kubespray ставит `kube-proxy`
+> в режиме **`ipvs`** (`kubectl -n kube-system get cm kube-proxy -o yaml | grep mode`
+> → `ipvs`). Проверьте на своём — режим виден там же.
+
+> ClusterIP — это НЕ интерфейс и не пингуется: kube-proxy ставит правило DNAT
+> (ClusterIP → один из Pod-IP). `ping ClusterIP` = 100% loss, и это норма; проверять
+> только `curl` на порт.
+
+- **EndpointSlice (замена Endpoints).** Старый объект `Endpoints` — ОДИН список всех
+  адресов сервиса: при 1000 подах любое изменение перезаписывает весь объект (нагрузка
+  на etcd/watch). `EndpointSlice` бьёт адреса на куски по ~100 → меняется только
+  затронутый срез. С 1.33+ `kubectl get endpoints` печатает deprecation-warning;
+  смотреть `kubectl get endpointslices`.
+- **`externalTrafficPolicy` (NodePort/LB):** `Cluster` (по умолчанию) — трафик может
+  прыгнуть на под на ДРУГОЙ ноде (доп. хоп, source-IP теряется = SNAT);
+  `Local` — только локальные поды ноды (сохраняет реальный source-IP, без хопа, но
+  трафик на ноду без подов дропается). `sessionAffinity: ClientIP` липнет клиент к
+  поду по IP.
+
 ---
 
 **Цель:** поднять ClusterIP-сервис и увидеть связь selector → Endpoints.
@@ -141,8 +170,19 @@ kubectl -n kube-system get ds -l k8s-app=kube-proxy 2>/dev/null | head -2
   внутри namespace достаточно короткого имени `net-demo`.
 - **headless Service** (`clusterIP: None`) резолвится не в один VIP, а в адреса
   всех подов (см. StatefulSet в модуле 03).
-- **`ndots`.** Из-за `ndots:5` короткие имена сначала пробуются с search-доменами
-  — отсюда «лишние» DNS-запросы; для внешних имён ставят точку в конце.
+- **`ndots:5` на числах.** Имя, в котором МЕНЬШЕ 5 точек, сначала перебирается со
+  ВСЕМИ search-доменами и лишь потом — как есть. `curl api.example.com` (2 точки <5)
+  на нашем кластере делает запросы:
+  `api.example.com.lab.svc.cluster.local` → `...svc.cluster.local` →
+  `...cluster.local` → … → и только в конце `api.example.com` — **до 6+ DNS-запросов**
+  на одно имя (5 промахов + попадание). Для внешних имён ставят ТОЧКУ в конце
+  (`api.example.com.` — абсолютное FQDN, 0 лишних запросов) или `dnsConfig.ndots:2`.
+- **nodelocaldns (Kubespray).** Чтобы не гонять каждый запрос в CoreDNS-под по сети,
+  на каждой ноде стоит кэш `nodelocaldns` на link-local `169.254.25.10:53` — поды
+  резолвят через НЕГО (см. `/etc/resolv.conf`: `nameserver 169.254.25.10`). Снижает
+  latency и нагрузку на CoreDNS (важно при ndots-«усилении» выше).
+- **`dnsPolicy`:** `ClusterFirst` (по умолчанию — сначала кластерный DNS),
+  `Default` (наследовать resolv.conf ноды), `None` (+ свой `dnsConfig`).
 
 ---
 
@@ -197,6 +237,24 @@ kubectl -n lab run dnscheck --image=busybox:1.36 --restart=Never -i --rm -- \
 - **Ingress** — L7-роутер: по `host`/`path` направляет HTTP(S) на сервисы.
   Работает только при установленном **ingress-controller**; правило само по себе
   ничего не делает. `ingressClassName` выбирает контроллер (`nginx`, `gce`, …).
+
+**Цепочка LoadBalancer (что под капотом):**
+
+```
+интернет → облачный LB (публ. IP, ПЛАТНЫЙ) → :NodePort на ноде → kube-proxy(iptables/ipvs) → Pod
+                                                  ▲ LoadBalancer-сервис ВКЛЮЧАЕТ NodePort внутри себя
+```
+> Поэтому даже LoadBalancer держит NodePort «под капотом». На bare-metal/Kubespray
+> облачного LB НЕТ → нужен MetalLB или ingress-nginx baremetal (модуль 22).
+
+- **Ingress vs Gateway API** (Gateway API — преемник Ingress, GA с 1.29):
+
+| | Ingress | Gateway API |
+|---|---|---|
+| Объекты | один `Ingress` | `GatewayClass` + `Gateway` + `HTTPRoute`/`TCPRoute` |
+| Роли | всё в одном (смешаны infra и app) | разделены: оператор кластера (Gateway) vs разработчик (Route) |
+| L4/гибкость | в основном HTTP, остальное через аннотации | HTTP/TCP/gRPC/TLS нативно, без аннотаций-«магии» |
+| Зрелость | повсеместно, но «застыл» | новый стандарт, развивается |
 
 ---
 
@@ -479,17 +537,20 @@ ns/lab`.
 1. Опишите путь пакета от `curl <ClusterIP>` до Pod. Роль `kube-proxy`.
 2. Сравните `ClusterIP`/`NodePort`/`LoadBalancer`/`ExternalName`.
 3. Почему пустой `Endpoints` = «Connection refused», и какие две причины этого?
+4. iptables vs IPVS: чем отличаются и где iptables деградирует? Какой режим у нашего кластера?
+5. `externalTrafficPolicy: Local` vs `Cluster` — что с source-IP и лишним хопом?
 
 ### Блок 2: DNS
 
-4. Как резолвится `net-demo.lab.svc.cluster.local`? Кто отвечает?
-5. Почему короткое имя работает внутри namespace, но не всегда между namespace?
+6. Как резолвится `net-demo.lab.svc.cluster.local`? Кто отвечает?
+7. `ndots:5`: сколько DNS-запросов на `api.example.com` и как убрать лишние?
+8. Зачем nodelocaldns и на каком адресе он слушает?
 
 ### Блок 3: Внешний доступ
 
-6. Чем Ingress принципиально отличается от LoadBalancer-сервиса?
-7. Что произойдёт с объектом Ingress, если в кластере нет ingress-controller?
-8. Зачем LoadBalancer-сервису под капотом всё равно нужен NodePort?
+9. Чем Ingress принципиально отличается от LoadBalancer-сервиса?
+10. Зачем LoadBalancer-сервису под капотом всё равно нужен NodePort?
+11. Чем Gateway API лучше Ingress (роли, L4, без «магии» аннотаций)?
 
 ### Блок 4: NetworkPolicy
 
