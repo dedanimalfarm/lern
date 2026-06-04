@@ -1,0 +1,52 @@
+# RBAC для webapp-operator.
+# ClusterRole/ClusterRoleBinding выбраны, чтобы контроллер мог:
+#   - читать/писать WebApp (включая /status)
+#   - управлять Deployment/Service в ns ``lab``
+#   - листить/смотреть ConfigMap'ы в своём ns для будущих расширений
+# Если в задаче достаточно Namespace-scoped прав — замените ClusterRole на Role
+# и ClusterRoleBinding на RoleBinding.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: webapp-operator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: webapp-operator
+  namespace: webapp-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: webapp-operator
+rules:
+  - apiGroups: ["lab.example.com"]
+    resources: ["webapps"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["lab.example.com"]
+    resources: ["webapps/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: webapp-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: webapp-operator
+subjects:
+  - kind: ServiceAccount
+    name: webapp-operator
+    namespace: webapp-operator

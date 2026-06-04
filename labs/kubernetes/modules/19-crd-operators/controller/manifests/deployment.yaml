@@ -1,0 +1,49 @@
+# Сам контроллер как Deployment. Для лабораторной работы можно также
+# запускать его вне кластера (KUBECONFIG env, см. README).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-operator
+  namespace: webapp-operator
+  labels:
+    app.kubernetes.io/name: webapp-operator
+    app.kubernetes.io/component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: webapp-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: webapp-operator
+    spec:
+      serviceAccountName: webapp-operator
+      containers:
+        - name: operator
+          # В учебной лабе образ собирается локально (см. README,
+          # `docker build -t webapp-operator:dev .`). Если registry
+          # недоступен — замените на imagePullPolicy: Never и подгрузите
+          # в containerd руками (`ctr -n k8s.io images import ...`).
+          image: webapp-operator:dev
+          imagePullPolicy: Never
+          env:
+            - name: WATCH_NAMESPACE
+              value: "lab"
+            - name: RESYNC_PERIOD
+              value: "15"
+            - name: LOG_LEVEL
+              value: "INFO"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            exec:
+              command: ["true"]
+            initialDelaySeconds: 10
+            periodSeconds: 30

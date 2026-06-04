@@ -244,6 +244,13 @@ kubectl -n lab get deploy,svc -l app=test-webapp    # пусто
 > использовать `--watch`/informers вместо poll; писать на Go (controller-runtime/
 > Kubebuilder) или Python (kopf).
 
+> 🏭 **Прод-реализация в этом же модуле:** `controller/webapp_controller.py` —
+> тот же оператор на Python (informers + workqueue + resync, client `kubernetes`),
+> упакованный в контейнер (`controller/Dockerfile`, non-root) и разворачиваемый
+> как Pod с least-privilege RBAC: `kubectl apply -k controller/manifests/`
+> (ns `webapp-operator` + SA + ClusterRole на webapps/deployments/services +
+> sample WebApp). Это «как в реальности», bash-версия выше — для понимания петли.
+
 **Контрольные вопросы:**
 1. Чем CRD без контроллера отличается от оператора?
 2. Что такое reconcile loop и какие три шага он делает?

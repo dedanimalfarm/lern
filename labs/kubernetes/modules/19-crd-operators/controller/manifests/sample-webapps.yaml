@@ -1,0 +1,41 @@
+# Тестовые экземпляры WebApp для проверки контроллера.
+# Сценарии:
+#   1) nginx-3      — базовый, 3 реплики (ожидаем создания Deployment+Service,
+#                     ready реплики 3/3)
+#   2) httpd-2-host — 2 реплики, host=httpd-2.local (проверяем, что host не ломает reconcile)
+#   3) min-replica  — replicas=1 (нижняя граница схемы)
+---
+apiVersion: lab.example.com/v1
+kind: WebApp
+metadata:
+  name: nginx-3
+  namespace: lab
+  labels:
+    test: "true"
+spec:
+  image: nginx:1.27-alpine
+  replicas: 3
+  host: nginx-3.local
+---
+apiVersion: lab.example.com/v1
+kind: WebApp
+metadata:
+  name: httpd-2-host
+  namespace: lab
+  labels:
+    test: "true"
+spec:
+  image: httpd:2.4-alpine
+  replicas: 2
+  host: httpd-2.local
+---
+apiVersion: lab.example.com/v1
+kind: WebApp
+metadata:
+  name: min-replica
+  namespace: lab
+  labels:
+    test: "true"
+spec:
+  image: nginx:1.27-alpine
+  replicas: 1
