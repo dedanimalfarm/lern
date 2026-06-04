@@ -52,6 +52,29 @@ kubectl -n kube-system get pods -l k8s-app=calico-node -o wide 2>/dev/null \
 - **Enforcement делает CNI**, а не сам Kubernetes. Без поддерживающего CNI объект
   есть, а фильтрации нет.
 
+- **Что CNI делает «под капотом» (Calico).** NetworkPolicy — это лишь ОБЪЕКТ в API.
+  `calico-node` (DaemonSet на каждой ноде) ВОТЧИТ их и транслирует в правила
+  пакетного фильтра на ноде: `iptables`/`ipset` (стандартный dataplane) или
+  **eBPF**-программы (Calico-eBPF / Cilium). `default-deny` = правило «DROP всё, что
+  не разрешено явным allow». Пакет от пода проходит через эти правила ДО выхода с
+  ноды — поэтому блок реальный, а не «в apiserver».
+
+- **Семантика пустого селектора (частая путаница):**
+
+| Запись | Значит |
+|--------|--------|
+| `podSelector: {}` | ВСЕ поды namespace (база для default-deny) |
+| `podSelector:` отсутствует в `from` | (в правиле) — не ограничивать по подам |
+| `from: []` (пустой список) | НИКОГО не пускать (пустой allow) |
+| `from:` отсутствует при `policyTypes:[Ingress]` | весь ingress ЗАПРЕЩЁН |
+
+| CNI | Enforcement | Dataplane |
+|-----|-------------|-----------|
+| Calico | ✅ (наш кластер) | iptables/ipset или eBPF |
+| Cilium | ✅ | eBPF (+ L7/FQDN) |
+| GKE Dataplane V2 | ✅ | eBPF (Cilium) |
+| Flannel / голый kind | ❌ объект есть, трафик НЕ режется | — |
+
 ---
 
 **Цель:** убедиться, что default-deny реально закрывает трафик.
@@ -150,6 +173,21 @@ probe api db    # OK  (api-policy egress -> db, db-policy ingress <- api)
 - Egress-политики позволяют ограничить и выход в интернет (разрешить только
   нужные адреса через `ipBlock`).
 
+- **Корректный allow-dns (UDP И TCP :53).** DNS обычно по UDP, но крупные ответы и
+  zone-transfer — по TCP, поэтому открывают ОБА протокола. На Kubespray резолвер —
+  `nodelocaldns` на link-local `169.254.25.10`, а НЕ под CoreDNS напрямую (см. наш
+  `01-allow-dns.yaml`): egress :53 нужен к `ipBlock 169.254.25.10/32` И к поду
+  `k8s-app=kube-dns` (для кластеров без nodelocaldns).
+- **Egress к ВНЕШНИМ ресурсам.** Прод-приложение часто ходит во внешнюю БД (RDS),
+  платёжный API, S3 — это НЕ in-cluster поды, podSelector тут не подходит. Открывают
+  egress к их CIDR через `ipBlock` (или, в Cilium/Calico, по FQDN — L7-расширение
+  поверх стандартного NetworkPolicy):
+  ```yaml
+  egress:
+  - to: [{ ipBlock: { cidr: 52.0.0.0/11 } }]   # напр. диапазон облачного RDS
+    ports: [{ protocol: TCP, port: 5432 }]
+  ```
+
 ---
 
 ### 3.1 Почему allow-dns обязателен
@@ -178,6 +216,32 @@ kubectl -n lab apply -f manifests/netpol/01-allow-dns.yaml   # вернуть
   `monitoring` к метрикам). Комбинируется с podSelector.
 - **ipBlock** оперирует CIDR: разрешить подсеть с исключениями (`except`) —
   полезно для доступа к внешним адресам/балансировщикам.
+
+**⚠️ AND vs OR — САМАЯ частая ошибка (разница в ОДНОМ дефисе):**
+
+```yaml
+# (1) AND — под app=prometheus И ОДНОВРЕМЕННО в ns monitoring.
+#     namespaceSelector и podSelector в ОДНОМ элементе списка (нет дефиса между ними):
+from:
+- namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: monitoring } }
+  podSelector:       { matchLabels: { app: prometheus } }
+
+# (2) OR — из ЛЮБОГО пода ns monitoring, ИЛИ из пода app=prometheus в ЛЮБОМ ns.
+#     ДВА отдельных элемента списка (каждый со своим дефисом):
+from:
+- namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: monitoring } }
+- podSelector:       { matchLabels: { app: prometheus } }
+```
+
+> Один лишний/пропущенный `-` меняет смысл с «строго prometheus-из-monitoring» на
+> «вообще весь monitoring + любой prometheus». Это дыра в безопасности №1 при
+> написании политик. Правило: элементы СПИСКА `from`/`to` — это **OR**; селекторы
+> ВНУТРИ одного элемента — **AND**.
+
+- **`ipBlock`-нюансы:** (а) в одном элементе `ipBlock` НЕЛЬЗЯ совмещать с
+  pod/namespaceSelector (ipBlock — отдельный вид источника); (б) для in-cluster
+  трафика podSelector надёжнее ipBlock (Pod IP эфемерны); (в) `ipBlock` нужен для
+  ВНЕШНИХ адресов (RDS, SaaS-API, link-local nodelocaldns `169.254.25.10/32` для DNS).
 
 ```yaml
 # Пример: пустить ingress к api ещё и из namespace monitoring (Prometheus):
@@ -274,11 +338,14 @@ bash verify/verify.sh
 
 ## Теоретические вопросы (итоговые)
 
-1. Объясните allow-list модель NetworkPolicy и роль `default-deny`.
+1. Объясните allow-list модель NetworkPolicy и роль `default-deny`. Что делает CNI
+   (Calico) «под капотом», чтобы политика реально резала трафик?
 2. Почему для пути A→B нужны egress у A и ingress у B одновременно?
-3. Как политики складываются (additive) и есть ли «явный deny»?
-4. Почему `allow-dns` критичен и что ломается без него?
-5. Чем `podSelector`/`namespaceSelector`/`ipBlock` отличаются по применению?
+3. **AND vs OR:** в чём разница между `namespaceSelector`+`podSelector` в ОДНОМ
+   элементе `from` и в ДВУХ? Почему это дыра №1?
+4. Почему `allow-dns` критичен; почему открывают и UDP, и TCP :53?
+5. Чем `podSelector`/`namespaceSelector`/`ipBlock` отличаются? Когда нужен `ipBlock`
+   (внешние ресурсы) и почему им не стоит описывать in-cluster трафик?
 6. От чего зависит, БУДЕТ ли NetworkPolicy реально применяться?
 
 ---
