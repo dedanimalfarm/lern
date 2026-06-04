@@ -319,6 +319,43 @@ affinity:
   `default`) и мин/макс. Важно: при активной ResourceQuota на requests/limits
   каждый Pod ОБЯЗАН их иметь — LimitRange проставляет их тем, кто не указал явно.
 
+#### scopes / scopeSelector — квота не на весь namespace, а на класс подов
+
+Обычная квота считает ВСЕ поды namespace. `scopes`/`scopeSelector` сужают её до
+подмножества — нужно для мультитенантности и защиты от «дешёвых» BestEffort-подов.
+
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata: { name: q-besteffort, namespace: lab }
+spec:
+  hard: { pods: "10" }                 # не больше 10 BestEffort-подов
+  scopes: [ BestEffort ]               # квота применяется ТОЛЬКО к ним
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata: { name: q-high-prio, namespace: lab }
+spec:
+  hard: { requests.cpu: "4", requests.memory: 8Gi }
+  scopeSelector:                       # квота только для подов класса "high"
+    matchExpressions:
+    - { scopeName: PriorityClass, operator: In, values: ["high"] }
+```
+
+| Scope | Что отбирает |
+|---|---|
+| `BestEffort` / `NotBestEffort` | поды без requests/limits / с ними |
+| `Terminating` / `NotTerminating` | поды с `activeDeadlineSeconds` / без (Job vs сервис) |
+| `PriorityClass` (через `scopeSelector`) | поды с конкретным PriorityClass — лимит дорогих/важных |
+| `CrossNamespacePodAffinity` | поды с кросс-namespace affinity |
+
+- **Зачем:** одна квота держит «потолок» дорогих Guaranteed-подов (`NotBestEffort`),
+  другая ограничивает число BestEffort-подов, третья режет ресурсы по
+  `PriorityClass=high` — каждый класс изолирован, не объедает соседей.
+- `scopes` (списком) и `scopeSelector` (выражения) можно сочетать; pod должен
+  удовлетворять ВСЕМ условиям, чтобы попасть под квоту. Связь PriorityClass/QoS —
+  модуль 12, QoS/OOM — модуль 02.
+
 ---
 
 **Цель:** ограничить namespace и увидеть авто-подстановку дефолтов.
