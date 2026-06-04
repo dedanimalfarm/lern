@@ -58,6 +58,34 @@ kubectl -n kube-system get deploy -l k8s-app=kube-dns
   `OOMKilled` и `exitCode`).
 - **`Running` ≠ `Ready`.** Колонка `READY n/m` считает контейнеры, прошедшие
   `readinessProbe`. Фаза может быть `Running`, а `READY 0/1`.
+
+**State machine фазы Pod (`.status.phase`):**
+
+```
+           (создан)
+              │
+          ┌── Pending ──────────────────┐  ждёт: scheduling / pull образа / mount тома
+          │      │ контейнер(ы) стартовали
+          │      ▼
+          │   Running ──────┬─────────────┐
+          │      │          │ exit 0       │ exit ≠0 (и restartPolicy исчерпан)
+          │      │ r" Always: рестарт      ▼              ▼
+          │      │  (CrashLoopBackOff)  Succeeded        Failed
+          │      ▼
+          └─ Unknown  (нет связи с kubelet ноды)
+```
+
+**Pod Conditions** (`.status.conditions` — 4 булевых сигнала от kubelet, ПОРЯДОК созревания):
+
+| Condition | True когда |
+|-----------|-----------|
+| `PodScheduled` | назначена нода |
+| `Initialized` | все initContainers завершились |
+| `ContainersReady` | все контейнеры прошли readiness |
+| `Ready` | под готов принимать трафик (попадает в Endpoints) |
+
+> `kubectl wait --for=condition=Ready pod/X` ждёт именно это. `Running` (phase) ≠
+> `Ready` (condition): процесс жив ≠ готов к трафику.
 - **`restartPolicy`** (`Always`/`OnFailure`/`Never`): для Deployment всегда
   `Always`; у разовых Pod/Job — `OnFailure`/`Never`. Определяет, перезапустит ли
   kubelet завершившийся контейнер.
