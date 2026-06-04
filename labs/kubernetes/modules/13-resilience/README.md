@@ -33,6 +33,38 @@ kubectl get nodes --no-headers | wc -l    # сколько нод (нужно >=
 - **`whenUnsatisfiable`**: `DoNotSchedule` (жёстко — иначе `Pending`) или
   `ScheduleAnyway` (мягко — постарается, но посадит).
 
+**`skew` на числах** (maxSkew=1, домены = ноды; у нас 2 worker, cp таинтнут):
+
+| Подов | Раскладка | skew = max−min | DoNotSchedule пускает? |
+|:---:|:---:|:---:|:---|
+| 1 | w1=1, w2=0 | 1 | да (≤1) |
+| 2 | w1=1, w2=1 | 0 | да (балансир) |
+| 3 | w1=2, w2=1 | 1 | да (3-й только на МЕНЬШИЙ домен) |
+| 4 | w1=2, w2=2 | 0 | да |
+
+> `skew = (макс. подов в домене) − (мин. подов в домене)`. Новый под при
+> `DoNotSchedule` сядет ТОЛЬКО туда, где итоговый skew ≤ `maxSkew`. Если все домены
+> равны и нельзя добавить без нарушения — под `Pending`.
+
+- **⚠️ `nodeTaintsPolicy` (критично на Kubespray!).** Какие ноды считать доменами:
+  `Ignore` (ПО УМОЛЧАНИЮ) — taint'ы игнорируются → таинтнутая control-plane нода
+  ВХОДИТ в домены как «домен с 0 подов» → ломает skew → лишние `Pending`. `Honor` —
+  исключить ноды с непротолерированными taint'ами из расчёта. На нашем кластере (cp
+  с taint) в `app.yaml` стоит **`nodeTaintsPolicy: Honor`** — иначе spread по 2
+  worker сломался бы. Парный `nodeAffinityPolicy` (default `Honor`) — учитывать ли
+  nodeSelector/affinity при выборе доменов.
+- **`minDomains`** — требовать МИНИМУМ N непустых доменов (защита «а если живой только
+  1 домен — не лепи всё туда»).
+
+**topologySpread vs podAntiAffinity** (часто путают):
+
+| | topologySpread | podAntiAffinity |
+|---|---|---|
+| Цель | РАВНОМЕРНО (skew по доменам) | НЕ ВМЕСТЕ (расталкивать) |
+| Гранулярность | счёт по доменам (мягко/жёстко) | бинарно: можно/нельзя в домене |
+| Масштаб | дёшев на 1000+ нод | дорог (O(подов²) при required) |
+| Комбинируют | да — spread для баланса + antiAffinity для строгого «не на одной ноде» | |
+
 ---
 
 **Цель:** размазать 3 реплики по 3 нодам.
@@ -71,6 +103,30 @@ kubectl -n lab get pods -l app=resilient-app \
 - Отличие от topologySpread: anti-affinity про «не вместе», spread про
   «равномерно». Часто комбинируют для надёжности.
 
+```yaml
+# required: реплики ОБЯЗАНЫ на разных хостах (нод < реплик -> лишние Pending)
+podAntiAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+  - labelSelector: { matchLabels: { app: resilient-app } }
+    topologyKey: kubernetes.io/hostname        # «домен» = нода
+# preferred: ПРЕДПОЧтительно на разных (под всё равно сядет; weight 1..100 — приоритет)
+  preferredDuringSchedulingIgnoredDuringExecution:
+  - weight: 100
+    podAffinityTerm:
+      labelSelector: { matchLabels: { app: resilient-app } }
+      topologyKey: kubernetes.io/hostname
+```
+
+- **`topologyKey`** определяет «домен совместности»: `hostname` — не на одной НОДЕ;
+  `zone` — не в одной ЗОНЕ (переживает падение зоны). Anti-affinity «расталкивает»
+  в пределах этого домена.
+- **`weight` (preferred).** scheduler складывает веса всех выполненных preferred-правил
+  в score ноды и выбирает ноду с наибольшим — то есть preferred влияет на ВЫБОР,
+  но не блокирует посадку (в отличие от required).
+- **Масштаб:** `required` antiAffinity дорог (проверка пар подов) — на больших
+  деплоях берут topologySpread, а antiAffinity оставляют для критичного «строго не
+  на одной ноде».
+
 ---
 
 ### 2.1 Реплики на разных нодах
@@ -95,13 +151,39 @@ kubectl -n lab get pods -l app=resilient-app -o wide | awk '{print $1, $7}'
 
 ### Теория для изучения перед частью
 
-- **PDB** защищает от ДОБРОВОЛЬНЫХ disruption (drain ноды на обслуживание,
-  обновление): `minAvailable` / `maxUnavailable`. Eviction, нарушающий PDB,
-  отклоняется Eviction API.
-- `ALLOWED DISRUPTIONS = replicas − minAvailable` — сколько подов можно увести
-  одновременно.
-- PDB НЕ защищает от НЕдобровольных сбоев (падение ноды) — только от плановых
-  операций.
+- **Voluntary vs involuntary disruptions (фундамент PDB).**
+  *Voluntary* (добровольные) — то, что инициирует человек/контроллер: `drain`,
+  обновление ноды, удаление пода через **Eviction API**. *Involuntary* —
+  падение ноды, kernel panic, OOM, вытеснение по нехватке ресурсов.
+  **PDB защищает ТОЛЬКО от voluntary** (через Eviction API). От падения ноды PDB не
+  спасёт — для этого нужны spread/antiAffinity (несколько реплик на разных нодах).
+- **PDB** (`minAvailable` / `maxUnavailable`): минимум живых / максимум недоступных
+  реплик во время voluntary-операций.
+
+| Поле | `ALLOWED DISRUPTIONS` (replicas=3) |
+|------|------------------------------------|
+| `minAvailable: 2` | `3 − 2 = 1` |
+| `minAvailable: 50%` | `3 − ceil(1.5)=2 → 1` |
+| `maxUnavailable: 1` | `1` (напрямую) |
+| `minAvailable: 3` | `0` — нода НЕДРЕНИРУЕМА (drain виснет) |
+
+**Поток Eviction API (что делает `kubectl drain` под капотом):**
+
+```
+drain -> для каждого пода: POST /eviction
+            apiserver проверяет PDB:
+              ALLOWED DISRUPTIONS > 0 ?
+                да  -> 201 Created (под выселен, ALLOWED уменьшается)
+                нет -> 429 Too Many Requests -> drain ЖДЁТ и повторяет
+            (контроллер пересоздаёт под на другой ноде -> ALLOWED восстанавливается)
+```
+
+- **`unhealthyPodEvictionPolicy` (k8s 1.26+).** `IfHealthyBudget` (по умолчанию) —
+  нездоровые (не Ready) поды защищены PDB так же → могут заблокировать drain, даже
+  если они «мёртвый груз». `AlwaysAllow` — нездоровые поды выселяются всегда (не
+  считаются в budget) — обычно правильнее для обслуживания.
+- **PDB × HPA.** PDB считает от ТЕКУЩего числа подов, не от `replicas` Deployment.
+  Если HPA скейлит вниз во время drain — `ALLOWED` может неожиданно стать 0.
 
 ---
 
@@ -191,11 +273,11 @@ anti-affinity rules`. Решение — `preferred` вместо `required`, л
 ## Проверка модуля
 
 ```bash
-kubectl -n lab apply -f manifests/
+kubectl -n lab apply -k manifests/      # -k (kustomize): в каталоге есть kustomization.yaml
 kubectl -n lab rollout status deploy/resilient-app --timeout=120s
 
 bash verify/verify.sh
-# [OK] resilient-app spread across 3 nodes
+# [OK] resilient-app spread across 2 nodes   (у нас 2 worker-ноды; cp таинтнут)
 # [OK] module 13 verified
 ```
 
@@ -216,11 +298,13 @@ bash verify/verify.sh
 
 ## Теоретические вопросы (итоговые)
 
-1. Чем topologySpread отличается от podAntiAffinity по смыслу?
-2. Что задают `maxSkew`/`topologyKey`/`whenUnsatisfiable`?
-3. Как считается `ALLOWED DISRUPTIONS` и от чего PDB защищает?
-4. Почему `required` anti-affinity при репликах > нод даёт `Pending`?
-5. Как spread + PDB вместе обеспечивают обслуживание без простоя?
+1. Чем topologySpread отличается от podAntiAffinity по смыслу и масштабируемости?
+2. Что задают `maxSkew`/`topologyKey`/`whenUnsatisfiable`? Посчитайте skew для 3 подов на 2 домена.
+3. Зачем `nodeTaintsPolicy: Honor` на Kubespray и что сломается при дефолтном `Ignore`?
+4. Voluntary vs involuntary disruption — от каких PDB защищает, а от каких нет?
+5. Как считается `ALLOWED DISRUPTIONS` (для `minAvailable` и `maxUnavailable`)? Опишите поток Eviction API (429/201).
+6. Что делает `unhealthyPodEvictionPolicy: AlwaysAllow` и зачем?
+7. Почему `required` anti-affinity при репликах > нод даёт `Pending`?
 
 ---
 
