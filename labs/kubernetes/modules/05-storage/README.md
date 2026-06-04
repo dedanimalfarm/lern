@@ -276,6 +276,88 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metada
 - `allowVolumeExpansion` и онлайн-расширение тома
 - Фазы PV/PVC: `Available → Bound → Released → Failed`
 
+#### Как PVC находит свой PV (критерии матчинга)
+
+Когда PVC ищет, к какому PV привязаться (или какой PV создать динамически),
+контроллер binding проверяет **все** условия одновременно:
+
+| Критерий | Правило связывания |
+|---|---|
+| `storageClassName` | должен **совпадать** строка-в-строку (пустой `""` PVC ↔ PV без класса; не указан у PVC ⇒ берётся default-класс) |
+| `accessModes` | PV обязан поддерживать **все** режимы, запрошенные PVC (PV — надмножество) |
+| `capacity` | `PV.capacity >= PVC.requests.storage` (можно получить том БОЛЬШЕ запроса) |
+| `volumeName` | если PVC явно указал `volumeName: X` — привяжется только к этому PV |
+| `selector` | `matchLabels`/`matchExpressions` PVC должны совпасть с метками PV |
+| `volumeMode` | `Filesystem` (по умолчанию) vs `Block` — должны совпасть |
+
+- **Связывание эксклюзивно и 1:1**: один PV ↔ один PVC. Привязанный PV не
+  отдадут другому claim, даже если в нём много места.
+- **Динамика vs статика**: если подходящего `Available` PV нет, но у класса есть
+  провижинер — PV создаётся под запрос (capacity = ровно `requests`). Если
+  провижинера нет — PVC висит `Pending` (см. Часть 4, Инцидент 1).
+- `WaitForFirstConsumer` откладывает и матчинг, и создание PV до появления Pod —
+  чтобы выбрать топологию (зону/ноду) под реального потребителя.
+
+#### CSI-архитектура (и почему в нашей лабе её НЕТ)
+
+Современный k8s общается с системами хранения через **CSI** (Container Storage
+Interface) — out-of-tree плагины. У CSI-драйвера две части:
+
+```
+        ┌─────────────────── Controller Plugin (Deployment, 1 на кластер) ──────────────────┐
+        │  CSI-драйвер  +  внешние sidecar-контроллеры (поставляет сообщество k8s):          │
+        │   • external-provisioner  — видит новый PVC → зовёт CreateVolume   (создать том)   │
+        │   • external-attacher     → ControllerPublishVolume   (присоединить том к ноде)    │
+        │   • external-resizer      → ControllerExpandVolume    (онлайн-расширение)          │
+        │   • external-snapshotter  → CreateSnapshot            (снапшоты)                    │
+        └───────────────────────────────────────────────────────────────────────────────────┘
+        ┌─────────────────── Node Plugin (DaemonSet, на каждой ноде) ───────────────────────┐
+        │   CSI-драйвер  +  node-driver-registrar  → NodeStageVolume / NodePublishVolume     │
+        │   (форматирует и монтирует том в каталог Pod на конкретной ноде)                   │
+        └───────────────────────────────────────────────────────────────────────────────────┘
+   Объекты-следы: `CSIDriver` (регистрация драйвера), `CSINode` (какие драйверы на ноде),
+                  `VolumeAttachment` (факт attach тома к ноде).
+```
+
+> **Reality на нашем кластере (Kubespray + local-path):**
+> ```bash
+> kubectl get csidrivers   # No resources found  — CSI-драйверов НЕТ
+> kubectl get csinodes     # у каждой ноды DRIVERS = 0
+> kubectl get sc local-path -o jsonpath='{.provisioner}'   # rancher.io/local-path
+> ```
+> `local-path-provisioner` от Rancher — это **не** CSI-драйвер, а простой
+> out-of-tree провижинер: на `CreateVolume` он просто делает `mkdir` каталога на
+> ноде (hostPath под капотом) подом-хелпером. Отсюда его ограничения, которые мы
+> видим в лабе: **нет** `allowVolumeExpansion` (внешнего resizer не существует) и
+> **нет** снапшотов (нет external-snapshotter и CRD VolumeSnapshot). В облаке
+> (EBS/PD/Cinder CSI) обе фичи появляются «бесплатно» вместе с CSI-драйвером.
+
+#### Снапшоты томов (VolumeSnapshot — теория, на local-path недоступно)
+
+Где CSI-драйвер умеет снапшоты, точечная копия тома делается тремя объектами:
+
+```yaml
+# 1) Класс снапшотов (как StorageClass, но для копий); ставится с CSI-драйвером
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata: { name: csi-snap }
+driver: ebs.csi.aws.com          # пример: реальный CSI-драйвер
+deletionPolicy: Delete
+---
+# 2) Запрос снапшота конкретного PVC (в namespace)
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata: { name: data-snap, namespace: lab }
+spec:
+  volumeSnapshotClassName: csi-snap
+  source: { persistentVolumeClaimName: demo-pvc }
+# 3) Восстановление: новый PVC с dataSource на этот VolumeSnapshot.
+```
+
+> На нашем стенде `kubectl get volumesnapshotclasses` вернёт ошибку «resource type
+> not found» — CRD снапшотов в кластер не ставились, т.к. local-path их не
+> поддерживает. Это нормально для лабы; раздел — для переноса знаний в облако.
+
 ---
 
 **Цель:** пройти весь путь данных `StorageClass → PV → PVC → Pod` и понять, какое
@@ -596,6 +678,36 @@ kubectl -n lab get pvc   -l app=stateful-demo  # data-...-1 и -2 ВСЁ ЕЩЁ 
 - Чем `ProvisioningFailed` (нет провижинера) отличается от `WaitForFirstConsumer`
 - Почему RWO-том нельзя примонтировать на две ноды сразу
 - Связь `df` внутри контейнера и реального размера PV
+
+#### Алгоритм диагностики storage по симптому
+
+Storage-сбой проявляется либо как «PVC не Bound», либо как «Pod застрял на томе».
+Ветвись по тому, что застряло:
+
+```
+Pod не стартует / том не работает
+│
+├─ PVC в Pending ? ──────► kubectl describe pvc <pvc>  → блок Events:
+│     ├─ "storageclass ... not found"          → класса нет/опечатка; PVC иммутабелен → пересоздать (Инцидент 1)
+│     ├─ "waiting for first consumer"          → НЕ ошибка: WaitForFirstConsumer ждёт Pod (Инцидент 2)
+│     ├─ "ProvisioningFailed" (квота/бэкенд)   → провижинер есть, но создать том не смог (квота/право/диск)
+│     └─ нет подходящего Available PV (статика) → проверь матчинг: класс/accessModes/capacity/selector
+│
+├─ PVC Bound, но Pod в ContainerCreating ? ──► kubectl describe pod <pod>  → Events:
+│     ├─ "FailedAttachVolume / Multi-Attach"   → RWO-том уже на другой ноде (Инцидент 3); жди отцепления старого Pod
+│     ├─ "FailedMount ... timeout"             → нода не может смонтировать: CSI node-plugin/драйвер ФС/сеть к СХД
+│     └─ "MountVolume.SetUp failed: not found" → секрет/ConfigMap тома нет (для projected-томов, → м07/м16)
+│
+├─ Pod Running, но "No space left on device" ► том заполнен: df внутри Pod (kubectl exec -- df -h /path);
+│     │                                          расширить PVC (если allowVolumeExpansion=true) или чистить
+│     └─ на local-path расширение НЕ поддержано → пересоздать том большего размера + перенос данных
+│
+└─ Данные пропали после рестарта ? ──────────► том эфемерный (emptyDir) или hostPath на другой ноде —
+                                                нужен PVC/StatefulSet (Часть 1.2 vs Часть 3.3)
+```
+
+Опорные команды: `kubectl get pvc,pv` (фазы), `describe pvc/pod` (Events — главный
+источник причины), `kubectl get volumeattachment` (факт attach к ноде), `exec -- df -h`.
 
 ---
 
