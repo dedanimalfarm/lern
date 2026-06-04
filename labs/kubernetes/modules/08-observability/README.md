@@ -188,6 +188,53 @@ metrics.k8s.io  ──>  kubectl top  /  HPA (Resource-метрики)
 | `custom.metrics.k8s.io` (Custom) | Prometheus Adapter | app-метрики на k8s-объектах | HPA по RPS |
 | `external.metrics.k8s.io` (External) | адаптер к внешней системе | вне кластера | HPA по длине очереди SQS |
 
+#### Usage vs Requests vs Limits — три понятия, три источника
+
+Самая частая путаница в сайзинге: три разных числа из трёх разных команд.
+Их **нельзя смешивать**.
+
+| Понятие | Что это | Откуда взять | На что влияет |
+|---|---|---|---|
+| **Usage** (факт) | сколько контейнер ПОТРЕБЛЯЕТ прямо сейчас | `kubectl top pod/node` (metrics-server) | ничего не гарантирует; меняется секунда-в-секунду |
+| **Requests** (резерв) | сколько scheduler РЕЗЕРВИРУЕТ под Pod | `kubectl describe node` → Allocated resources; `describe pod` → Requests | **планирование**: Pod встанет на ноду, только если хватает свободных requests |
+| **Limits** (потолок) | жёсткий предел: CPU троттлится, RAM ⇒ OOMKilled | `kubectl describe pod` → Limits; spec контейнера | **enforcement** на ноде через cgroup |
+
+```
+   0 ──── requests ──────── usage(сейчас) ──── limits ─────► ресурс
+   │      (резерв,           (факт,            (потолок,
+   │       для scheduler)     для top)          для cgroup)
+   │
+   usage может быть НИЖЕ requests (зря зарезервировано) или
+   ВЫШЕ requests (burst в пределах limits) — это нормально.
+```
+
+**Reality на нашем кластере** (одна нода `k8s-w-1`, три источника, три числа):
+
+```bash
+# 1) USAGE — реальное потребление прямо сейчас
+kubectl top node k8s-w-1
+# k8s-w-1   169m (12%)   1156Mi (37%)        <- факт
+
+# 2) REQUESTS/LIMITS — сумма по всем подам ноды (резерв и потолки)
+kubectl describe node k8s-w-1 | sed -n '/Allocated resources/,/Events/p'
+# cpu      Requests 390m (27%)   Limits 1 (71%)     <- зарезервировано 390m, потолок 1 ядро
+# memory   Requests 380Mi (12%)  Limits 933Mi (30%)
+
+# 3) Requests/Limits конкретного пода — из его spec
+kubectl -n kube-system get pod <coredns-pod> \
+  -o jsonpath='{.spec.containers[0].resources}'
+# requests: cpu 100m / memory 70Mi    limits: memory 300Mi   <- CPU-лимита НЕТ
+```
+
+> Два вывода из реальных чисел:
+> - **usage (169m) < requests (390m)**: резерв держится, даже если поды простаивают.
+>   Scheduler считает по requests, не по факту — нода может «кончиться» по
+>   requests, оставаясь почти пустой по usage (см. Pending в м06/м13).
+> - **у coredns есть limit по памяти, но НЕТ по CPU.** Это намеренно: CPU-лимит
+>   = троттлинг (латентность), память без лимита = риск выселить соседей. Частый
+>   прод-паттерн — ставить requests=limits для памяти и не лимитировать CPU.
+>   Связь: requests/limits → QoS-класс и OOMKilled (модуль 02 Часть 4, модуль 12).
+
 ---
 
 **Цель:** снять текущую нагрузку.
