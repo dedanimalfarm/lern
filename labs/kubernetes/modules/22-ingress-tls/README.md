@@ -28,8 +28,8 @@ kubectl get crd certificates.cert-manager.io >/dev/null 2>&1 \
   || bash ../../scripts/bootstrap/07-install-cert-manager.sh
 
 # 3) Чистый namespace lab
-kubectl -n lab delete deploy,svc,cm,ingress,secret,certificate --all --ignore-not-found 2>/dev/null
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n lab delete deploy,svc,cm,ingress,secret,certificate --all --ignore-not-found 2>/dev/null
 ```
 
 > **Как обращаться к Ingress без внешнего DNS.** Имена `*.lab.local` нигде не

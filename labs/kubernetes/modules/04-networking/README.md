@@ -22,8 +22,8 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl version --output=yaml | head -5
 
 # 2) Чистый namespace lab (важно: убрать ресурсы прошлых модулей)
-kubectl -n lab delete deploy,sts,ds,job,cronjob,svc,pvc,pod,ingress,netpol --all --ignore-not-found
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n lab delete deploy,sts,ds,job,cronjob,svc,pvc,pod,ingress,netpol --all --ignore-not-found
 ```
 
 > **Три важных реальных нюанса этого модуля** (часто бьют новичков):

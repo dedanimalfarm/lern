@@ -19,8 +19,8 @@
 ```bash
 # kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
 export KUBECONFIG=/root/.kube/kubespray.conf
-kubectl -n lab delete deploy,svc,netpol,pod --all --ignore-not-found 2>/dev/null
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n lab delete deploy,svc,netpol,pod --all --ignore-not-found 2>/dev/null
 
 # КЛЮЧЕВОЕ: убедиться, что CNI умеет enforcement
 kubectl -n kube-system get pods | grep -iE "calico|cilium" | head -2 \

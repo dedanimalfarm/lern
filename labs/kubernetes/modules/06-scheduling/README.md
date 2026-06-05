@@ -16,8 +16,8 @@
 # kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
 export KUBECONFIG=/root/.kube/kubespray.conf
 # Чистый namespace lab (убрать ресурсы прошлых модулей)
-kubectl -n lab delete deploy,sts,ds,job,cronjob,svc,pvc,pod,ingress,netpol,resourcequota,limitrange --all --ignore-not-found
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n lab delete deploy,sts,ds,job,cronjob,svc,pvc,pod,ingress,netpol,resourcequota,limitrange --all --ignore-not-found
 ```
 
 ### Подготовка нод (обязательно для verify!)

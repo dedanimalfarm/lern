@@ -20,8 +20,8 @@
 ```bash
 # kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
 export KUBECONFIG=/root/.kube/kubespray.conf
-kubectl -n lab delete job,cronjob --all --ignore-not-found 2>/dev/null
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n lab delete job,cronjob --all --ignore-not-found 2>/dev/null
 
 # Версия кластера: podFailurePolicy GA с 1.31, Indexed GA с 1.24, CronJob timeZone
 # с 1.27 — на нашем 1.36 всё доступно штатно.

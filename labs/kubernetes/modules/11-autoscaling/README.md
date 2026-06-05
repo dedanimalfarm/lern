@@ -15,8 +15,8 @@
 ```bash
 # kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
 export KUBECONFIG=/root/.kube/kubespray.conf
-kubectl -n lab delete deploy,svc,hpa,pod --all --ignore-not-found 2>/dev/null
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n lab delete deploy,svc,hpa,pod --all --ignore-not-found 2>/dev/null
 
 # HPA по CPU/RAM требует metrics-server. На GKE он есть; проверим:
 kubectl top nodes >/dev/null 2>&1 && echo "metrics-server: OK" || echo "metrics-server НЕ готов — HPA по ресурсам не отработает"
