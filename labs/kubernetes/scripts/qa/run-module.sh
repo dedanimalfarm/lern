@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export KUBECONFIG=/root/.kube/kubespray.conf
+
 TARGET_PATH="${1:-}"
 if [[ -z "$TARGET_PATH" ]]; then
   echo "usage: $0 modules/<module-name>|projects/<project-name>"
@@ -16,6 +18,12 @@ if [[ ! -d "$FULL_PATH" ]]; then
 fi
 
 echo "--- Running module: $TARGET_PATH ---"
+
+# Prepare
+if [[ -f "$FULL_PATH/verify/prepare.sh" ]]; then
+  echo "Running prepare.sh..."
+  bash "$FULL_PATH/verify/prepare.sh"
+fi
 
 # Deploy
 if [[ -d "$FULL_PATH/manifests" ]]; then

@@ -42,12 +42,12 @@ command -v jq    # нужен для audit.sh
 
 ## Часть 1: Аудит «наивного» приложения (ДО)
 
-«Наивное» приложение `shop` (`manifests/before/app.yaml`) — типичные анти-паттерны:
+«Наивное» приложение `shop` (`broken/app.yaml`) — типичные анти-паттерны:
 `nginx:latest`, 1 реплика, без resources/probes/securityContext (root), пароль в
 открытом env.
 
 ```bash
-kubectl -n lab apply -f manifests/before/app.yaml
+kubectl -n lab apply -f broken/app.yaml
 bash audit/audit.sh lab shop
 ```
 
@@ -60,13 +60,13 @@ bash audit/audit.sh lab shop
 
 ## Часть 2: Харденинг до прод-готовности (ПОСЛЕ)
 
-`manifests/after/` чинит ВСЕ критерии. Ключевые приёмы:
+`manifests/` чинит ВСЕ критерии. Ключевые приёмы:
 
 ```bash
 # Секрет — отдельно (в проде: Sealed Secrets / ESO / Vault, см. модуль 16)
 kubectl -n lab create secret generic shop-db --from-literal=password='S3cr3tP@ss'
 
-kubectl -n lab apply -f manifests/after/      # app + pdb + hpa + netpol + servicemonitor
+kubectl -n lab apply -f manifests/      # app + pdb + hpa + netpol + servicemonitor
 kubectl -n lab rollout status deploy/shop --timeout=120s
 bash audit/audit.sh lab shop
 ```
@@ -122,8 +122,8 @@ bash verify/verify.sh
 
 | Ресурс | Что демонстрирует |
 |--------|-------------------|
-| `manifests/before/` | анти-паттерны (аудит = 11 FAIL) |
-| `manifests/after/` | прод-готовое приложение (аудит = 0 FAIL) |
+| `broken/` | анти-паттерны (аудит = 11 FAIL) |
+| `manifests/` | прод-готовое приложение (аудит = 0 FAIL) |
 | `audit/audit.sh` | переиспользуемый аудит-гейт прод-готовности |
 
 ---
@@ -142,16 +142,16 @@ bash verify/verify.sh
 
 > Делайте на кластере; проверяйте себя через `audit/audit.sh` (он покажет, что ещё не так).
 
-1. **Сломай и почини по одному.** Возьмите `manifests/after/app.yaml`, уберите ОДИН
+1. **Сломай и почини по одному.** Возьмите `manifests/app.yaml`, уберите ОДИН
    критерий (напр. `readinessProbe`), примените, запустите `audit.sh` — убедитесь,
    что именно этот критерий стал `[FAIL]`. Верните. Повторите для resources,
    securityContext, образа.
 2. **Свой 12-й критерий.** Добавьте в `audit.sh` проверку, что у Deployment задан
    `terminationGracePeriodSeconds` И в контейнере есть `lifecycle.preStop`
-   (graceful shutdown, модуль 02). Сделайте so, чтобы `after` его проходил.
+   (graceful shutdown, модуль 02). Сделайте so, чтобы приложение его проходило.
 3. **Проверка PSA restricted вживую.** Создайте ns `prod-restricted` с
-   `pod-security.kubernetes.io/enforce=restricted`, разверните туда `after`-приложение
-   — оно должно пройти admission. Затем разверните `before` — оно должно быть
+   `pod-security.kubernetes.io/enforce=restricted`, разверните туда `manifests/`-приложение
+   — оно должно пройти admission. Затем разверните `broken/` — оно должно быть
    отклонено. Объясните по тексту ошибки, какие поля нарушены (модуль 14).
 4. **selfHeal через PDB.** Сделайте `kubectl drain` worker-ноды (cordon+drain,
    модуль 10) и убедитесь по событиям, что PDB не дал увести обе реплики разом, а
@@ -168,7 +168,7 @@ bash verify/verify.sh
 ## Уборка
 
 ```bash
-kubectl -n lab delete -f manifests/after/ --ignore-not-found
-kubectl -n lab delete -f manifests/before/app.yaml --ignore-not-found
+kubectl -n lab delete -f manifests/ --ignore-not-found
+kubectl -n lab delete -f broken/app.yaml --ignore-not-found
 kubectl -n lab delete secret shop-db --ignore-not-found
 ```

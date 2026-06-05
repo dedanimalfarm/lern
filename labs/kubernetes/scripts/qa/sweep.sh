@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -u
 
+export KUBECONFIG=/root/.kube/kubespray.conf
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 PASS_COUNT=0

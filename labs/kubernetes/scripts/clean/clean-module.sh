@@ -11,4 +11,8 @@ kubectl -n lab delete -f "$MODULE_PATH/manifests" --ignore-not-found=true || tru
 kubectl -n lab delete -f "$MODULE_PATH/broken" --ignore-not-found=true || true
 kubectl -n lab delete -f "$MODULE_PATH/solutions" --ignore-not-found=true || true
 
+if [[ -f "$MODULE_PATH/verify/cleanup.sh" ]]; then
+  bash "$MODULE_PATH/verify/cleanup.sh" || true
+fi
+
 echo "cleaned resources for $MODULE_PATH"
