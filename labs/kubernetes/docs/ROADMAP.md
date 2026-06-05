@@ -101,8 +101,12 @@ progressive delivery, backup/DR. Это и есть план ниже.
   `audit/isolation-audit.sh` (6 контролей). Прогнано на Kubespray+Calico: 5
   доказательств изоляции (PSA-deny / VAP scoped tenant-vs-lab / RBAC / quota /
   cross-tenant netpol-блок) — все вживую.
-- **F — incident-response**: расширить `project-c-broken-cluster-lab` сценариями
-  из новых модулей (OOM, eviction, DNS, cert-expiry, sync-fail).
+- **F — incident-response** ✅ ГОТОВ (`projects/project-c-broken-cluster-lab/`):
+  расширен с 4 до 8 сценариев — добавлены DNS-failure (targeted netpol egress-deny),
+  scheduling-Pending (requests.cpu=8), GitOps sync-fail (Argo bad path), cert-expiry
+  (openssl -not_after, detection). Центр — `triage/incident-triage.sh` (классифицирует
+  под по симптому → причина → первая команда). Прогнано на Kubespray: все 4 новых
+  сценария + триаж + решения вживую.
 
 ---
 

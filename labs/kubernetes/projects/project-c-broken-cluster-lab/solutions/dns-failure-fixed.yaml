@@ -1,0 +1,19 @@
+# РЕШЕНИЕ DNS: добавить egress-правило к CoreDNS. ВАЖНО на Kubespray: реальный
+# резолвер — nodelocaldns на link-local 169.254.25.10, поэтому нужен ipBlock
+# (иначе egress-deny рвёт DNS даже с разрешением namespaceSelector kube-system).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns-client-allow-dns
+  namespace: lab
+spec:
+  podSelector: { matchLabels: { app: dns-client } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+          podSelector: { matchLabels: { k8s-app: kube-dns } }
+        - ipBlock: { cidr: 169.254.25.10/32 }   # nodelocaldns (Kubespray)
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }

@@ -1,0 +1,19 @@
+# РЕШЕНИЕ GITOPS: исправить path на существующий каталог (base вместо bas).
+# Application синхронизируется, Argo разворачивает web в namespace lab.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: incident-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/dedanimalfarm/lern.git
+    targetRevision: main
+    path: labs/kubernetes/modules/25-gitops-at-scale/base   # исправлено: base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: lab
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true ]

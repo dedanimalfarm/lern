@@ -1,0 +1,35 @@
+# ИНЦИДЕНТ DNS: приложение dns-client в цикле резолвит сервис, но NetworkPolicy
+# egress-deny (нацелен ТОЛЬКО на app=dns-client) закрывает весь исходящий трафик,
+# включая DNS на порт 53. Симптом: в логах "bad address"/"connection timed out",
+# приложение «висит» на резолве. Targeted (не на весь namespace) — не задевает
+# другие поды lab.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-client
+  namespace: lab
+  labels: { app: dns-client }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: dns-client } }
+  template:
+    metadata:
+      labels: { app: dns-client }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - 'while true; do nslookup kubernetes.default || echo RESOLVE_FAIL; sleep 5; done'
+---
+# Источник инцидента: egress закрыт целиком, allow-dns НЕ добавлен.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns-client-deny
+  namespace: lab
+spec:
+  podSelector: { matchLabels: { app: dns-client } }
+  policyTypes: [Egress]      # egress есть, правил НЕТ => всё запрещено, в т.ч. DNS

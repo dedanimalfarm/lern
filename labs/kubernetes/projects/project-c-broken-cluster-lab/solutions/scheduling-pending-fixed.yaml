@@ -1,0 +1,22 @@
+# РЕШЕНИЕ ПЛАНИРОВАНИЯ: привести requests к реальной ёмкости нод (100m вместо 8
+# ядер). Под сразу находит ноду и стартует. В проде альтернатива — добавить ноды
+# (Cluster Autoscaler, модуль 11) или уменьшить аппетит.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heavy-compute
+  namespace: lab
+  labels: { app: heavy-compute }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: heavy-compute } }
+  template:
+    metadata:
+      labels: { app: heavy-compute }
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources:
+            requests: { cpu: 100m, memory: 64Mi }   # помещается на worker-ноду
+            limits:   { cpu: 200m, memory: 128Mi }

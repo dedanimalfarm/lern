@@ -7,11 +7,21 @@ source "$ROOT_DIR/scripts/verify/helpers.sh"
 need_bin kubectl
 require_namespace lab
 
-# Verify solutions exist in repository
-[[ -f "$ROOT_DIR/projects/project-c-broken-cluster-lab/solutions/crashloop-fixed.yaml" ]] || fail "missing crashloop solution"
-[[ -f "$ROOT_DIR/projects/project-c-broken-cluster-lab/solutions/readiness-fixed.yaml" ]] || fail "missing readiness solution"
-[[ -f "$ROOT_DIR/projects/project-c-broken-cluster-lab/solutions/imagepullbackoff-fixed.yaml" ]] || fail "missing imagepull solution"
-[[ -f "$ROOT_DIR/projects/project-c-broken-cluster-lab/solutions/oomkilled-fixed.yaml" ]] || fail "missing oom solution"
+PROJ="$ROOT_DIR/projects/project-c-broken-cluster-lab"
+
+# Verify solutions exist in repository (базовые 4 + новые инциденты capstone F)
+for s in crashloop-fixed.yaml readiness-fixed.yaml imagepullbackoff-fixed.yaml oomkilled-fixed.yaml \
+         dns-failure-fixed.yaml scheduling-pending-fixed.yaml sync-fail-fixed.yaml cert-expiry-fixed.sh; do
+  [[ -f "$PROJ/solutions/$s" ]] || fail "missing solution: $s"
+done
+ok "все 8 solution-файлов на месте (4 базовых + 4 новых)"
+
+# Verify новые broken-сценарии и триаж-инструмент присутствуют
+for b in dns-failure.yaml scheduling-pending.yaml sync-fail.yaml cert-expiry/setup.sh; do
+  [[ -f "$PROJ/broken/$b" ]] || fail "missing broken scenario: $b"
+done
+[[ -x "$PROJ/triage/incident-triage.sh" || -f "$PROJ/triage/incident-triage.sh" ]] || fail "missing triage tool"
+ok "новые сценарии (dns/scheduling/sync/cert) + триаж-инструмент на месте"
 
 # Verify broken pods are in expected failure states (if deployed)
 check_broken_pod() {

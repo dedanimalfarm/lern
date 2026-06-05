@@ -1,0 +1,22 @@
+# ИНЦИДЕНТ GITOPS (sync-fail): Argo CD Application указывает на НЕсуществующий path
+# в репозитории (опечатка bas вместо base). Симптом: Application SYNC=Unknown,
+# condition "app path does not exist"; ресурсы не разворачиваются. Аналог инцидента
+# из модуля 25, но как часть incident-response.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: incident-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/dedanimalfarm/lern.git
+    targetRevision: main
+    # ОПЕЧАТКА: каталога ".../bas" нет (есть ".../base")
+    path: labs/kubernetes/modules/25-gitops-at-scale/bas
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: lab
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true ]
