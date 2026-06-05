@@ -1,0 +1,24 @@
+# БАЗА — общий для всех окружений Deployment. Окружения (dev/staging/prod)
+# наследуют его и точечно патчат (replicas, образ, метки) через overlays.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 1                     # дефолт; overlay переопределит на 1/2/3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.27-alpine  # дефолтный тег; prod-overlay может запинить другой
+        ports:
+        - containerPort: 80
+        resources:
+          requests: { cpu: 25m, memory: 32Mi }
+          limits:   { cpu: 100m, memory: 64Mi }

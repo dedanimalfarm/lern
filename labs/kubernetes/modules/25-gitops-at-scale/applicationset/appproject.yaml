@@ -1,0 +1,25 @@
+# AppProject — граница доверия для Applications этого модуля: ИЗ какого репо, КУДА
+# и КАКИЕ ресурсы разрешено разворачивать. Сужает «радиус поражения» GitOps.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: labs-gitops
+  namespace: argocd
+spec:
+  description: GitOps-at-scale lab (module 25)
+  # Откуда разрешено брать манифесты (whitelist репозиториев).
+  sourceRepos:
+    - https://github.com/dedanimalfarm/lern.git
+  # Куда разрешено разворачивать: только namespaces lab-* в нашем кластере.
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: 'lab-*'
+  # CreateNamespace=true создаёт Namespace — это cluster-scoped ресурс, поэтому
+  # его надо явно разрешить в проекте, иначе sync упадёт на namespace.
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  # Внутри namespace разрешаем любые ресурсы (Deployment/Service/...).
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

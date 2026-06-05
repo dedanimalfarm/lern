@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Общие для всех окружений ресурсы. Overlays ссылаются на этот каталог как на base.
+resources:
+  - deployment.yaml
+  - service.yaml
+# Метка, проставляемая ВСЕМ ресурсам всех окружений (видно происхождение).
+labels:
+  - pairs:
+      managed-by: kustomize
+    includeSelectors: false

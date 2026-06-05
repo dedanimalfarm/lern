@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# STAGING: 2 реплики (ближе к прод), свой namespace.
+namespace: lab-staging
+resources:
+  - ../../base
+replicas:
+  - name: web
+    count: 2
+labels:
+  - pairs:
+      env: staging
+    includeSelectors: false

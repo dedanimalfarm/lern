@@ -1,0 +1,38 @@
+# ApplicationSet — ОДИН объект порождает МНОГО Argo CD Application по шаблону.
+# Здесь list-генератор даёт 3 окружения; для каждого создаётся Application
+# web-<env>, синхронизирующий overlay этого окружения в namespace lab-<env>.
+# Добавил окружение в список -> ApplicationSet сам создаст новый Application
+# (масштабирование GitOps без копипасты Application-манифестов).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: web-environments
+  namespace: argocd
+spec:
+  goTemplate: true                      # Go-шаблоны: {{.env}} (современный синтаксис)
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - env: dev
+          - env: staging
+          - env: prod
+  template:
+    metadata:
+      name: 'web-{{.env}}'              # web-dev / web-staging / web-prod
+    spec:
+      project: labs-gitops
+      source:
+        repoURL: https://github.com/dedanimalfarm/lern.git
+        targetRevision: main
+        # Каждое окружение тянет СВОЙ overlay из git:
+        path: 'labs/kubernetes/modules/25-gitops-at-scale/overlays/{{.env}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'lab-{{.env}}'
+      syncPolicy:
+        automated:
+          prune: true                   # удалять из кластера то, что убрали из git
+          selfHeal: true                # откатывать ручной drift к состоянию git
+        syncOptions:
+          - CreateNamespace=true        # создать lab-<env>, если его нет

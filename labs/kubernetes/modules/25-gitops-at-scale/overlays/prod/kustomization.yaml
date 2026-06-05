@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# PROD: 3 реплики + ПИН образа по конкретному тегу (в проде не тянут плавающий
+# latest/minor — фиксируют версию). Демонстрирует images-трансформер kustomize.
+namespace: lab-prod
+resources:
+  - ../../base
+replicas:
+  - name: web
+    count: 3
+images:
+  - name: nginx
+    newName: nginx
+    newTag: 1.27.3-alpine     # прод фиксирует точный патч-тег
+labels:
+  - pairs:
+      env: prod
+    includeSelectors: false

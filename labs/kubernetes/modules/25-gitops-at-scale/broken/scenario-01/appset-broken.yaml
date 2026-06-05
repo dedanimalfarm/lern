@@ -1,0 +1,35 @@
+# ПОЛОМКА: в списке окружений опечатка — "stagng" вместо "staging". ApplicationSet
+# послушно создаст Application web-stagng с path .../overlays/stagng, которого НЕТ
+# в репозитории. Application появится, но sync упадёт: "path does not exist".
+# Симптом: лишний Application в состоянии Unknown/ComparisonError, deployment не
+# разворачивается. Урок: ApplicationSet не валидирует существование path — что в
+# генераторе, то и в Application.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: web-environments
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - env: dev
+          - env: stagng        # <-- ОПЕЧАТКА: overlays/stagng не существует
+          - env: prod
+  template:
+    metadata:
+      name: 'web-{{.env}}'
+    spec:
+      project: labs-gitops
+      source:
+        repoURL: https://github.com/dedanimalfarm/lern.git
+        targetRevision: main
+        path: 'labs/kubernetes/modules/25-gitops-at-scale/overlays/{{.env}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'lab-{{.env}}'
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions: [ CreateNamespace=true ]
