@@ -292,6 +292,31 @@ kubectl top pods -n lab
   контейнер за превышение `limits.memory` (exit 137), под остаётся; Evicted —
   kubelet выселил ВЕСЬ под из-за нехватки ресурсов на НОДЕ (node pressure).
 
+**Node-pressure eviction: пороги и порядок выселения по QoS.** Когда на ноде
+кончается память/диск, kubelet сам выселяет поды, чтобы спасти ноду:
+
+```
+kubelet следит за сигналами: memory.available, nodefs.available, imagefs.available
+   │
+   ├─ SOFT threshold  ─► ставит condition (MemoryPressure) + ждёт evictionSoftGracePeriod,
+   │                      затем выселяет ГРАЦИОЗНО (SIGTERM, grace)
+   └─ HARD threshold  ─► выселяет НЕМЕДЛЕННО, без grace (защита ноды важнее)
+
+Кого выселять первым (порядок жертв):
+   1. BestEffort   (нет requests/limits)          ◄── ПЕРВЫЕ, всегда
+   2. Burstable, чей usage ВЫШЕ requests          ◄── «перебравшие» свой резерв
+   3. Burstable в пределах requests / Guaranteed  ◄── ПОСЛЕДНИЕ, только в крайнем случае
+```
+
+- **QoS определяет очередь на выселение** (а также cgroup OOM-score): `BestEffort`
+  гибнет первым, `Guaranteed` (requests==limits) — последним. Это прямой довод
+  ставить requests/limits критичным сервисам (модуль 02 — QoS, модуль 12).
+- **Кооперация с scheduler:** при `MemoryPressure` на ноду перестают планировать
+  новые поды (taint `node.kubernetes.io/memory-pressure`). Выселенный под
+  пересоздаётся контроллером — и может сесть на другую ноду.
+- Признак: `kubectl get pod` → `Evicted`; причина в `describe node` (Conditions
+  `MemoryPressure/DiskPressure=True`) и в events ноды.
+
 ---
 
 ### Инцидент 1: `CrashLoopBackOff`

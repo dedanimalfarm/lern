@@ -110,6 +110,23 @@ kubectl apply ──HTTP──> kube-apiserver:
    <- ответ. Дальше scheduler/контроллеры РЕАГИРУЮТ на изменение (reconcile).
 ```
 
+**Каталог ошибок по этапу — текст ошибки сразу говорит, ГДЕ чинить:**
+
+| Симптом / текст | Этап | Причина | Что делать |
+|---|---|---|---|
+| `Unauthorized` (**401**) | AuthN | сертификат/токен невалиден, протух, не тот кластер | проверить kubeconfig (`kubectl config view`), срок cert |
+| `error: You must be logged in` | AuthN | нет/битые credentials | перевыпустить kubeconfig |
+| `Forbidden` (**403**) `User "X" cannot get resource "pods"` | AuthZ | RBAC не даёт verb на resource | `kubectl auth can-i <verb> <res>`; добавить Role/Binding (м07) |
+| `forbidden: violates PodSecurity "restricted"` | Admission | PSA-профиль namespace | привести securityContext (м14) |
+| `admission webhook "X" denied the request` | Admission | внешний webhook (Kyverno/Gatekeeper) | смотреть политику движка (м14) |
+| `Invalid value` / `Required value` | Validation | объект не проходит схему (типы, required, CEL) | исправить манифест/CR (м19) |
+| `AlreadyExists` (409) | persist | объект с таким именем есть | `apply` вместо `create` / другое имя |
+
+> Главный инструмент для AuthZ-этапа — **`kubectl auth can-i`**: проверяет право
+> БЕЗ выполнения действия (`kubectl auth can-i delete pods -n lab`;
+> `--as=system:serviceaccount:lab:pod-reader` — от имени SA). 401 ≠ 403:
+> **401** = «не понял, кто ты» (AuthN), **403** = «понял, но нельзя» (AuthZ).
+
 **API group/version.** Каждый ресурс адресуется как `group/version` + `Kind`:
 core-группа (пустая) — `Pod`/`Service` (`apiVersion: v1`); именованные группы —
 `Deployment` (`apps/v1`), `Job` (`batch/v1`), `Ingress` (`networking.k8s.io/v1`).
