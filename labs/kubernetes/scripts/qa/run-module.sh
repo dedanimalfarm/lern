@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export KUBECONFIG=/root/.kube/kubespray.conf
+export KUBECONFIG="${KUBECONFIG:-/root/.kube/kubespray.conf}"
 
 TARGET_PATH="${1:-}"
 if [[ -z "$TARGET_PATH" ]]; then

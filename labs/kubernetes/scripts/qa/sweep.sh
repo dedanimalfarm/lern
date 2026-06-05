@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-export KUBECONFIG=/root/.kube/kubespray.conf
+export KUBECONFIG="${KUBECONFIG:-/root/.kube/kubespray.conf}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -10,10 +10,12 @@ FAIL_COUNT=0
 TOTAL_COUNT=0
 
 REPORT_FILE="/root/k8s-lab-handoff/qa-report.md"
-echo "# Baseline QA Report" > "$REPORT_FILE"
-echo "" >> "$REPORT_FILE"
-echo "| Module/Project | Status | Notes |" >> "$REPORT_FILE"
-echo "|----------------|--------|-------|" >> "$REPORT_FILE"
+{
+  echo "# Baseline QA Report"
+  echo ""
+  echo "| Module/Project | Status | Notes |"
+  echo "|----------------|--------|-------|"
+} > "$REPORT_FILE"
 
 printf "%-40s | %-10s\n" "MODULE/PROJECT" "STATUS"
 echo "-----------------------------------------+-----------"
@@ -29,15 +31,14 @@ for d in "$ROOT_DIR"/modules/* "$ROOT_DIR"/projects/*; do
   fi
 
   # Skip optional / not implemented modules
-  if [[ "$BASENAME" =~ ^18-|^21-|^23-|^24-|^26-|^27- ]]; then
+  if [[ "$BASENAME" =~ ^23-|^24-|^26-|^27- ]]; then
     continue
   fi
 
   TOTAL_COUNT=$((TOTAL_COUNT+1))
   
   # Run module and capture output
-  OUTPUT=$(bash "$ROOT_DIR/scripts/qa/run-module.sh" "$TARGET" 2>&1)
-  if [[ $? -eq 0 ]]; then
+  if bash "$ROOT_DIR/scripts/qa/run-module.sh" "$TARGET" > /dev/null 2>&1; then
     printf "%-40s | \e[32mPASS\e[0m\n" "$TARGET"
     echo "| $TARGET | ✅ PASS | |" >> "$REPORT_FILE"
     PASS_COUNT=$((PASS_COUNT+1))

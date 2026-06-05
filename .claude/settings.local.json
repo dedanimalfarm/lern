@@ -28,7 +28,23 @@
       "Bash(gcloud projects *)",
       "Bash(gcloud services *)",
       "Bash(chmod +x /root/lern/linux/process_isolation/00-setup/*.sh)",
-      "Bash(chmod +x *)"
+      "Bash(chmod +x *)",
+      "Bash(git -C /root/lern pull --ff-only)",
+      "Bash(terraform version *)",
+      "Bash(az version *)",
+      "Bash(gcloud version *)",
+      "Bash(az account *)",
+      "Bash(terraform fmt *)",
+      "Bash(terraform init *)",
+      "Bash(terraform validate *)",
+      "Bash(curl -s ifconfig.me)",
+      "Bash(ssh-keygen -t rsa -b 4096 -N \"\" -f ~/.ssh/id_rsa)",
+      "Bash(terraform plan *)",
+      "Bash(git check-ignore *)",
+      "Bash(terraform output *)",
+      "Bash(terraform state *)",
+      "Bash(terraform apply *)",
+      "Bash(ansible -i inventory/hosts.ini kafka_nodes -m ping)"
     ]
   }
 }

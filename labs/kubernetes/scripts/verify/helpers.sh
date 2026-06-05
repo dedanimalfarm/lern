@@ -74,7 +74,7 @@ require_job_complete() {
   kubectl -n "$ns" get job "$name" >/dev/null 2>&1 || fail "job/$name not found in ns/$ns"
   local succeeded
   # Wait for job to complete (up to timeout seconds)
-  for i in $(seq 1 "$timeout"); do
+  for _ in $(seq 1 "$timeout"); do
     succeeded=$(kubectl -n "$ns" get job "$name" -o jsonpath='{.status.succeeded}' 2>/dev/null || true)
     [[ "${succeeded:-0}" -ge 1 ]] && return 0
     sleep 1

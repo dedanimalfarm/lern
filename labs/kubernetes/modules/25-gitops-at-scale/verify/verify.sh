@@ -23,7 +23,7 @@ for env in dev staging prod; do
   require_resource argocd application "$app"
 
   # Ждём Synced+Healthy (Argo тянет из git и применяет).
-  for i in $(seq 1 90); do
+  for _ in $(seq 1 90); do
     sync=$(kubectl -n argocd get application "$app" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
     health=$(kubectl -n argocd get application "$app" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
     [[ "$sync" == "Synced" && "$health" == "Healthy" ]] && break

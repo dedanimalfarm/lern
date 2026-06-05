@@ -12,7 +12,14 @@ APP=$(jq -r '.spec.selector.matchLabels.app // .metadata.name' <<<"$J")
 fails=0
 pass(){ printf '  [PASS] %s\n' "$1"; }
 fail(){ printf '  [FAIL] %s\n' "$1"; fails=$((fails+1)); }
-chk(){ local ok="$1" msg="$2"; [[ "$ok" == "true" ]] && pass "$msg" || fail "$msg"; }
+chk(){
+  local ok="$1" msg="$2"
+  if [[ "$ok" == "true" ]]; then
+    pass "$msg"
+  else
+    fail "$msg"
+  fi
+}
 
 c=$(jq '.spec.template.spec.containers[0]' <<<"$J")
 

@@ -8,7 +8,7 @@ need_bin kubectl
 require_namespace lab
 
 # StorageClass must exist before PVC checks
-require_storageclass
+require_storageclass "local-path"
 
 require_pvc_bound lab demo-pvc
 require_resource lab svc stateful-demo-headless

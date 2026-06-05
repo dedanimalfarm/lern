@@ -1,0 +1,15 @@
+extends: relaxed
+rules:
+  line-length: disable
+  indentation: disable
+  document-start: disable
+  braces: disable
+  brackets: disable
+  trailing-spaces: disable
+  empty-lines: disable
+  truthy: disable
+  comments: disable
+  commas: disable
+  colons: disable
+ignore: |
+  **/charts/**
