@@ -435,6 +435,14 @@ kubectl -n lab delete -k manifests/
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Развёртыванию kube-prometheus-stack
+- Сбору метрик приложений через ServiceMonitor
+- Настройке правил алертинга в Prometheus/Alertmanager
+
 ## Уборка
 
 ```bash

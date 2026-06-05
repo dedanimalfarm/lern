@@ -386,6 +386,14 @@ kubectl -n lab delete -f manifests/app.yaml
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Реализации микросегментации через NetworkPolicy
+- Концепции Zero-Trust в кластере (default-deny)
+- Разрешению специфичного Ingress/Egress трафика
+
 ## Уборка
 
 ```bash

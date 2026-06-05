@@ -364,6 +364,14 @@ kubectl delete clusterissuer selfsigned-issuer --ignore-not-found
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Установке Ingress-контроллера (NGINX)
+- Автоматическому выпуску SSL-сертификатов через cert-manager
+- Настройке HTTP(S) маршрутизации
+
 ## Уборка
 
 ```bash

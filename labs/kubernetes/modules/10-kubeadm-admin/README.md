@@ -329,6 +329,14 @@ kubectl -n lab delete pdb drain-demo-pdb --ignore-not-found
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Базовому администрированию control-plane
+- Добавлению узлов в кластер
+- Диагностике системных компонентов (kube-proxy, kubelet)
+
 ## Уборка
 
 ```bash

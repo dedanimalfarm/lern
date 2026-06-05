@@ -307,6 +307,14 @@ bash verify/verify.sh
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Шифрованию секретов в etcd (encryption-at-rest)
+- Использованию Sealed Secrets для хранения секретов в Git
+- Интеграции с внешними хранилищами через External Secrets Operator
+
 ## Уборка
 
 ```bash

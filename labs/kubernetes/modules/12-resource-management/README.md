@@ -302,6 +302,14 @@ kubectl label node <worker> lab-prio- 2>/dev/null
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Использованию Requests и Limits для управления ресурсами
+- Пониманию классов обслуживания QoS (Guaranteed, Burstable)
+- Настройке PriorityClasses для вытеснения (preemption) подов
+
 ## Уборка
 
 ```bash

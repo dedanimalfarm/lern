@@ -431,6 +431,14 @@ kubectl delete ns lab-restricted --ignore-not-found
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Настройке стандартов безопасности (Pod Security Standards)
+- Использованию ValidatingAdmissionPolicy для кастомных правил
+- Защите кластера от привилегированных подов
+
 ## Уборка
 
 ```bash

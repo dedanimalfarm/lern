@@ -575,6 +575,14 @@ kubectl -n lab get events --field-selector reason=FailedScheduling
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Использованию NodeSelector и NodeAffinity для привязки подов к узлам
+- Механизмам отталкивания Taint и Toleration
+- Пониманию работы kube-scheduler
+
 ## Уборка
 
 Обязательно снимите разметку нод — иначе она повлияет на следующие модули:

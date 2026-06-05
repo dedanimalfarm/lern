@@ -968,3 +968,10 @@ kubectl -n lab describe pod -l app=kb-web | grep -A4 -E "Readiness|Warning|Faile
 kubectl -n lab delete -f manifests/app/svc.yaml -f manifests/app/deploy.yaml
 kubectl config set-context --current --namespace=default
 ```
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Базовым операциям с kubectl (get, describe, logs)
+- Пониманию архитектуры API Kubernetes
+- Императивному созданию ресурсов

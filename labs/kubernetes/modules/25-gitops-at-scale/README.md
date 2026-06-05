@@ -396,6 +396,14 @@ kubectl delete ns lab-dev lab-staging lab-prod --ignore-not-found
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Управлению множеством окружений (multi-env) через Kustomize
+- Массовому деплою с помощью Argo CD ApplicationSet
+- Структурированию репозитория для GitOps
+
 ## Уборка
 
 ```bash

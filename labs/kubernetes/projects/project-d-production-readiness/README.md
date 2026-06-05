@@ -174,6 +174,14 @@ bash verify/verify.sh
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Проведению аудита Production-Readiness
+- Настройке PDB, проб и requests/limits для production
+- Внедрению security-практик в деплойменты
+
 ## Уборка
 
 ```bash

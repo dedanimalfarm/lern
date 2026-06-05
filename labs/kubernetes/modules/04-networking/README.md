@@ -607,6 +607,14 @@ kubectl -n lab delete -k manifests/
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Балансировке трафика через Service (ClusterIP, NodePort)
+- Настройке L7 маршрутизации через Ingress
+- Диагностике DNS внутри кластера (CoreDNS)
+
 ## Уборка
 
 ```bash

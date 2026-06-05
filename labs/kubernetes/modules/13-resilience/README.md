@@ -348,6 +348,14 @@ kubectl -n lab delete -k manifests/
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Распределению подов по зонам отказа (TopologySpreadConstraints)
+- Использованию PodDisruptionBudget (PDB) для безопасных обновлений
+- Анти-аффинити (Anti-Affinity) для отказоустойчивости
+
 ## Уборка
 
 ```bash

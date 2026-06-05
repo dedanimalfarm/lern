@@ -30,6 +30,14 @@ kubectl -n platform get resourcequota,limitrange
 kubectl -n platform get networkpolicy
 ```
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Сборке комплексного окружения с квотами и RBAC
+- Интеграции различных Kubernetes-объектов воедино
+- Подготовке tenant-namespace
+
 ## Уборка
 
 Очистите ресурсы после завершения:

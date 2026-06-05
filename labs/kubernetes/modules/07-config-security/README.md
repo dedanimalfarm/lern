@@ -515,6 +515,14 @@ kubectl -n lab delete -k manifests/
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Передаче конфигураций через ConfigMap и секретов через Secret
+- Настройке ServiceAccount и политик доступа RBAC
+- Ограничению прав процессов через SecurityContext
+
 ## Уборка
 
 ```bash

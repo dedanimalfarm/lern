@@ -446,6 +446,14 @@ kubectl delete crd webapps.lab.example.com   # удаляет CRD И все ег
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Расширению Kubernetes API через CustomResourceDefinition
+- Пониманию паттерна Operator/Controller
+- Управлению кастомными ресурсами через kubectl
+
 ## Уборка
 
 ```bash

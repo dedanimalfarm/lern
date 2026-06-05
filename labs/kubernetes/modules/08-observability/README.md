@@ -464,6 +464,14 @@ kubectl -n lab delete -k manifests/ ; kubectl -n lab delete deploy obs-broken --
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Чтению и анализу логов контейнеров
+- Работе с Events Kubernetes для диагностики проблем
+- Пониманию концепций метрик и трейсинга
+
 ## Уборка
 
 ```bash

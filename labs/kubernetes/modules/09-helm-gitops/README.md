@@ -453,6 +453,14 @@ kubectl -n argocd delete application demo-app --ignore-not-found
 
 ---
 
+
+## Чему вы научились
+
+В этом модуле вы научились:
+- Упаковке приложений в Helm-чарты
+- Декларативному деплою через Argo CD (GitOps)
+- Управлению конфигурациями с Kustomize
+
 ## Уборка
 
 ```bash
