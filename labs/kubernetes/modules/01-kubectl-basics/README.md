@@ -30,6 +30,12 @@ kubectl config current-context
 which jq watch || echo "jq/watch желательны, но не критичны"
 ```
 
+> **Что за «дистрибутивы» k8s** (встретятся по всему курсу): **kind/minikube/k3s** —
+> локальные песочницы на одной машине (быстро поднять/снести); **GKE/EKS/AKS** —
+> управляемые кластеры в облаке (Google/Amazon/Azure); **Kubespray** — разворачивает
+> полноразмерный production-like кластер на ваших VM (наш учебный стенд). Сам
+> Kubernetes и команды `kubectl` везде одинаковы — отличается только КАК поднят кластер.
+>
 > **Про учебный стенд.** Этот модуль рассчитан на кластер, где поды
 > по-настоящему запускаются (kind/minikube/k3s/GKE). На «ненастоящих» стендах,
 > которые лишь показывают объекты в API, но не выполняют контейнеры,
@@ -246,7 +252,12 @@ kubectl explain deployment.spec.replicas
 # FIELD: replicas <integer>
 # DESC:  Number of desired pods...
 
-# Развернуть всю вложенную схему ресурса
+# Сначала — описание самого поля и его прямых под-полей (читабельно):
+kubectl explain pod.spec.containers
+# KIND: Pod ... FIELDS: name <string>, image <string>, ports <[]Object>, ...
+
+# Затем, при необходимости, развернуть ВСЮ вложенную схему (флаг --recursive даёт
+# большую «простыню» — её обычно смотрят точечно через | grep <поле>):
 kubectl explain pod.spec.containers --recursive | head -30
 ```
 

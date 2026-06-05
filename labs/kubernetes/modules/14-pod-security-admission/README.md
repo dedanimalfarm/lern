@@ -176,8 +176,13 @@ spec:
 
 > **Зачем разделение policy/binding:** одну policy можно привязать к разным scope
 > с разным действием — напр. `Warn` в dev-namespace и `Deny` в prod, не дублируя
-> CEL. ⚠️ Binding cluster-scoped: `namespaceSelector` тут — единственная граница,
-> поэтому такая VAP «утекает» на все ns, попавшие под селектор (грабли модуля 11).
+> CEL. ⚠️ И policy, и binding — **cluster-scoped** (не живут в namespace).
+> `namespaceSelector` в binding — единственная граница действия. Практическое
+> следствие: VAP **переживает** `kubectl delete ns`/`delete all` и продолжает
+> применяться ко ВСЕМ namespace, попавшим под селектор, пока ты явно не удалишь
+> саму policy и binding (`kubectl delete validatingadmissionpolicy <name>`). Если
+> в следующем модуле под вдруг не создаётся «без причины» — проверь оставшиеся VAP
+> (`kubectl get validatingadmissionpolicy`) и снеси их.
 
 **VAP vs внешний validating-webhook:**
 
