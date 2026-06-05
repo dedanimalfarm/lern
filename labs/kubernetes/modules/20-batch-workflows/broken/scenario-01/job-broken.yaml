@@ -1,0 +1,20 @@
+# ПОЛОМКА: команда всегда падает (exit 1). Job ретраит на уровне Job, но с
+# backoffLimit=2 после 3 неудачных подов (1 первичный + 2 ретрая) Job переходит
+# в Failed с reason=BackoffLimitExceeded и БОЛЬШЕ не пытается.
+# Симптом у студента: поды в Error, Job не Complete, новые поды не создаются.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-flaky
+  namespace: lab
+spec:
+  completions: 1
+  backoffLimit: 2          # всего 3 попытки, потом сдаётся
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: worker
+        image: busybox:1.36
+        # Опечатка/баг: пытается прочитать файл, которого нет -> ненулевой код выхода.
+        command: ["sh", "-c", "cat /data/input.txt"]   # /data не смонтирован -> exit 1

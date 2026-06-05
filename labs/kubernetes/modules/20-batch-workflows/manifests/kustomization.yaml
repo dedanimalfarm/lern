@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: lab
+resources:
+  - parallel/job-parallel.yaml
+  - indexed/job-indexed.yaml
+  - cron/cronjob.yaml

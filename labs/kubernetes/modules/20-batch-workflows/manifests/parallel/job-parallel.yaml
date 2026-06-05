@@ -1,0 +1,28 @@
+# Параллельный Job с фиксированным числом завершений.
+# completions=6: Job считается выполненным, когда УСПЕШНО завершатся 6 подов.
+# parallelism=2: одновременно бежит не более 2 подов — остальные ждут слота.
+# Итого 3 «волны» по 2 пода. Это паттерн «обработать N независимых единиц работы».
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-parallel
+  namespace: lab
+spec:
+  completions: 6            # сколько успешных подов нужно всего
+  parallelism: 2            # сколько бежит одновременно (пропускная способность)
+  backoffLimit: 4           # сколько ретраев на УРОВНЕ Job до признания провала
+  ttlSecondsAfterFinished: 600   # авто-удаление Job через 10 мин после финиша
+  template:
+    spec:
+      # Never: упавший под НЕ перезапускается на месте — Job создаёт НОВЫЙ под
+      # (каждая попытка = новый под, видна в `get pods`). Альтернатива OnFailure
+      # перезапускает контейнер В ТОМ ЖЕ поде (счётчик restarts, подов меньше).
+      restartPolicy: Never
+      containers:
+      - name: worker
+        image: busybox:1.36
+        # Имитация полезной работы: «обработали единицу» и вышли с 0 (успех).
+        command: ["sh", "-c", "echo processing unit on $(hostname); sleep 3; echo done"]
+        resources:
+          requests: { cpu: 25m, memory: 16Mi }
+          limits:   { cpu: 100m, memory: 32Mi }

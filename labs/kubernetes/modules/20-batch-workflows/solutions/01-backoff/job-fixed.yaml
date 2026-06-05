@@ -1,0 +1,19 @@
+# РЕШЕНИЕ сценария 01: команда больше не читает несуществующий файл — выходит 0.
+# (В реальной задаче альтернатива — смонтировать том/ConfigMap с /data/input.txt.)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-flaky
+  namespace: lab
+spec:
+  completions: 1
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: worker
+        image: busybox:1.36
+        # Исправлено: работаем с данными, которые точно есть -> exit 0 -> Job Complete.
+        command: ["sh", "-c", "echo 'input processed'; sleep 1"]

@@ -64,7 +64,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 | # | Новый модуль | Ключевое | Среда |
 |---|--------------|----------|-------|
 | 19 | **crd-operators** ✅ ГОТОВ `2b2c4f0` | CRD + схема/валидация + operator pattern (prometheus-operator) — прогнан на Kubespray | ✅ |
-| 20 | **batch-workflows** | Argo Workflows, Job parallelism/completions, indexed Jobs | любой ✅ |
+| 20 | **batch-workflows** ✅ ГОТОВ | Job parallelism/completions, **Indexed** Jobs, **podFailurePolicy**, activeDeadline/ttl/suspend, CronJob (concurrencyPolicy/timeZone/history) — прогнан на Kubespray 1.36 (parallel 6/6, indexed 0-3, FailJob на exit42, CronJob тикает). Argo Workflows — на будущее (надстройка) | любой ✅ |
 | 21 | **stateful-systems** | DB-операторы (CloudNativePG/Redis), backup, StatefulSet advanced | GKE + storage |
 
 ## Уровень 6 — Networking advanced

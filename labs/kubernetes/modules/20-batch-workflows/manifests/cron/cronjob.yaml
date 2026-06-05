@@ -1,0 +1,32 @@
+# CronJob — Job по расписанию (cron-синтаксис). Контроллер создаёт по одному Job
+# на каждый «тик» расписания. Здесь — каждую минуту, для наглядности в лабе.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: batch-report
+  namespace: lab
+spec:
+  schedule: "*/1 * * * *"        # каждую минуту (мин час день месяц день-недели)
+  timeZone: "Europe/Amsterdam"   # часовой пояс расписания (GA с k8s 1.27); без него — UTC
+  # Forbid: если прошлый Job ещё бежит — НЕ запускать новый (пропустить тик).
+  # Альтернативы: Allow (по умолчанию, разрешить наложение), Replace (убить старый).
+  concurrencyPolicy: Forbid
+  # Если контроллер проспал тик (downtime) дольше N секунд — НЕ запускать задним
+  # числом. Защита от «шторма» пропущенных запусков после простоя.
+  startingDeadlineSeconds: 30
+  successfulJobsHistoryLimit: 3  # сколько успешных Job хранить (для разбора логов)
+  failedJobsHistoryLimit: 1      # сколько проваленных хранить
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: report
+            image: busybox:1.36
+            command: ["sh", "-c", "echo report generated at $(date -u +%FT%TZ)"]
+            resources:
+              requests: { cpu: 25m, memory: 16Mi }
+              limits:   { cpu: 100m, memory: 32Mi }
