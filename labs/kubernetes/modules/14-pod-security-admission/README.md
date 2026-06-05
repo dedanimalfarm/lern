@@ -153,7 +153,7 @@ spec:
     resourceRules:
     - apiGroups: [""]; apiVersions: ["v1"]; operations: ["CREATE","UPDATE"]; resources: ["pods"]
   validations:
-  - expression: "object.spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))"
+  - expression: "object.spec.containers.all(c, (c.image.matches('^.*:[a-zA-Z0-9_.-]+$') && !c.image.matches('^.*:latest$')) || c.image.matches('^.*@sha256:[a-f0-9]+$'))"
     message: "образы :latest или без тега запрещены"   # ^ CEL: проверка КАЖДОГО контейнера
 ---
 kind: ValidatingAdmissionPolicyBinding     # ГДЕ применять + ЧТО делать (отделено от правила)
@@ -204,7 +204,7 @@ kubectl -n lab delete pod good --ignore-not-found
 ```
 
 > CEL-выражение `object.spec.containers.all(c, c.image.contains(':') &&
-> !c.image.endsWith(':latest'))` проверяет каждый контейнер. Так одной декларацией
+> (c.image.matches('^.*:[a-zA-Z0-9_.-]+$') && !c.image.matches('^.*:latest$')) || c.image.matches('^.*@sha256:[a-f0-9]+$'))` проверяет каждый контейнер. Так одной декларацией
 > закрывается распространённый антипаттерн `:latest` (невоспроизводимые деплои).
 
 **Контрольные вопросы:**
