@@ -9,4 +9,4 @@ kubectl get ns platform >/dev/null || fail "namespace/platform not found"
 require_resource platform networkpolicy default-deny
 require_resource platform resourcequota platform-quota
 
-ok "project A verified"
+ok "project-a verified"

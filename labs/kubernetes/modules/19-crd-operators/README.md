@@ -1,5 +1,7 @@
 # Лабораторная работа 19: CRD и операторы (расширение Kubernetes API)
 
+> ⏱ время ~30 мин · сложность 4/5 · пререквизиты: Трек 1 и Трек 3
+
 Цель: понять, как Kubernetes из «оркестратора контейнеров» превращается в
 платформу — через CustomResourceDefinition (свои типы ресурсов) и оператор-паттерн
 (CRD + контроллер). К концу модуля вы регистрируете свой ресурс со схемой и
@@ -15,6 +17,13 @@
 export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl get ns lab >/dev/null 2>&1 || kubectl create ns lab
 kubectl version -o json 2>/dev/null | grep -i gitVersion | head -1
+```
+
+## Стартовая проверка
+
+Убедитесь, что кластер доступен:
+```bash
+kubectl get nodes
 ```
 
 ---

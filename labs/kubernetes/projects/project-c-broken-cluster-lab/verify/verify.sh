@@ -51,4 +51,4 @@ check_broken_pod "crashloop-app"     "CrashLoopBackOff"
 check_broken_pod "imagepull-app"     "ImagePullBackOff"
 check_broken_pod "oom-app"           "OOMKilled"
 
-ok "project C verify script executed"
+ok "project-c verified"

@@ -1,5 +1,7 @@
 # Лабораторная работа 25: GitOps на масштабе (Kustomize overlays, ApplicationSet, multi-env)
 
+> ⏱ время ~30 мин · сложность 4/5 · пререквизиты: Трек 1 (Core)
+
 Цель: научиться разворачивать ОДНО приложение в МНОГО окружений без копипасты —
 через `Kustomize` (base + overlays на dev/staging/prod) и Argo CD `ApplicationSet`
 (один объект порождает Application на каждое окружение). К концу модуля вы

@@ -1,5 +1,7 @@
 # Лабораторная работа 04: Сеть в Kubernetes (Service, DNS, Ingress, NetworkPolicy)
 
+> ⏱ время ~30 мин · сложность 3/5 · пререквизиты: модуль 03
+
 Цель: разобраться, как трафик ходит внутри кластера и попадает в него снаружи —
 от Pod IP и `Service` через `Endpoints` и CoreDNS до `NodePort`/`LoadBalancer`/
 `Ingress`, и как `NetworkPolicy` ограничивает связность. К концу модуля вы

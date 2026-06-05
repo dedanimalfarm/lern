@@ -27,4 +27,4 @@ for t in tenant-a tenant-b; do
   ok "isolation-audit пройден для $t (6/6 контролей)"
 done
 
-ok "project-e secure-platform verified"
+ok "project-e verified"

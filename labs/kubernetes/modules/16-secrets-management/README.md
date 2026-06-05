@@ -1,5 +1,7 @@
 # Лабораторная работа 16: Управление секретами (encryption-at-rest, Sealed Secrets, ESO, Vault dynamic)
 
+> ⏱ время ~25 мин · сложность 3/5 · пререквизиты: Трек 1 и Трек 3
+
 Цель: понять, почему обычный `Secret` — это НЕ безопасное хранение, и освоить
 четыре прод-подхода: шифрование etcd (encryption-at-rest), **Sealed Secrets**
 (git-safe), **External Secrets Operator** (синк из внешнего менеджера) и
@@ -18,6 +20,13 @@ on-demand и ротируются). К концу модуля вы выбира
 ```bash
 export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
+
+## Стартовая проверка
+
+Убедитесь, что кластер доступен:
+```bash
+kubectl get nodes
+```
 
 # Операторы модуля (ставятся по одному разу):
 bash ../../scripts/bootstrap/08-install-sealed-secrets.sh          # Часть 2 (+ kubeseal CLI)

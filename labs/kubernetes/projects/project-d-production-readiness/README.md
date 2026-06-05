@@ -1,5 +1,7 @@
 # Project D: Production Readiness Audit (аудит прод-готовности)
 
+> ⏱ время ~30 мин · сложность 4/5 · пререквизиты: Трек 1 и Трек 3
+
 Цель: научиться отличать «работает на демо» от «готово к проду» и довести
 приложение до прод-готовности по чек-листу из 11 критериев. Это СИНТЕЗ всей лабы:
 надёжность, здоровье, ресурсы, безопасность, сеть, масштабирование, наблюдаемость.
@@ -36,6 +38,13 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl -n lab delete deploy,svc,pdb,hpa,netpol,servicemonitor,secret shop shop-db --all --ignore-not-found 2>/dev/null
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
 command -v jq    # нужен для audit.sh
+```
+
+## Стартовая проверка
+
+Убедитесь, что кластер доступен:
+```bash
+kubectl get nodes
 ```
 
 ---

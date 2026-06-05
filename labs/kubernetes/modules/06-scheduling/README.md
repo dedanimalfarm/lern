@@ -1,5 +1,7 @@
 # Лабораторная работа 06: Планирование подов (nodeSelector, taints, affinity, quotas)
 
+> ⏱ время ~20 мин · сложность 2/5 · пререквизиты: модуль 03
+
 Цель: научиться управлять тем, на какую ноду попадёт Pod и сколько ресурсов он
 сможет занять — через `nodeSelector`/labels, `taints`/`tolerations`,
 `affinity`/`anti-affinity` и `ResourceQuota`/`LimitRange`. К концу модуля вы

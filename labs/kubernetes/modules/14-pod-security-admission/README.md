@@ -1,5 +1,7 @@
 # Лабораторная работа 14: Pod Security и Admission Control (PSA + ValidatingAdmissionPolicy)
 
+> ⏱ время ~25 мин · сложность 3/5 · пререквизиты: Трек 1 и Трек 3
+
 Цель: научиться запрещать небезопасные поды НА ВХОДЕ (admission), пока они не
 попали в кластер — через встроенный Pod Security Admission (профили
 privileged/baseline/restricted) и ValidatingAdmissionPolicy (кастомные правила на
@@ -20,6 +22,13 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl get ns lab >/dev/null 2>&1 || kubectl create ns lab
 kubectl delete ns lab-restricted --ignore-not-found 2>/dev/null
 kubectl version -o json 2>/dev/null | grep -i gitVersion | head -1   # нужен >=1.30 для VAP
+```
+
+## Стартовая проверка
+
+Убедитесь, что кластер доступен:
+```bash
+kubectl get nodes
 ```
 
 ---

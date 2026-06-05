@@ -1,5 +1,7 @@
 # Лабораторная работа 17: Метрики и алертинг (Prometheus + Grafana + Alertmanager)
 
+> ⏱ время ~30 мин · сложность 3/5 · пререквизиты: Трек 1 (Core)
+
 Цель: поднять полноценный observability-стек и научиться им пользоваться —
 собирать метрики (Prometheus), запрашивать их (PromQL), визуализировать
 (Grafana), подключать свои приложения (ServiceMonitor) и заводить алерты
@@ -15,6 +17,13 @@
 export KUBECONFIG=/root/.kube/kubespray.conf
 helm version --short    # нужен Helm
 kubectl get nodes       # нужны рабочие ноды (стек заметно потребляет RAM)
+```
+
+## Стартовая проверка
+
+Убедитесь, что кластер доступен:
+```bash
+kubectl get nodes
 ```
 
 ---

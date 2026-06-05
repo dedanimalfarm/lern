@@ -10,4 +10,4 @@ require_resource lab sts redis
 require_resource lab svc redis-headless
 require_resource lab cronjob redis-backup
 
-ok "project B verified"
+ok "project-b verified"

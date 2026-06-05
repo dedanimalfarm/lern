@@ -1,5 +1,7 @@
 # Лабораторная работа 13: Отказоустойчивость (topologySpread, anti-affinity, PDB)
 
+> ⏱ время ~20 мин · сложность 3/5 · пререквизиты: Трек 1 (Core)
+
 Цель: научиться размещать рабочие нагрузки так, чтобы падение одной ноды (или
 зоны) не уносило весь сервис, и защищать доступность во время планового
 обслуживания. К концу модуля вы равномерно «размазываете» реплики по нодам и
@@ -18,6 +20,13 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl -n lab delete deploy,pdb,pod --all --ignore-not-found 2>/dev/null
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
 kubectl get nodes --no-headers | wc -l    # сколько нод (нужно >=2)
+```
+
+## Стартовая проверка
+
+Убедитесь, что кластер доступен:
+```bash
+kubectl get nodes
 ```
 
 ---
