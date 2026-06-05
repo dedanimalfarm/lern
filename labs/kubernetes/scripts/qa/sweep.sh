@@ -31,7 +31,7 @@ for d in "$ROOT_DIR"/modules/* "$ROOT_DIR"/projects/*; do
   fi
 
   # Skip optional / not implemented modules
-  if [[ "$BASENAME" =~ ^23-|^24-|^26-|^27- ]]; then
+  if [[ "$BASENAME" =~ ^23-|^26-|^27- ]]; then
     continue
   fi
 

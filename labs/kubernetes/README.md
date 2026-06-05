@@ -44,7 +44,8 @@ kubectl get nodes -o wide
 20. [20-batch-workflows](modules/20-batch-workflows) — Батч-нагрузки и workflows (Job parallelism, Indexed, podFailurePolicy, CronJob)
 21. [21-stateful-systems](modules/21-stateful-systems) — Базы данных и Stateful-системы (CloudNativePG)
 22. [22-ingress-tls](modules/22-ingress-tls) — Ingress и TLS (маршрутизация L7 + HTTPS + cert-manager)
-23. [25-gitops-at-scale](modules/25-gitops-at-scale) — GitOps на масштабе (Kustomize overlays, ApplicationSet, multi-env)
+24. [24-progressive-delivery](modules/24-progressive-delivery) — Progressive Delivery (Canary с Argo Rollouts)
+25. [25-gitops-at-scale](modules/25-gitops-at-scale) — GitOps на масштабе (Kustomize overlays, ApplicationSet, multi-env)
 
 ## 🏗 Итоговые проекты (Capstone)
 

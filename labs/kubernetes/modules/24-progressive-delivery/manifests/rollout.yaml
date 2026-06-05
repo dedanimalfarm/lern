@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo-rollout
+  namespace: lab
+spec:
+  replicas: 4
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: demo-rollout
+  template:
+    metadata:
+      labels:
+        app: demo-rollout
+    spec:
+      containers:
+      - name: app
+        image: argoproj/rollouts-demo:blue
+        ports:
+        - containerPort: 8080
+  strategy:
+    canary:
+      steps:
+      - setWeight: 25
+      # Pause indefinitely until promoted manually (or automatically via analysis)
+      # For this lab, we'll use a finite pause so the QA script doesn't hang.
+      - pause:
+          duration: 5s
+      - setWeight: 50
+      - pause:
+          duration: 5s
+      - setWeight: 100

@@ -18,7 +18,7 @@ find "$ROOT_DIR/modules" "$ROOT_DIR/projects" "$ROOT_DIR/scripts" -type f -name 
 echo "=== Running kustomize build ==="
 find "$ROOT_DIR/modules" "$ROOT_DIR/projects" \( -name "kustomization.yaml" -o -name "kustomization.yml" \) -print0 | while IFS= read -r -d '' kfile; do
   dir="$(dirname "$kfile")"
-  kubectl kustomize "$dir" >/dev/null || { echo "Kustomize build failed in $dir"; exit 1; }
+  kubectl kustomize --load-restrictor LoadRestrictionsNone "$dir" >/dev/null || { echo "Kustomize build failed in $dir"; exit 1; }
 done
 
 echo "Done."
