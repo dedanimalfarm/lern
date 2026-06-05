@@ -116,6 +116,43 @@ openAPIV3Schema:
   `replicas`). Чтобы РАЗРЕШИТЬ произвольные поля в поддереве — явно
   `x-kubernetes-preserve-unknown-fields: true`.
 
+#### CEL-валидация (`x-kubernetes-validations`) — без webhook'ов
+
+`minimum`/`maximum`/`required` проверяют ОДНО поле. Кросс-полевые правила («min ≤
+max», «host обязателен, если ingress включён») раньше требовали admission-webhook.
+С k8s 1.29 (GA) их пишут прямо в схеме на **CEL** (Common Expression Language):
+
+```yaml
+properties:
+  spec:
+    type: object
+    properties:
+      minReplicas: { type: integer }
+      maxReplicas: { type: integer }
+    x-kubernetes-validations:
+    - rule: "self.minReplicas <= self.maxReplicas"      # self = текущий объект (spec)
+      message: "minReplicas must be <= maxReplicas"      # текст в ошибке apply
+```
+
+**Reality (проверено на нашем 1.36):**
+```bash
+# BAD: min=5 > max=2
+kubectl apply -f bad-cr.yaml
+# The CelTest "bad" is invalid: spec: Invalid value: minReplicas must be <= maxReplicas
+# GOOD: min=1 <= max=3  -> celtest/good created
+```
+
+- **`self`** — валидируемый узел; `oldSelf` доступен в transition-правилах (с
+  `optionalOldSelf`) для проверки «поле нельзя уменьшать». `messageExpression` —
+  динамическое сообщение через CEL.
+- **Плюс над webhook:** ноль инфраструктуры (нет пода-вебхука, сертификата,
+  `ValidatingWebhookConfiguration`), правило живёт в самом CRD, выполняется
+  apiserver синхронно. Это тот же CEL, что в **ValidatingAdmissionPolicy**
+  (модуль 14) — но привязан к схеме конкретного CRD.
+- **Граница:** CEL валидирует объект в момент записи (без обращения к другим
+  ресурсам и внешним системам) — для «проверить, что Deployment с таким именем уже
+  есть» по-прежнему нужен webhook/контроллер.
+
 ---
 
 **Цель:** создать CR и увидеть валидацию.
