@@ -1,0 +1,46 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: my-db
+  namespace: lab
+spec:
+  instances: 2
+  primaryUpdateStrategy: unsupervised
+  storage:
+    size: 1Gi
+  bootstrap:
+    initdb:
+      database: appdb
+      owner: appuser
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-client
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-client
+  template:
+    metadata:
+      labels:
+        app: db-client
+    spec:
+      containers:
+      - name: psql
+        image: postgres:15-alpine
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          while true; do
+            PGPASSWORD=$DB_PASSWORD psql -h my-db-rw -U appuser -d appdb -c "SELECT now();" || echo "DB connection failed"
+            sleep 5
+          done
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-db-app
+              key: password

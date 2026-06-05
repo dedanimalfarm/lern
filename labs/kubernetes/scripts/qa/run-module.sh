@@ -70,4 +70,9 @@ kubectl delete validatingadmissionpolicy require-tenant-labels --ignore-not-foun
 # Explicit clean lab just in case
 kubectl -n lab delete all --all 2>/dev/null || true
 
+if [[ -f "$FULL_PATH/verify/cleanup.sh" ]]; then
+  echo "Running cleanup.sh..."
+  bash "$FULL_PATH/verify/cleanup.sh"
+fi
+
 exit $VERIFY_EXIT

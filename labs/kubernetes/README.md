@@ -39,10 +39,12 @@ kubectl get nodes -o wide
 15. [15-network-policy-enforced](modules/15-network-policy-enforced) — NetworkPolicy с реальным enforcement (микросегментация)
 16. [16-secrets-management](modules/16-secrets-management) — Управление секретами (encryption-at-rest, Sealed Secrets, ESO, Vault dynamic)
 17. [17-metrics-alerting](modules/17-metrics-alerting) — Метрики и алертинг (Prometheus + Grafana + Alertmanager)
-18. [19-crd-operators](modules/19-crd-operators) — CRD и операторы (расширение Kubernetes API)
-19. [20-batch-workflows](modules/20-batch-workflows) — Батч-нагрузки и workflows (Job parallelism, Indexed, podFailurePolicy, CronJob)
-20. [22-ingress-tls](modules/22-ingress-tls) — Ingress и TLS (маршрутизация L7 + HTTPS + cert-manager)
-21. [25-gitops-at-scale](modules/25-gitops-at-scale) — GitOps на масштабе (Kustomize overlays, ApplicationSet, multi-env)
+18. [18-logs-tracing](modules/18-logs-tracing) — Централизованное логирование (Loki + Promtail)
+19. [19-crd-operators](modules/19-crd-operators) — CRD и операторы (расширение Kubernetes API)
+20. [20-batch-workflows](modules/20-batch-workflows) — Батч-нагрузки и workflows (Job parallelism, Indexed, podFailurePolicy, CronJob)
+21. [21-stateful-systems](modules/21-stateful-systems) — Базы данных и Stateful-системы (CloudNativePG)
+22. [22-ingress-tls](modules/22-ingress-tls) — Ingress и TLS (маршрутизация L7 + HTTPS + cert-manager)
+23. [25-gitops-at-scale](modules/25-gitops-at-scale) — GitOps на масштабе (Kustomize overlays, ApplicationSet, multi-env)
 
 ## 🏗 Итоговые проекты (Capstone)
 
@@ -66,7 +68,7 @@ kubectl get nodes -o wide
 
 ## 📂 Структура репозитория
 
-- `docs/` — Базовые документы, чеклисты, справочники (playbooks, cheatsheets).
+- `docs/` — Базовые документы, чеклисты, справочники (playbooks, cheatsheets), а также [Глоссарий терминов](docs/03-glossary.md).
 - `scripts/` — Скрипты инициализации (bootstrap), очистки и QA-верификации.
 - `common/` — Общие ресурсы для лаборатории (базовые namespace, квоты и т.д.).
 - `modules/` — Директории учебных модулей (теория, манифесты, практические сломанные сценарии).

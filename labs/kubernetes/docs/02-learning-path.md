@@ -20,6 +20,7 @@
 * **[08-observability](../modules/08-observability)** (20 мин, сложность 2/5)
 * **[10-kubeadm-admin](../modules/10-kubeadm-admin)** (30 мин, сложность 4/5)
 * **[17-metrics-alerting](../modules/17-metrics-alerting)** (30 мин, сложность 3/5)
+* **[18-logs-tracing](../modules/18-logs-tracing)** (25 мин, сложность 3/5)
 * **[20-batch-workflows](../modules/20-batch-workflows)** (20 мин, сложность 3/5)
 * **[Project F: Incident Response](../projects/project-c-broken-cluster-lab)** (45 мин, сложность 5/5) — *Capstone*
 
@@ -29,6 +30,7 @@
 * **[11-autoscaling](../modules/11-autoscaling)** (25 мин, сложность 3/5)
 * **[12-resource-management](../modules/12-resource-management)** (20 мин, сложность 3/5)
 * **[13-resilience](../modules/13-resilience)** (20 мин, сложность 3/5)
+* **[21-stateful-systems](../modules/21-stateful-systems)** (35 мин, сложность 4/5)
 * **[22-ingress-tls](../modules/22-ingress-tls)** (30 мин, сложность 4/5)
 * **[25-gitops-at-scale](../modules/25-gitops-at-scale)** (30 мин, сложность 4/5)
 
