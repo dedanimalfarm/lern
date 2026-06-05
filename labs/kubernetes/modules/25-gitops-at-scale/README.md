@@ -281,7 +281,7 @@ generators:
 ```bash
 kubectl apply -f broken/scenario-01/appset-broken.yaml
 sleep 10
-kubectl -n argocd get applications        # web-stagng в Unknown/Missing
+kubectl -n argocd get applications        # web-stagng в SYNC=Unknown (path не найден)
 kubectl -n argocd get application web-stagng -o jsonpath='{.status.conditions[*].message}{"\n"}'
 # ... overlays/stagng: app path does not exist
 

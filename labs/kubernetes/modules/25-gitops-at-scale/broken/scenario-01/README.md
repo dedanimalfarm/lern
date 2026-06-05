@@ -9,7 +9,8 @@ kubectl -n argocd get applications
 # NAME           SYNC STATUS   HEALTH STATUS
 # web-dev        Synced        Healthy
 # web-prod       Synced        Healthy
-# web-stagng     Unknown       Missing       <- лишний/битый: path не найден
+# web-stagng     Unknown       Healthy       <- SYNC=Unknown: path не найден (битый)
+#   ^ health может быть Healthy/Missing (ресурсов нет) — ключевой сигнал именно SYNC=Unknown
 ```
 
 ## Подсказки

@@ -79,7 +79,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 | # | Новый модуль | Ключевое | Среда |
 |---|--------------|----------|-------|
 | 24 | **progressive-delivery** | Argo Rollouts, canary/blue-green, Flagger, analysis | GKE + Argo |
-| 25 | **gitops-at-scale** | ApplicationSets, sync waves/hooks, Kustomize overlays, multi-env | любой ✅ |
+| 25 | **gitops-at-scale** ✅ ГОТОВ | Kustomize base+overlays (dev/staging/prod), **ApplicationSet** (list-генератор→3 Application), AppProject-границы, prune/selfHeal, обзор git/cluster/matrix-генераторов — прогнан на Kubespray (3 Application Synced/Healthy, реплики 1/2/3, selfHeal вернул prod 7→3, broken path→solution). Sync-waves — в м09 | любой ✅ |
 
 ## Уровень 8 — Cluster operations & DR
 
