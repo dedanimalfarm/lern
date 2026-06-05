@@ -1,0 +1,40 @@
+# policy-as-code (модуль 14): ValidatingAdmissionPolicy на CEL запрещает образы с
+# тегом :latest / без тега. Биндинг нацелен ТОЛЬКО на namespaces платформы (метка
+# platform-tenant=true) — не на lab/прочие, чтобы политика не «протекала» в другие
+# модули. Встроенный admission, без Kyverno/OPA.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: tenant-no-latest-tag
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "replicasets"]
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    # Ветвление: у Deployment/ReplicaSet контейнеры в spec.template.spec, у Pod —
+    # в spec. has() выбирает нужный путь, чтобы одна политика покрыла оба вида.
+    - expression: >
+        (has(object.spec.template) ? object.spec.template.spec.containers : object.spec.containers)
+          .all(c, c.image.contains(':') && !c.image.endsWith(':latest'))
+      message: "образы с тегом ':latest' или без тега запрещены — пиньте конкретную версию"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: tenant-no-latest-tag-binding
+spec:
+  policyName: tenant-no-latest-tag
+  validationActions: ["Deny"]
+  matchResources:
+    # Только namespaces платформы — изоляция политики (НЕ трогает lab и другие).
+    namespaceSelector:
+      matchLabels:
+        platform-tenant: "true"

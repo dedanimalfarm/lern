@@ -95,8 +95,12 @@ progressive delivery, backup/DR. Это и есть план ниже.
 
 - **D — production-app**: микросервис + HPA + Ingress/TLS + Prometheus + Argo CD
   (собирает уровни 2-4, 7 в одном сквозном проекте).
-- **E — secure-platform**: multi-tenant платформа с Pod Security, NetworkPolicy,
-  RBAC, quota, policy-as-code (уровень 3).
+- **E — secure-platform** ✅ ГОТОВ (`projects/project-e-secure-platform/`):
+  multi-tenant платформа (tenant-a/b) с PSA restricted + default-deny
+  NetworkPolicy + RBAC own-ns + ResourceQuota/LimitRange + VAP policy-as-code;
+  `audit/isolation-audit.sh` (6 контролей). Прогнано на Kubespray+Calico: 5
+  доказательств изоляции (PSA-deny / VAP scoped tenant-vs-lab / RBAC / quota /
+  cross-tenant netpol-блок) — все вживую.
 - **F — incident-response**: расширить `project-c-broken-cluster-lab` сценариями
   из новых модулей (OOM, eviction, DNS, cert-expiry, sync-fail).
 

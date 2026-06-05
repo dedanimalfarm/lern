@@ -1,0 +1,169 @@
+# ============================================================================
+# ТЕНАНТ B — изолированное окружение команды на общем кластере.
+# Пять слоёв изоляции в одном namespace: PSA (что можно запускать),
+# NetworkPolicy (с кем общаться), RBAC (кто чем управляет), ResourceQuota +
+# LimitRange (сколько ресурсов). policy-as-code (VAP) — отдельно в policy/.
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-b
+  labels:
+    # PSA: жёсткий профиль — non-root, drop caps, seccomp (модуль 14).
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+    # Кастомная метка — по ней VAP-биндинг нацеливается ТОЛЬКО на тенантов
+    # (не на ns lab/прочие), чтобы политика не «протекала» в другие модули.
+    platform-tenant: "true"
+---
+# --- Лимиты ресурсов namespace (модуль 06/12) ---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-b-quota
+  namespace: tenant-b
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
+    pods: "10"
+    count/services: "5"
+---
+# LimitRange проставляет дефолтные requests/limits подам без них — обязателен при
+# активной ResourceQuota (иначе под без requests отклонят).
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant-b-limits
+  namespace: tenant-b
+spec:
+  limits:
+    - type: Container
+      default: { cpu: 200m, memory: 128Mi }
+      defaultRequest: { cpu: 50m, memory: 64Mi }
+      max: { cpu: "1", memory: 512Mi }
+---
+# --- Сеть: Zero-Trust (модуль 15) ---
+# 1) default-deny: пустой podSelector + оба policyTypes => весь трафик закрыт.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: tenant-b
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# 2) allow-dns: egress к CoreDNS. ВАЖНО на Kubespray: реальный резолвер —
+# nodelocaldns на link-local 169.254.25.10, поэтому нужен ipBlock (иначе
+# default-deny рвёт DNS, и поды получают "bad address").
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: tenant-b
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+          podSelector: { matchLabels: { k8s-app: kube-dns } }
+        - ipBlock: { cidr: 169.254.25.10/32 }   # nodelocaldns (Kubespray)
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# 3) allow-intra: трафик ВНУТРИ тенанта разрешён (web<->свои поды), наружу — нет.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: tenant-b
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{ podSelector: {} }]
+  egress:
+    - to: [{ podSelector: {} }]
+---
+# --- RBAC: команда управляет ТОЛЬКО своим namespace (модуль 07) ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tenant-b-deployer
+  namespace: tenant-b
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tenant-deployer
+  namespace: tenant-b
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tenant-b-deployer-binding
+  namespace: tenant-b
+subjects:
+  - kind: ServiceAccount
+    name: tenant-b-deployer
+    namespace: tenant-b
+roleRef:
+  kind: Role
+  name: tenant-deployer
+  apiGroup: rbac.authorization.k8s.io
+---
+# --- Hardened workload: проходит restricted PSA (модуль 02/07/14) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: tenant-b
+  labels: { app: web }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: web } }
+  template:
+    metadata:
+      labels: { app: web }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: web
+          image: nginxinc/nginx-unprivileged:1.27-alpine   # non-root, слушает :8080
+          ports: [{ containerPort: 8080 }]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: cache, mountPath: /var/cache/nginx }
+            - { name: run, mountPath: /var/run }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - { name: cache, emptyDir: {} }
+        - { name: run, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: tenant-b
+spec:
+  selector: { app: web }
+  ports: [{ port: 80, targetPort: 8080 }]
