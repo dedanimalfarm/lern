@@ -1,0 +1,21 @@
+# ПОЛОМКА (старый антипаттерн до native sidecars): «sidecar» положили обычным
+# контейнером в containers[]. app-контейнер отрабатывает и выходит, НО логгер
+# крутится вечно — Job НИКОГДА не завершится (status.active=1 навсегда), под висит
+# в NotReady (1/2). Симптом: Job не Complete, хотя «работа» давно сделана.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sidecar-job
+  namespace: lab
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: logshipper            # ❌ обычный контейнер, не native sidecar
+        image: busybox:1.36
+        command: ["sh","-c","while true; do echo '[sidecar] flushing'; sleep 2; done"]
+      - name: app
+        image: busybox:1.36
+        command: ["sh","-c","echo '[app] doing work'; sleep 5; echo '[app] done'"]

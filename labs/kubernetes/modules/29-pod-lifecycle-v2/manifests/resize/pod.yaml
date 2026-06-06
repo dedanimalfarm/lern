@@ -1,0 +1,21 @@
+# In-place Pod resize (beta 1.33): менять requests/limits CPU/память РАБОТАЮЩЕМУ
+# поду БЕЗ пересоздания. `resizePolicy` задаёт, нужен ли рестарт контейнера на
+# изменение ресурса: NotRequired (применить на лету) или RestartContainer.
+# Под — Burstable (requests < limits), чтобы resize мог менять значения, не меняя
+# QoS-класс (смена QoS при resize ЗАПРЕЩЕНА).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: resize-demo
+  namespace: lab
+  labels: { app: resize-demo }
+spec:
+  containers:
+  - name: app
+    image: nginx:1.27-alpine
+    resizePolicy:
+    - { resourceName: cpu, restartPolicy: NotRequired }      # CPU — на лету, без рестарта
+    - { resourceName: memory, restartPolicy: RestartContainer } # память — с рестартом контейнера
+    resources:
+      requests: { cpu: 100m, memory: 64Mi }
+      limits:   { cpu: 200m, memory: 128Mi }

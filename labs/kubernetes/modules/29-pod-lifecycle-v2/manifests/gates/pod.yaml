@@ -1,0 +1,20 @@
+# Scheduling gates (GA 1.30): под НЕ рассматривается планировщиком, пока на нём
+# висит хотя бы один schedulingGate. Статус — Pending/reason=SchedulingGated.
+# Снять gate можно ТОЛЬКО патчем (добавить нельзя). Используется для «отложенного
+# старта»: дождаться внешнего approval, квоты (Kueue использует gates), готовности
+# зависимости, окна обслуживания — БЕЗ busy-wait в init-контейнере.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gated-demo
+  namespace: lab
+  labels: { app: gated-demo }
+spec:
+  schedulingGates:
+  - name: "lab.example.com/wait-for-approval"   # пока он тут — под не планируется
+  containers:
+  - name: app
+    image: nginx:1.27-alpine
+    resources:
+      requests: { cpu: 50m, memory: 32Mi }
+      limits:   { cpu: 100m, memory: 64Mi }

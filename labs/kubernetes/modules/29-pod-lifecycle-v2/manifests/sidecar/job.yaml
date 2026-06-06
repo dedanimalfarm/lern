@@ -1,0 +1,30 @@
+# Native sidecar (GA 1.33): sidecar — это initContainer с restartPolicy: Always.
+# Он стартует в фазе init, НЕ блокирует (как только Started — идут app-контейнеры),
+# работает рядом с app и ГАСИТСЯ ПОСЛЕ него. Ключевой плюс именно в Job: под
+# завершается, когда выходит app-контейнер, а sidecar не держит Job «вечно живым»
+# (старый антипаттерн — sidecar в containers[] не давал Job завершиться).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sidecar-job
+  namespace: lab
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: logshipper            # <-- НАТИВНЫЙ sidecar
+        image: busybox:1.36
+        restartPolicy: Always       # именно это превращает init в sidecar
+        command: ["sh","-c","while true; do echo '[sidecar] flushing logs'; sleep 2; done"]
+        resources:
+          requests: { cpu: 20m, memory: 16Mi }
+          limits:   { cpu: 50m, memory: 32Mi }
+      containers:
+      - name: app                   # основная работа: посчитал и вышел
+        image: busybox:1.36
+        command: ["sh","-c","echo '[app] doing work'; sleep 5; echo '[app] done'"]
+        resources:
+          requests: { cpu: 20m, memory: 16Mi }
+          limits:   { cpu: 50m, memory: 32Mi }
