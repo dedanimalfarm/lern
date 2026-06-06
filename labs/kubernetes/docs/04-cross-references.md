@@ -11,7 +11,7 @@
 | **Хранение данных** | `m05` (Storage/StatefulSet) | `m21` (Stateful Systems) | От ручного StatefulSet к мощным операторам (CloudNativePG) с failover и backup. |
 | **Секреты** | `m07` (Secrets) | `m16` (Secrets Mgmt) | От Base64 к Vault, External Secrets Operator и шифрованию at-rest. |
 | **Метрики** | `m08` (Observability) | `m17` (Metrics/Alerting) | От `kubectl top` к полноценному стеку Prometheus, PromQL и Alertmanager. |
-| **Маршрутизация (L7)** | `m04` (Ingress) | `m22` (Ingress/TLS) | От простого правила Ingress к TLS-терминации с cert-manager. |
+| **Маршрутизация (L7)** | `m04` (Ingress) | `m22` (TLS), `m23` (Gateway API) | От простого правила Ingress к TLS-терминации и миграции на современный стандарт Gateway API. |
 | **Масштабирование** | `m03` (Deployments) | `m11` (Autoscaling) | От ручного `kubectl scale` к автоматическому HPA/VPA/ClusterAutoscaler. |
 | **GitOps и доставка** | `m09` (Helm/GitOps) | `m25` (GitOps at Scale) | От простого Application к ApplicationSet, Kustomize overlays и AppProject. |
 | **Стратегии релиза** | `m03` (RollingUpdate) | `m24` (Progressive Delivery) | От RollingUpdate к Canary, Blue/Green и автоматическому анализу в Argo Rollouts. |

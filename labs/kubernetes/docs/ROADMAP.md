@@ -69,7 +69,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 | # | Статус | Новый модуль | Ключевое |
 |---|:---:|--------------|----------|
 | 22 | [x] | **ingress-tls** `938b97e` | L7 routing + TLS termination (ingress-nginx + cert-manager) |
-| 23 | [ ] | <span style="color:red">**gateway-api / mesh**</span> | Gateway API (замена Ingress), Istio/Linkerd, mTLS, traffic shifting |
+| 23 | [x] | **gateway-api** | Gateway API (замена Ingress), HTTPRoute, traffic shifting, TLS |
 
 ## Уровень 7 — Delivery & GitOps advanced
 
