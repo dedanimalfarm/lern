@@ -643,6 +643,10 @@ kubectl -n lab logs sidecar-demo -c vault-agent
 kubectl -n lab delete pod sidecar-demo
 ```
 
+> Это базовое введение в native sidecar (в Pod). Продвинутая практика — sidecar в
+> **Job** (почему он не «вешает» Job), плюс **scheduling gates** и **in-place
+> resize** — в модуле **29 (pod-lifecycle-v2)**.
+
 ---
 
 ## Часть 6: Troubleshooting — боевые инциденты
