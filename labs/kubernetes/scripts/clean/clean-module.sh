@@ -47,12 +47,26 @@ kubectl delete validatingadmissionpolicy \
   no-latest-tag require-tenant-labels tenant-no-latest-tag \
   --ignore-not-found=true 2>/dev/null || true
 
-# 4) Argo CD объекты, созданные модулями 25 / capstone F (живут в ns argocd).
+# 4) Argo CD объекты (ns argocd). ⚠️ КРИТИЧНО: у Application есть finalizer
+#    `resources-finalizer.argocd.argoproj.io` — `kubectl delete application` ВИСНЕТ
+#    на нём БЕСКОНЕЧНО, если Argo не может выполнить prune (напр. AppProject уже
+#    удалён → «project not found»). Именно это морозило sweep на часы.
+#    Правильный порядок и приёмы: ApplicationSet (--wait=false, чтобы не
+#    регенерировал apps) → СНЯТЬ finalizer у каждого Application и удалить
+#    (--wait=false) → только ПОТОМ AppProject. Все delete неблокирующие.
 if kubectl get ns argocd >/dev/null 2>&1; then
-  kubectl -n argocd delete applicationset web-environments --ignore-not-found=true 2>/dev/null || true
-  kubectl -n argocd delete appproject labs-gitops --ignore-not-found=true 2>/dev/null || true
-  kubectl -n argocd delete application incident-app web-dev web-staging web-prod \
-    --ignore-not-found=true 2>/dev/null || true
+  kubectl -n argocd delete applicationset web-environments \
+    --ignore-not-found=true --wait=false 2>/dev/null || true
+  for app in web-dev web-staging web-prod incident-app; do
+    kubectl -n argocd get application "$app" >/dev/null 2>&1 || continue
+    # снять finalizer, иначе delete зависнет на невыполнимом prune
+    kubectl -n argocd patch application "$app" --type=merge \
+      -p '{"metadata":{"finalizers":null}}' 2>/dev/null || true
+    kubectl -n argocd delete application "$app" \
+      --ignore-not-found=true --wait=false 2>/dev/null || true
+  done
+  kubectl -n argocd delete appproject labs-gitops \
+    --ignore-not-found=true --wait=false 2>/dev/null || true
 fi
 
 # 5) Доп. namespaces окружений/тенантов (модуль 25 / project-e secure-platform).

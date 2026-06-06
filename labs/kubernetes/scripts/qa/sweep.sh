@@ -37,14 +37,22 @@ for d in "$ROOT_DIR"/modules/* "$ROOT_DIR"/projects/*; do
 
   TOTAL_COUNT=$((TOTAL_COUNT+1))
   
-  # Run module and capture output
-  if bash "$ROOT_DIR/scripts/qa/run-module.sh" "$TARGET" > /dev/null 2>&1; then
+  # Run module под жёстким per-module таймаутом. Без него зависший модуль
+  # (напр. Argo-приложение, которое никогда не станет Synced) морозит ВЕСЬ sweep
+  # на часы. timeout шлёт SIGTERM на дедлайне (trap в run-module.sh подчистит),
+  # SIGKILL — спустя ещё 30с, если не вышел. 600с с запасом покрывают самые
+  # медленные модули (CNPG/Loki/Argo).
+  MODULE_TIMEOUT="${MODULE_TIMEOUT:-600}"
+  if timeout --kill-after=30 "$MODULE_TIMEOUT" \
+       bash "$ROOT_DIR/scripts/qa/run-module.sh" "$TARGET" > /dev/null 2>&1; then
     printf "%-40s | \e[32mPASS\e[0m\n" "$TARGET"
     echo "| $TARGET | ✅ PASS | |" >> "$REPORT_FILE"
     PASS_COUNT=$((PASS_COUNT+1))
   else
-    printf "%-40s | \e[31mFAIL\e[0m\n" "$TARGET"
-    echo "| $TARGET | ❌ FAIL | |" >> "$REPORT_FILE"
+    rc=$?
+    note=""; [[ "$rc" == 124 || "$rc" == 137 ]] && note=" (TIMEOUT ${MODULE_TIMEOUT}s)"
+    printf "%-40s | \e[31mFAIL%s\e[0m\n" "$TARGET" "$note"
+    echo "| $TARGET | ❌ FAIL |$note |" >> "$REPORT_FILE"
     FAIL_COUNT=$((FAIL_COUNT+1))
   fi
 done
