@@ -1,0 +1,10 @@
+apiVersion: postgresql.k8s.io/v1
+kind: ScheduledBackup
+metadata:
+  name: my-db-backup
+  namespace: lab
+spec:
+  schedule: "0 0 2 * * *" # Every day at 2:00 AM
+  backupOwnerReference: self
+  cluster:
+    name: my-db

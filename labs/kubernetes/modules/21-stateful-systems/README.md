@@ -4,21 +4,20 @@
 <!-- TOC -->
 - [Предварительные требования](#-)
 - [Стартовая проверка](#-)
-- [1. Развёртывание PostgreSQL кластера](#1--postgresql-)
-- [2. Оператор vs Ручной StatefulSet](#2--vs--statefulset)
+- [Часть 1: Развёртывание PostgreSQL кластера](#-1--postgresql-)
+- [Часть 2: Failover (Переключение мастера)](#-2-failover--)
+- [Часть 3: Бэкапы и Восстановление (ScheduledBackup)](#-3----scheduledbackup)
+- [Часть 4: Rolling Upgrade (Обновление версии)](#-4-rolling-upgrade--)
+- [Архитектура: CloudNativePG Operator vs StatefulSet](#-cloudnativepg-operator-vs-statefulset)
 - [Практические задания](#-)
-  - [Задание 1. Подключение к БД](#-1---)
-  - [Задание 2. Failover (Переключение мастера)](#-2-failover--)
-- [Архитектура: CloudNativePG Operator](#-cloudnativepg-operator)
 - [Финальная карта ресурсов модуля](#---)
-- [Теоретические вопросы (итоговые)](#--)
 - [Чему вы научились](#--)
 - [Уборка](#)
 <!-- /TOC -->
 
 > ⏱ время ~35 мин · сложность 4/5 · пререквизиты: Трек 1 и Трек 3
 
-В этом модуле мы изучим работу с базами данных в Kubernetes на примере оператора CloudNativePG. Вы научитесь разворачивать высокодоступный кластер PostgreSQL с автоматическим failover и создавать резервные копии.
+В этом модуле мы изучим работу с базами данных в Kubernetes на примере оператора CloudNativePG. Вы научитесь разворачивать высокодоступный кластер PostgreSQL с автоматическим failover, создавать резервные копии и выполнять бесшовные обновления (Rolling Upgrade).
 
 ## Предварительные требования
 
@@ -28,12 +27,12 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 
 ## Стартовая проверка
 
-Убедитесь, что кластер доступен и оператор установлен:
+Убедитесь, что кластер доступен:
 ```bash
 kubectl get nodes
 ```
 
-## 1. Развёртывание PostgreSQL кластера
+## Часть 1: Развёртывание PostgreSQL кластера
 
 Мы установим CloudNativePG оператор с помощью стартового скрипта:
 ```bash
@@ -46,45 +45,68 @@ kubectl apply -f manifests/cluster.yaml
 kubectl apply -f manifests/app.yaml
 ```
 
-Проверьте статус кластера:
+Проверьте статус кластера (подождите около минуты, пока поды не перейдут в статус Running):
 ```bash
 kubectl -n lab get cluster my-db
 kubectl -n lab get pods -l cnpg.io/cluster=my-db
 ```
-
 Вы увидите 2 пода (один Primary, один Replica).
 
-## 2. Оператор vs Ручной StatefulSet
-
-В модуле 05 мы деплоили StatefulSet вручную. Оператор (CRD + Controller) автоматизирует "человеческие" задачи DBA:
-1. **Bootstrap**: Создание пользователей, баз данных, инициализация.
-2. **High Availability**: Автоматический failover (переключение на реплику при падении primary).
-3. **Backup/Restore**: Автоматические бэкапы через pgBackRest/Barman.
-4. **Upgrades**: Безопасное обновление версий PostgreSQL без простоя.
-
-## Практические задания
-
-### Задание 1. Подключение к БД
-Оператор автоматически создал Service `my-db-rw` для чтения/записи (направляет на Primary) и `my-db-ro` для чтения (направляет на Replica). Подключимся к базе (пароль находится в секрете `my-db-app`):
+Подключимся к базе (пароль находится в секрете `my-db-app`):
 ```bash
 # Тестовое приложение уже использует эти креды. Посмотрим его логи:
 kubectl -n lab logs -l app=db-client
 ```
 
-### Задание 2. Failover (Переключение мастера)
-Сымитируйте падение Primary узла:
+## Часть 2: Failover (Переключение мастера)
+
+Оператор автоматически обрабатывает сбои. Сымитируйте падение Primary узла:
 ```bash
-# Узнаем текущий Primary:
-kubectl -n lab get cluster my-db -o=jsonpath='{.status.currentPrimary}'
+# 1. Узнаем текущий Primary:
+PRIMARY_POD=$(kubectl -n lab get cluster my-db -o=jsonpath='{.status.currentPrimary}')
+echo "Current Primary is: $PRIMARY_POD"
 
-# Удалим под Primary (как будто нода упала):
-kubectl -n lab delete pod my-db-1
+# 2. Удалим под Primary (как будто нода упала):
+kubectl -n lab delete pod $PRIMARY_POD
 ```
-Посмотрите, как быстро оператор назначит реплику `my-db-2` новым Primary и создаст новый под для восстановления кворума.
 
----
+Сразу же понаблюдайте за кластером:
+```bash
+kubectl -n lab get cluster my-db
+```
+Посмотрите, как быстро оператор назначит реплику новым Primary и создаст новый под для восстановления кворума.
 
-## Архитектура: CloudNativePG Operator
+## Часть 3: Бэкапы и Восстановление (ScheduledBackup)
+
+Настроим автоматическое резервное копирование по расписанию:
+```bash
+kubectl apply -f manifests/backup.yaml
+```
+
+Посмотрите статус бэкапов:
+```bash
+kubectl -n lab get scheduledbackup
+```
+
+В реальной жизни бэкапы отправляются в S3 (объектное хранилище). В случае аварии, вы можете создать новый кластер из бэкапа, добавив в манифест нового кластера секцию `bootstrap: recovery`.
+
+## Часть 4: Rolling Upgrade (Обновление версии)
+
+CloudNativePG позволяет обновлять PostgreSQL без даунтайма.
+Обновим версию образа в манифесте кластера (например, с `15.3` на `15.4` или просто изменим конфигурацию).
+
+Отредактируйте `manifests/cluster.yaml`, увеличив количество инстансов с 2 до 3:
+```bash
+sed -i 's/instances: 2/instances: 3/g' manifests/cluster.yaml
+kubectl apply -f manifests/cluster.yaml
+```
+
+Понаблюдайте за тем, как оператор разворачивает новую реплику:
+```bash
+kubectl -n lab get cluster my-db
+```
+
+## Архитектура: CloudNativePG Operator vs StatefulSet
 
 ```text
 ┌───────────────────────┐          ┌───────────────────────────────────┐
@@ -98,7 +120,7 @@ kubectl -n lab delete pod my-db-1
 ┌───────────────────────┐          ┌───────────────────────────────────┐
 │  CR: Cluster "my-db"  │          │   PostgreSQL Cluster (my-db)      │
 │                       │          │                                   │
-│  instances: 2         │          │   [Pod: my-db-1 (Primary)]        │
+│  instances: 3         │          │   [Pod: my-db-1 (Primary)]        │
 │  storage: 1Gi         │          │   ├── PVC: 1Gi                    │
 └───────────────────────┘          │   └── Service: my-db-rw           │
                                    │           ▲ (replication)         │
@@ -109,37 +131,35 @@ kubectl -n lab delete pod my-db-1
                                    └───────────────────────────────────┘
 ```
 
-**Преимущества паттерна Operator для БД:**
-Вместо того, чтобы полагаться только на базовые примитивы Kubernetes (StatefulSet + PVC), оператор внедряет **domain-specific knowledge** (знания администратора БД) прямо в кластер. Например, он знает, что для добавления реплики нужно сделать `pg_basebackup` с Primary, а при сбое — выполнить promotion реплики и обновить Service `my-db-rw`.
+**StatefulSet vs Operator:**
+В модуле 05 мы деплоили StatefulSet вручную. Оператор (CRD + Controller) автоматизирует "человеческие" задачи DBA:
+1. **Bootstrap**: Создание пользователей, баз данных, инициализация.
+2. **High Availability (Failover)**: Автоматическое переключение на реплику при падении primary (StatefulSet этого не умеет, он просто пересоздаст под).
+3. **Backup/Restore**: Автоматические бэкапы в S3 через pgBackRest/Barman.
+4. **Upgrades**: Безопасное обновление версий PostgreSQL без простоя.
 
----
+## Практические задания
+
+1. **Trigger Manual Backup**: Изучите CRD `Backup`. Создайте манифест `Backup` (не `ScheduledBackup`), чтобы запустить резервное копирование прямо сейчас.
+2. **Scale Down**: Измените количество инстансов в кластере обратно на 2.
 
 ## Финальная карта ресурсов модуля
 
 | Ресурс | Тип | Роль |
 |--------|-----|------|
 | `my-db` | Cluster (CRD) | Декларативное описание желаемого кластера PostgreSQL |
-| `my-db-1`, `my-db-2` | Pods | Поды инстансов БД (Primary и Replica). Имена фиксированы, но управляются оператором, а не StatefulSet. |
+| `my-db-backup` | ScheduledBackup | Расписание создания резервных копий |
+| `my-db-1`, `my-db-2` | Pods | Поды инстансов БД. Управляются оператором, а не StatefulSet. |
 | `my-db-rw`, `my-db-ro`| Service | `rw` маршрутизирует трафик только на Primary; `ro` балансирует запросы на чтение между Replica. |
-| `my-db-app` | Secret | Автоматически сгенерированный секрет с паролем для пользователя приложения (`appuser`). |
-| `db-client` | Deployment | Тестовое приложение (pgbench), которое читает секрет и пишет в БД через сервис `my-db-rw`. |
-
----
-
-## Теоретические вопросы (итоговые)
-
-1. Чем подход на базе Operator (CloudNativePG) отличается от классического StatefulSet для запуска баз данных?
-2. Как тестовое приложение понимает, на какой узел (Pod) отправлять запросы `INSERT/UPDATE`, чтобы не получить ошибку "read-only transaction"?
-3. Что произойдет с данными, если удалить `Cluster` my-db? Сохранятся ли PVC?
-4. Зачем оператору требуется отдельная ServiceAccount с широкими правами в кластере (RBAC)?
-
+| `db-client` | Deployment | Тестовое приложение, которое читает секрет и пишет в БД. |
 
 ## Чему вы научились
 
 В этом модуле вы научились:
-- Управлению базами данных с помощью операторов (CloudNativePG)
-- Разнице между оператором и ручным StatefulSet
-- Механизмам Failover и High Availability в БД на Kubernetes
+- Разворачивать PostgreSQL с помощью оператора CloudNativePG.
+- Выполнять Failover и проверять устойчивость кластера БД к сбоям нод.
+- Понимать разницу между базовым StatefulSet и умным Operator'ом.
+- Настраивать резервное копирование и масштабировать кластер БД.
 
 ## Уборка
 
