@@ -14,7 +14,11 @@
 - [Часть 3: VPA и Cluster Autoscaler (обзор)](#-3-vpa--cluster-autoscaler-)
   - [Теория для изучения перед частью](#----)
   - [3.1 Связь HPA → Cluster Autoscaler](#31--hpa--cluster-autoscaler)
-- [Часть 4: Troubleshooting](#-4-troubleshooting)
+- [Часть 4: Продвинутое масштабирование (KEDA, Karpenter, DRA)](#-4---keda-karpenter-dra)
+  - [4.1 KEDA (Kubernetes Event-driven Autoscaling)](#41-keda)
+  - [4.2 Karpenter (Оптимизированный Node Provisioning)](#42-karpenter)
+  - [4.3 DRA (Dynamic Resource Allocation)](#43-dra)
+- [Часть 5: Troubleshooting](#-5-troubleshooting)
   - [Теория: дерево диагностики HPA `<unknown>`](#---hpa-unknown)
   - [Инцидент 1: HPA показывает `<unknown>/50%` — нет `requests.cpu`](#-1-hpa--unknown50---requestscpu)
   - [Инцидент 2: HPA не масштабирует — нет metrics-server](#-2-hpa-----metrics-server)
@@ -281,7 +285,51 @@ kubectl get events -A | grep -iE "TriggeredScaleUp|NotTriggerScaleUp" | tail -3
 
 ---
 
-## Часть 4: Troubleshooting
+## Часть 4: Продвинутое масштабирование (KEDA, Karpenter, DRA)
+
+Стандартные механизмы (HPA и Cluster Autoscaler) хороши, но имеют архитектурные ограничения. Для более сложных и современных сценариев применяют специализированные инструменты. В этой части дан обзор трех ключевых технологий нового поколения.
+
+> **Важно:** Эти инструменты не установлены на учебном кластере по умолчанию, так как требуют сложной привязки к Cloud Provider (AWS/GCP) или установки операторов. В директории `manifests/` лежат готовые примеры (CRD) для изучения.
+
+### 4.1 KEDA (Kubernetes Event-driven Autoscaling)
+
+**Проблема HPA:** HPA масштабирует поды на основе метрик (CPU, RAM). Если вы читаете очередь (RabbitMQ, Kafka) и подов нет (scale to 0), метрика CPU = 0, и HPA не начнет масштабирование, даже если очередь заполнится тысячами сообщений. HPA также не умеет масштабировать в 0 (только до 1).
+
+**Решение KEDA:** KEDA (CNCF проект) выступает мостом между внешними источниками событий и Kubernetes. Он умеет масштабировать Deployment (или Job) напрямую до 0 и обратно, основываясь на длине очереди, метриках Prometheus или базах данных. Под капотом KEDA сам управляет стандартным HPA, когда реплик > 0.
+
+```bash
+# Пример: изучите манифест KEDA ScaledObject, который масштабирует
+# воркеры от 0 до 10 на основе количества HTTP запросов из Prometheus
+cat manifests/keda-scaledobject.yaml
+```
+
+### 4.2 Karpenter (Оптимизированный Node Provisioning)
+
+**Проблема Cluster Autoscaler (CA):** CA работает на уровне Node Groups / Node Pools (ASG в AWS, MIG в GCP). Он видит `Pending` поды и запрашивает у облака +1 ноду фиксированного типа из пула. Если поду нужен GPU, а в пуле только CPU, CA бессилен (если нет отдельного пула). Масштабирование занимает 3–5 минут.
+
+**Решение Karpenter:** Karpenter напрямую общается со слоем IaaS облака (например, AWS EC2 Fleet API), минуя громоздкие Auto Scaling Groups. Он "на лету" анализирует `Pending` поды (их requests, nodeSelectors, tolerations) и запускает *идеально подходящую ноду* (нужного размера и семейства) за секунды (group-less provisioning). Также он умеет агрессивно консолидировать пустые или недогруженные ноды.
+
+```bash
+# Пример: изучите манифест Karpenter NodePool. Обратите внимание,
+# что вместо жесткой фиксации Instance Type, задаются требования:
+# любая AMD64/ARM64 нода, типов C/M/R, spot или on-demand.
+cat manifests/karpenter-nodepool.yaml
+```
+
+### 4.3 DRA (Dynamic Resource Allocation)
+
+**Проблема:** В Kubernetes традиционно есть только "CPU" и "Memory". Запрос специфичного оборудования (GPU, FPGA, InfiniBand) требовал установки костыльных Device Plugins. Если вам нужна ровно "половина GPU" или GPU конкретной модели с нужной топологией подключения, стандартные ресурсы этого не умеют.
+
+**Решение DRA:** Dynamic Resource Allocation (с Kubernetes 1.26+) абстрагирует "железо" подобно тому, как PVC/PV абстрагируют диски (Storage). Вы создаете `ResourceClaim` с параметрами (нужна карточка с 16GB VRAM), а вендорский драйвер (DRA Driver) динамически её выделяет и пробрасывает в под.
+
+```bash
+# Пример: изучите манифест ResourceClaim
+cat manifests/dra-resourceclaim.yaml
+```
+
+---
+
+## Часть 5: Troubleshooting
 
 ### Теория: дерево диагностики HPA `<unknown>`
 

@@ -18,4 +18,11 @@ else
   warn "hpa-demo metric <unknown> — подождите прогрев metrics-server или проверьте requests.cpu"
 fi
 
+for f in keda-scaledobject.yaml karpenter-nodepool.yaml dra-resourceclaim.yaml; do
+  if [[ ! -f "$ROOT_DIR/modules/11-autoscaling/manifests/$f" ]]; then
+    fail "Manifest $f is missing"
+  fi
+done
+ok "Advanced scaling manifests (KEDA, Karpenter, DRA) are present"
+
 ok "module 11 verified"
