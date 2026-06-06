@@ -35,102 +35,66 @@ progressive delivery, backup/DR. Это и есть план ниже.
 
 ## Уровень 2 — Reliability & Scaling
 
-| # | Новый модуль | Ключевое | Среда |
-|---|--------------|----------|-------|
-| 11 | **autoscaling** ✅ ГОТОВ `c9f0c86` | HPA/VPA/Cluster Autoscaler — прогнан вживую (scale-up 1→5 под нагрузкой) | ✅ |
-| 12 | **resource-management** ✅ ГОТОВ `c7e1338` | QoS-классы + PriorityClass/preemption + limits enforcement (CPU throttle vs Memory OOM) — прогнан на Kubespray (preemption вживую: high-prio вытеснил low-prio, событие Preempted) | любой ✅ |
-| 13 | **resilience** ✅ ГОТОВ `ef90589` | topologySpread + antiAffinity + PDB + cordon/drain — прогнан на Kubespray (drain показал защиту PDB вживую) | ✅ |
+| # | Статус | Новый модуль | Ключевое |
+|---|:---:|--------------|----------|
+| 11 | [x] | **autoscaling** `c9f0c86` | HPA/VPA/Cluster Autoscaler — прогнан вживую |
+| 12 | [x] | **resource-management** `c7e1338` | QoS-классы + PriorityClass/preemption + limits enforcement |
+| 13 | [x] | **resilience** `ef90589` | topologySpread + antiAffinity + PDB + cordon/drain |
 
 ## Уровень 3 — Security hardening
 
-| # | Новый модуль | Ключевое | Среда |
-|---|--------------|----------|-------|
-| 14 | **pod-security-admission** ✅ ГОТОВ `5aea74d` | PSA restricted + ValidatingAdmissionPolicy (CEL) — прогнан на Kubespray (bad-pod и `:latest` отклонены) | ✅ |
-| 15 | **network-policy-enforced** ✅ ГОТОВ `350f848` | микросегментация web→api→db — прогнан на Kubespray+Calico (web→db заблокировано) | Calico ✅ |
-| 16 | **secrets-management** ✅ ГОТОВ `de6069a` | encryption-at-rest (etcd plaintext по SSH) + Sealed Secrets + External Secrets Operator + Vault DYNAMIC secrets через VSO — всё прогнано на Kubespray (динамические postgres-креды генерятся on-demand) | ✅ |
-
-> ⚠️ Модуль 15 не отработает на текущем GKE (без Dataplane V2). Варианты: пересоздать
-> кластер с `datapath_provider=ADVANCED_DATAPATH`, либо kind + Calico.
+| # | Статус | Новый модуль | Ключевое |
+|---|:---:|--------------|----------|
+| 14 | [x] | **pod-security-admission** `5aea74d` | PSA restricted + ValidatingAdmissionPolicy (CEL) |
+| 15 | [x] | **network-policy-enforced** `350f848` | микросегментация web→api→db — прогнан на Kubespray+Calico |
+| 16 | [x] | **secrets-management** `de6069a` | encryption-at-rest + Sealed Secrets + ESO + Vault DYNAMIC secrets |
 
 ## Уровень 4 — Observability stack (реальный)
 
-| # | Новый модуль | Ключевое | Среда |
-|---|--------------|----------|-------|
-| 17 | **metrics-alerting** ✅ ГОТОВ `46be54c` | Prometheus+Grafana+Alertmanager+exporters, ServiceMonitor, PromQL — прогнан на Kubespray (kube-prometheus-stack, target up=1) | ✅ |
-| 18 | **logs-tracing** | Loki/EFK, OpenTelemetry, Jaeger, distributed tracing | GKE ✅ |
+| # | Статус | Новый модуль | Ключевое |
+|---|:---:|--------------|----------|
+| 17 | [x] | **metrics-alerting** `46be54c` | Prometheus+Grafana+Alertmanager, ServiceMonitor, PromQL |
+| 18 | [x] | **logs-tracing** `29bf5f1` | Loki/EFK, Promtail (без трассировки, требует OTel) |
 
 ## Уровень 5 — Extensibility & advanced workloads
 
-| # | Новый модуль | Ключевое | Среда |
-|---|--------------|----------|-------|
-| 19 | **crd-operators** ✅ ГОТОВ `2b2c4f0` | CRD + схема/валидация + operator pattern (prometheus-operator) — прогнан на Kubespray | ✅ |
-| 20 | **batch-workflows** ✅ ГОТОВ | Job parallelism/completions, **Indexed** Jobs, **podFailurePolicy**, activeDeadline/ttl/suspend, CronJob (concurrencyPolicy/timeZone/history) — прогнан на Kubespray 1.36 (parallel 6/6, indexed 0-3, FailJob на exit42, CronJob тикает). Argo Workflows — на будущее (надстройка) | любой ✅ |
-| 21 | **stateful-systems** | DB-операторы (CloudNativePG/Redis), backup, StatefulSet advanced | GKE + storage |
+| # | Статус | Новый модуль | Ключевое |
+|---|:---:|--------------|----------|
+| 19 | [x] | **crd-operators** `2b2c4f0` | CRD + схема/валидация + operator pattern (prometheus-operator) |
+| 20 | [x] | **batch-workflows** | Job parallelism/completions, Indexed Jobs, CronJob |
+| 21 | [x] | **stateful-systems** `29bf5f1` | DB-операторы (CloudNativePG), failover |
 
 ## Уровень 6 — Networking advanced
 
-| # | Новый модуль | Ключевое | Среда |
-|---|--------------|----------|-------|
-| 22 | **ingress-tls** ✅ ГОТОВ `938b97e` | L7 host/path routing + TLS termination (ручной + cert-manager) — прогнан на Kubespray (ingress-nginx, HTTPS с self-signed и cert-manager-cert); Gateway API — на будущее | ingress-controller ✅ |
-| 23 | **service-mesh** | Istio/Linkerd: mTLS, traffic shifting, retries, mesh-observability | GKE (вернуть ноды) |
+| # | Статус | Новый модуль | Ключевое |
+|---|:---:|--------------|----------|
+| 22 | [x] | **ingress-tls** `938b97e` | L7 routing + TLS termination (ingress-nginx + cert-manager) |
+| 23 | [ ] | <span style="color:red">**gateway-api / mesh**</span> | Gateway API (замена Ingress), Istio/Linkerd, mTLS, traffic shifting |
 
 ## Уровень 7 — Delivery & GitOps advanced
 
-| # | Новый модуль | Ключевое | Среда |
-|---|--------------|----------|-------|
-| 24 | **progressive-delivery** | Argo Rollouts, canary/blue-green, Flagger, analysis | GKE + Argo |
-| 25 | **gitops-at-scale** ✅ ГОТОВ | Kustomize base+overlays (dev/staging/prod), **ApplicationSet** (list-генератор→3 Application), AppProject-границы, prune/selfHeal, обзор git/cluster/matrix-генераторов — прогнан на Kubespray (3 Application Synced/Healthy, реплики 1/2/3, selfHeal вернул prod 7→3, broken path→solution). Sync-waves — в м09 | любой ✅ |
+| # | Статус | Новый модуль | Ключевое |
+|---|:---:|--------------|----------|
+| 24 | [x] | **progressive-delivery** | Argo Rollouts, canary/blue-green |
+| 25 | [x] | **gitops-at-scale** | Kustomize, ApplicationSet, AppProject-границы, prune/selfHeal |
 
 ## Уровень 8 — Cluster operations & DR
 
-| # | Новый модуль | Ключевое | Среда |
-|---|--------------|----------|-------|
-| 26 | **backup-dr** | Velero (backup/restore), etcd snapshot/restore | self-managed для etcd |
-| 27 | **upgrades-lifecycle** | cluster/node upgrades, surge, Cluster API | kubeadm/GKE |
-| 28 | **cost-multitenancy** | FinOps, spot/preemptible, hierarchical namespaces, vcluster | GKE ✅ |
+| # | Статус | Новый модуль | Ключевое |
+|---|:---:|--------------|----------|
+| 26 | [ ] | <span style="color:red">**backup-dr**</span> | Velero (backup/restore), etcd snapshot/restore |
+| 27 | [ ] | <span style="color:red">**upgrades-lifecycle**</span> | cluster/node upgrades, surge, Cluster API |
+| 28 | [ ] | <span style="color:red">**cost-multitenancy**</span> | FinOps, spot/preemptible, hierarchical namespaces, vcluster |
 
 ---
 
-## Capstone-проекты (расширить существующие + добавить)
+## Capstone-проекты
 
-- **D — production-app**: микросервис + HPA + Ingress/TLS + Prometheus + Argo CD
-  (собирает уровни 2-4, 7 в одном сквозном проекте).
-- **E — secure-platform** ✅ ГОТОВ (`projects/project-e-secure-platform/`):
-  multi-tenant платформа (tenant-a/b) с PSA restricted + default-deny
-  NetworkPolicy + RBAC own-ns + ResourceQuota/LimitRange + VAP policy-as-code;
-  `audit/isolation-audit.sh` (6 контролей). Прогнано на Kubespray+Calico: 5
-  доказательств изоляции (PSA-deny / VAP scoped tenant-vs-lab / RBAC / quota /
-  cross-tenant netpol-блок) — все вживую.
-- **F — incident-response** ✅ ГОТОВ (`projects/project-c-broken-cluster-lab/`):
-  расширен с 4 до 8 сценариев — добавлены DNS-failure (targeted netpol egress-deny),
-  scheduling-Pending (requests.cpu=8), GitOps sync-fail (Argo bad path), cert-expiry
-  (openssl -not_after, detection). Центр — `triage/incident-triage.sh` (классифицирует
-  под по симптому → причина → первая команда). Прогнано на Kubespray: все 4 новых
-  сценария + триаж + решения вживую.
-
----
-
-## Приоритизация (с чего начинать)
-
-**Phase 1 — ✅ ЗАВЕРШЕНА (все 4 прогнаны вживую на Kubespray+Calico):**
-- ✅ 11 autoscaling (HPA scale-up 1→5) `c9f0c86`
-- ✅ 14 pod-security-admission (PSA + VAP) `5aea74d`
-- ✅ 17 metrics-alerting (Prometheus/Grafana) `46be54c`
-- ✅ 19 crd-operators (CRD + operator pattern) `2b2c4f0`
-- (бонус из Phase 3) ✅ 15 network-policy-enforced (микросегментация на Calico) `350f848`
-
-**Phase 2:** 12, 13, 16, 18, 20, 25 (углубление reliability/observability/delivery).
-
-**Phase 3:** 15 (нужен Calico/Dataplane V2), 21, 22, 23, 24, 26, 27, 28 + capstone D/E/F.
-
----
-
-## Заметки по среде
-
-- Текущий GKE (`cluster-gke/`) сейчас «припаркован» (0 нод). Для модулей 11/17/23
-  вернуть ноды: `terraform apply` (node_count=2).
-- Для NetworkPolicy enforcement (15) и части mesh-сценариев — отдельный кластер
-  с advanced datapath или локальный kind + Calico.
-- Формат новых модулей — тот же скелет, что у 01-10 (теория→команды с «зачем»+
-  выводом→контрольные→troubleshooting→проверка→карта→вопросы→шпаргалка→уборка),
-  с `verify/verify.sh` и прогоном на реальном кластере.
+| Проект | Статус | Название | Содержание |
+|--------|:---:|----------|------------|
+| Project A | [x] | **platform-namespace** | Базовый namespace (Quota, LimitRange, Role) |
+| Project B | [x] | **stateful-service** | StatefulSet, headless svc |
+| Project C | [x] | **broken-cluster-lab** | (Алиас для Project F) |
+| Project D | [x] | **production-readiness** | Аудит 11 критериев (PDB, probes, limits, replicas) |
+| Project E | [x] | **secure-platform** | Multi-tenant изоляция (5 контролей: PSA, VAP, RBAC, Quota, NetPol) |
+| Project F | [x] | **incident-response** | 8 инцидентов + авто-триаж `incident-triage.sh` |
