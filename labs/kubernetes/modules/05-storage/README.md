@@ -1,5 +1,50 @@
 # Лабораторная работа 05: Хранилище в Kubernetes (volumes, PV/PVC, StatefulSet)
 
+## Оглавление
+<!-- TOC -->
+- [Предварительные требования](#-)
+- [Стартовая проверка](#-)
+- [Часть 1: Эфемерные тома (emptyDir) и привязка к ноде (hostPath)](#-1---emptydir-----hostpath)
+  - [Теория для изучения перед частью](#----)
+  - [1.1 emptyDir как общий том между контейнерами](#11-emptydir-----)
+  - [1.2 Жизненный цикл emptyDir: рестарт контейнера vs пересоздание Pod](#12---emptydir---vs--pod)
+  - [1.3 hostPath: монтирование каталога ноды](#13-hostpath---)
+  - [1.4 Почему hostPath опасен в production](#14--hostpath---production)
+- [Часть 2: PersistentVolume, PersistentVolumeClaim и StorageClass](#-2-persistentvolume-persistentvolumeclaim--storageclass)
+  - [Теория для изучения перед частью](#----)
+  - [2.1 Динамическое provisioning: PVC создаёт PV сам](#21--provisioning-pvc--pv-)
+  - [2.2 PVC + Pod: привязка и accessModes](#22-pvc--pod---accessmodes)
+  - [2.3 volumeBindingMode: Immediate vs WaitForFirstConsumer](#23-volumebindingmode-immediate-vs-waitforfirstconsumer)
+  - [2.4 reclaimPolicy: что станет с PV после удаления PVC](#24-reclaimpolicy----pv---pvc)
+  - [2.5 Статическое provisioning: PV руками](#25--provisioning-pv-)
+  - [2.6 Расширение тома (online resize)](#26---online-resize)
+- [Часть 3: StatefulSet + volumeClaimTemplates + headless Service](#-3-statefulset--volumeclaimtemplates--headless-service)
+  - [Теория для изучения перед частью](#----)
+  - [3.1 Headless Service и стабильные DNS-имена](#31-headless-service---dns-)
+  - [3.2 StatefulSet с volumeClaimTemplates](#32-statefulset--volumeclaimtemplates)
+  - [3.3 Сохранность данных при пересоздании Pod](#33-----pod)
+  - [3.4 Масштабирование и судьба PVC](#34----pvc)
+- [Часть 4: Troubleshooting — боевые инциденты](#-4-troubleshooting---)
+  - [Теория для изучения перед частью](#----)
+  - [Инцидент 1: PVC висит в Pending — несуществующий StorageClass](#-1-pvc---pending---storageclass)
+  - [Инцидент 2: PVC Pending, хотя StorageClass есть (WaitForFirstConsumer)](#-2-pvc-pending--storageclass--waitforfirstconsumer)
+  - [Инцидент 3: Pod не стартует — Multi-Attach error (RWO на двух нодах)](#-3-pod----multi-attach-error-rwo---)
+  - [Бонус: общая диагностика storage](#---storage)
+- [Проверка модуля](#-)
+- [Финальная карта ресурсов модуля](#---)
+- [Теоретические вопросы (итоговые)](#--)
+  - [Блок 1: Тома и жизненный цикл данных](#-1-----)
+  - [Блок 2: PV/PVC/StorageClass](#-2-pvpvcstorageclass)
+  - [Блок 3: accessModes и многонодовость](#-3-accessmodes--)
+  - [Блок 4: StatefulSet](#-4-statefulset)
+  - [Блок 5: Troubleshooting](#-5-troubleshooting)
+- [Чему вы научились](#--)
+- [Уборка](#)
+- [Практические задания (отработка)](#--)
+- [Шпаргалка](#)
+<!-- /TOC -->
+
+
 > ⏱ время ~25 мин · сложность 2/5 · пререквизиты: модуль 03
 
 ---

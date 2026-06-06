@@ -1,5 +1,43 @@
 # Лабораторная работа 06: Планирование подов (nodeSelector, taints, affinity, quotas)
 
+## Оглавление
+<!-- TOC -->
+- [Предварительные требования](#-)
+  - [Подготовка нод (обязательно для verify!)](#----verify)
+- [Стартовая проверка](#-)
+- [Часть 1: nodeSelector и labels нод](#-1-nodeselector--labels-)
+  - [Теория для изучения перед частью](#----)
+  - [1.1 Label ноды + nodeSelector](#11-label---nodeselector)
+- [Часть 2: Taints и Tolerations](#-2-taints--tolerations)
+  - [Теория для изучения перед частью](#----)
+  - [2.1 Taint отталкивает обычные поды](#21-taint---)
+  - [2.2 Toleration разрешает посадку](#22-toleration--)
+- [Часть 3: Affinity и Anti-affinity](#-3-affinity--anti-affinity)
+  - [Теория для изучения перед частью](#----)
+  - [3.1 preferred nodeAffinity (мягкое правило)](#31-preferred-nodeaffinity--)
+  - [3.2 podAntiAffinity — разнести реплики по нодам](#32-podantiaffinity-----)
+- [Часть 4: ResourceQuota и LimitRange](#-4-resourcequota--limitrange)
+  - [Теория для изучения перед частью](#----)
+  - [4.1 ResourceQuota](#41-resourcequota)
+  - [4.2 LimitRange (дефолты для контейнеров)](#42-limitrange---)
+- [Часть 5: Troubleshooting — боевые инциденты](#-5-troubleshooting---)
+  - [Инцидент 1: Pod вечно `Pending` — нет подходящей ноды](#-1-pod--pending----)
+  - [Инцидент 2: `Pending` из-за нехватки ресурсов](#-2-pending----)
+  - [Инцидент 3: ResourceQuota отклоняет Pod](#-3-resourcequota--pod)
+- [Проверка модуля](#-)
+- [Финальная карта ресурсов модуля](#---)
+- [Теоретические вопросы (итоговые)](#--)
+  - [Блок 1: Scheduler и nodeSelector](#-1-scheduler--nodeselector)
+  - [Блок 2: Taints/Tolerations](#-2-taintstolerations)
+  - [Блок 3: Affinity](#-3-affinity)
+  - [Блок 4: Quotas](#-4-quotas)
+- [Практические задания (отработка)](#--)
+- [Шпаргалка](#)
+- [Чему вы научились](#--)
+- [Уборка](#)
+<!-- /TOC -->
+
+
 > ⏱ время ~20 мин · сложность 2/5 · пререквизиты: модуль 03
 
 Цель: научиться управлять тем, на какую ноду попадёт Pod и сколько ресурсов он

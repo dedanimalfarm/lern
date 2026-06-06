@@ -1,5 +1,46 @@
 # Лабораторая работа 03: Workload-контроллеры (Deployment, Job/CronJob, DaemonSet, StatefulSet)
 
+## Оглавление
+<!-- TOC -->
+- [Предварительные требования](#-)
+- [Стартовая проверка](#-)
+- [Часть 1: Deployment — rollout и rollback](#-1-deployment--rollout--rollback)
+  - [Теория для изучения перед частью](#----)
+  - [1.1 Deployment v1](#11-deployment-v1)
+  - [1.2 Rolling update на v2](#12-rolling-update--v2)
+  - [1.3 История и rollback](#13---rollback)
+  - [1.4 Стратегии обновления](#14--)
+- [Часть 2: Job и CronJob](#-2-job--cronjob)
+  - [Теория для изучения перед частью](#----)
+  - [2.1 Job](#21-job)
+  - [2.2 CronJob](#22-cronjob)
+- [Часть 3: DaemonSet](#-3-daemonset)
+  - [Теория для изучения перед частью](#----)
+  - [3.1 DaemonSet по одному на ноду](#31-daemonset----)
+- [Часть 4: StatefulSet — базовая идентичность](#-4-statefulset---)
+  - [Теория для изучения перед частью](#----)
+  - [4.1 Headless Service + StatefulSet](#41-headless-service--statefulset)
+  - [4.2 PVC на каждую реплику](#42-pvc---)
+- [Часть 5: Troubleshooting — боевые инциденты](#-5-troubleshooting---)
+  - [Теория для изучения перед частью](#----)
+  - [Инцидент 1: rollout завис — ImagePullBackOff](#-1-rollout---imagepullbackoff)
+  - [Инцидент 2: Job падает в backoff](#-2-job---backoff)
+  - [Бонус: PodDisruptionBudget и drain](#-poddisruptionbudget--drain)
+- [Проверка модуля](#-)
+- [Финальная карта ресурсов модуля](#---)
+  - [Когда какой контроллер](#--)
+- [Теоретические вопросы (итоговые)](#--)
+  - [Блок 1: Deployment](#-1-deployment)
+  - [Блок 2: Job / CronJob](#-2-job--cronjob)
+  - [Блок 3: DaemonSet](#-3-daemonset)
+  - [Блок 4: StatefulSet](#-4-statefulset)
+- [Практические задания (отработка)](#--)
+- [Шпаргалка](#)
+- [Чему вы научились](#--)
+- [Уборка](#)
+<!-- /TOC -->
+
+
 > ⏱ время ~25 мин · сложность 2/5 · пререквизиты: модуль 02
 
 Цель: научиться выбирать правильный контроллер под задачу и управлять им —

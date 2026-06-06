@@ -1,5 +1,40 @@
 # Лабораторная работа 07: Конфигурация и безопасность (ConfigMap, Secret, RBAC, securityContext)
 
+## Оглавление
+<!-- TOC -->
+- [Предварительные требования](#-)
+- [Стартовая проверка](#-)
+- [Часть 1: ConfigMap](#-1-configmap)
+  - [Теория для изучения перед частью](#----)
+  - [1.1 ConfigMap как env (envFrom)](#11-configmap--env-envfrom)
+- [Часть 2: Secret](#-2-secret)
+  - [Теория для изучения перед частью](#----)
+  - [2.1 Secret как env](#21-secret--env)
+  - [2.2 base64 ≠ безопасность](#22-base64--)
+- [Часть 3: ServiceAccount и RBAC](#-3-serviceaccount--rbac)
+  - [Теория для изучения перед частью](#----)
+  - [3.1 SA + Role + RoleBinding](#31-sa--role--rolebinding)
+  - [3.2 Полный список прав SA](#32----sa)
+- [Часть 4: securityContext и ужесточение запуска](#-4-securitycontext---)
+  - [Теория для изучения перед частью](#----)
+  - [4.1 securityContext у config-demo](#41-securitycontext--config-demo)
+- [Часть 5: Troubleshooting — боевые инциденты](#-5-troubleshooting---)
+  - [Инцидент 1: под не стартует — `runAsNonRoot` против root-образа](#-1-----runasnonroot--root-)
+  - [Инцидент 2: приложение получает `403 Forbidden` от API](#-2---403-forbidden--api)
+  - [Инцидент 3: `readOnlyRootFilesystem` ломает приложение](#-3-readonlyrootfilesystem--)
+- [Проверка модуля](#-)
+- [Финальная карта ресурсов модуля](#---)
+- [Теоретические вопросы (итоговые)](#--)
+  - [Блок 1: ConfigMap / Secret](#-1-configmap--secret)
+  - [Блок 2: RBAC](#-2-rbac)
+  - [Блок 3: securityContext](#-3-securitycontext)
+- [Практические задания (отработка)](#--)
+- [Шпаргалка](#)
+- [Чему вы научились](#--)
+- [Уборка](#)
+<!-- /TOC -->
+
+
 > ⏱ время ~20 мин · сложность 2/5 · пререквизиты: модуль 03
 
 Цель: научиться отделять конфигурацию от образа (`ConfigMap`/`Secret`),

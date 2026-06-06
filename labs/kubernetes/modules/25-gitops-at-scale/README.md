@@ -1,5 +1,37 @@
 # Лабораторная работа 25: GitOps на масштабе (Kustomize overlays, ApplicationSet, multi-env)
 
+## Оглавление
+<!-- TOC -->
+- [Предварительные требования](#-)
+- [Стартовая проверка](#-)
+- [Часть 1: Kustomize — base и overlays](#-1-kustomize--base--overlays)
+  - [Теория для изучения перед частью](#----)
+  - [1.1 Рендер overlays](#11--overlays)
+- [Часть 2: ApplicationSet — один объект, много Application](#-2-applicationset-----application)
+  - [Теория для изучения перед частью](#----)
+  - [2.1 Применить ApplicationSet](#21--applicationset)
+- [Часть 3: prune и selfHeal на масштабе](#-3-prune--selfheal--)
+  - [Теория для изучения перед частью](#----)
+  - [3.1 selfHeal: ручной дрейф откатывается](#31-selfheal---)
+- [Часть 4: Другие паттерны масштабирования (обзор)](#-4----)
+  - [Теория](#)
+- [Часть 5: Troubleshooting — боевые инциденты](#-5-troubleshooting---)
+  - [Теория: диагностика ApplicationSet/Application](#--applicationsetapplication)
+  - [Инцидент 1: ApplicationSet породил битый Application (`path does not exist`)](#-1-applicationset---application-path-does-not-exist)
+  - [Бонус: быстрая диагностика](#--)
+- [Проверка модуля](#-)
+- [Финальная карта ресурсов модуля](#---)
+- [Теоретические вопросы (итоговые)](#--)
+  - [Блок 1: Kustomize](#-1-kustomize)
+  - [Блок 2: ApplicationSet](#-2-applicationset)
+  - [Блок 3: GitOps на масштабе](#-3-gitops--)
+- [Практические задания (отработка)](#--)
+- [Шпаргалка](#)
+- [Чему вы научились](#--)
+- [Уборка](#)
+<!-- /TOC -->
+
+
 > ⏱ время ~30 мин · сложность 4/5 · пререквизиты: Трек 1 (Core)
 
 Цель: научиться разворачивать ОДНО приложение в МНОГО окружений без копипасты —

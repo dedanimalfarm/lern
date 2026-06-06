@@ -1,5 +1,45 @@
 # Лабораторная работа 04: Сеть в Kubernetes (Service, DNS, Ingress, NetworkPolicy)
 
+## Оглавление
+<!-- TOC -->
+- [Предварительные требования](#-)
+- [Стартовая проверка](#-)
+- [Часть 1: Service и Endpoints](#-1-service--endpoints)
+  - [Теория для изучения перед частью](#----)
+  - [1.1 ClusterIP и Endpoints](#11-clusterip--endpoints)
+  - [1.2 Как kube-proxy реализует ClusterIP](#12--kube-proxy--clusterip)
+  - [1.3 Типы Service](#13--service)
+- [Часть 2: DNS в кластере](#-2-dns--)
+  - [Теория для изучения перед частью](#----)
+  - [2.1 Резолв сервиса](#21--)
+  - [2.2 Search domains и короткие имена](#22-search-domains---)
+- [Часть 3: Внешний доступ — NodePort, LoadBalancer, Ingress](#-3----nodeport-loadbalancer-ingress)
+  - [Теория для изучения перед частью](#----)
+  - [3.1 NodePort](#31-nodeport)
+  - [3.2 LoadBalancer (реальный внешний IP)](#32-loadbalancer---ip)
+  - [3.3 Ingress](#33-ingress)
+- [Часть 4: NetworkPolicy](#-4-networkpolicy)
+  - [Теория для изучения перед частью](#----)
+  - [4.1 default-deny и поэтапные allow](#41-default-deny---allow)
+  - [4.2 Проверка эффекта (если enforcement есть)](#42----enforcement-)
+- [Часть 5: Troubleshooting — боевые инциденты](#-5-troubleshooting---)
+  - [Инцидент 1: Service есть, поды Running, но трафик не идёт (selector mismatch)](#-1-service---running-----selector-mismatch)
+  - [Инцидент 2: после default-deny всё «отвалилось»](#-2--default-deny--)
+  - [Бонус: диагностика цепочки Ingress → Service → Endpoints → Pod](#---ingress--service--endpoints--pod)
+- [Проверка модуля](#-)
+- [Финальная карта ресурсов модуля](#---)
+- [Теоретические вопросы (итоговые)](#--)
+  - [Блок 1: Service и kube-proxy](#-1-service--kube-proxy)
+  - [Блок 2: DNS](#-2-dns)
+  - [Блок 3: Внешний доступ](#-3--)
+  - [Блок 4: NetworkPolicy](#-4-networkpolicy)
+- [Практические задания (отработка)](#--)
+- [Шпаргалка](#)
+- [Чему вы научились](#--)
+- [Уборка](#)
+<!-- /TOC -->
+
+
 > ⏱ время ~30 мин · сложность 3/5 · пререквизиты: модуль 03
 
 Цель: разобраться, как трафик ходит внутри кластера и попадает в него снаружи —
