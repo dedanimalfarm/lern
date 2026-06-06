@@ -279,18 +279,18 @@ kubectl -n monitoring get pods | grep operator
 # Prometheus. Это reconcile в действии (вы это видели в модуле 17).
 ```
 
-### 3.2 Свой контроллер для WebApp (reconcile вживую)
+### 3.2 Свой контроллер для WebApp (на базе Kopf)
 
 CRD `WebApp` сам по себе ничего не разворачивает. Сделаем его «живым»: учебный
-контроллер `controller/app-controller.sh` (reconcile-петля на `kubectl`+`jq`, без
-kopf/controller-runtime) для каждого `WebApp X` создаёт `Deployment X-deploy`
-(образ/реплики из `spec`) + `Service X-svc`, пишет `status.availableReplicas`, а на
-созданные объекты вешает `ownerReferences` → их КАСКАДНО снесёт GC при удалении CR.
+контроллер `controller/operator.py` (написанный на мощном фреймворке Kopf) для каждого `WebApp X` создаёт `Deployment X-deploy`
+(образ/реплики из `spec`) + `Service X-svc`, пишет статус и добавляет
+`ownerReferences` → их КАСКАДНО снесёт GC при удалении CR.
 
 ```bash
 # 1) Запустить контроллер на control-машине (использует текущий KUBECONFIG)
-bash controller/app-controller.sh &          # Ctrl+C / kill — остановить
-#    [webapp-controller] reconciled my-webapp: my-webapp-deploy(replicas=3,...) + my-webapp-svc
+pip install -r controller/requirements.txt
+kopf run controller/operator.py -A &         # Ctrl+C / kill — остановить
+#    [webapp-operator] reconciled my-webapp: my-webapp-deploy(replicas=3,...) + my-webapp-svc
 
 # 2) Создать новый CR — контроллер сам развернёт Deployment+Service
 kubectl apply -f - <<'EOF'
@@ -445,7 +445,7 @@ bash verify/verify.sh
 
 1. Создайте CR с нарушением схемы (replicas=99 / без image) и прочитайте отказ admission.
 2. Докажите server-side pruning: добавьте в CR поле вне схемы и убедитесь, что оно вырезано.
-3. Запустите учебный контроллер (`controller/app-controller.sh`) и проверьте reconcile: создайте WebApp → появились Deployment+Service.
+3. Запустите учебный контроллер (`kopf run controller/operator.py -A`) и проверьте reconcile: создайте WebApp → появились Deployment+Service.
 4. Обновите `spec.replicas` у WebApp и убедитесь, что контроллер масштабировал Deployment.
 5. Удалите WebApp и подтвердите каскадное удаление Deployment/Service через `ownerReferences`.
 

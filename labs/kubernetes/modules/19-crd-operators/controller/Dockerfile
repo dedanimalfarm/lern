@@ -9,8 +9,8 @@ FROM python:3.12-slim
 RUN useradd -r -u 10001 -m -d /home/operator operator
 WORKDIR /app
 COPY --from=builder /root/.local /home/operator/.local
-COPY webapp_controller.py main.py ./
+COPY operator.py ./
 ENV PATH=/home/operator/.local/bin:$PATH \
     PYTHONUNBUFFERED=1
 USER 10001
-ENTRYPOINT ["python", "/app/main.py"]
+ENTRYPOINT ["kopf", "run", "/app/operator.py"]

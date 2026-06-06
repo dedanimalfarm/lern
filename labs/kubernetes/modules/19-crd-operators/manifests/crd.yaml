@@ -38,6 +38,16 @@ spec:
             properties:
               availableReplicas:
                 type: integer
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type: { type: string }
+                    status: { type: string }
+                    reason: { type: string }
+                    message: { type: string }
+                    lastTransitionTime: { type: string, format: date-time }
     additionalPrinterColumns:                  # колонки в `kubectl get webapp`
     - { name: Image, type: string, jsonPath: .spec.image }
     - { name: Replicas, type: integer, jsonPath: .spec.replicas }
