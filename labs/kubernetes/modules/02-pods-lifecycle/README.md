@@ -23,7 +23,9 @@
   - [Теория для изучения перед частью](#----)
   - [4.1 QoS-класс пода](#41-qos--)
   - [4.2 Воспроизведение OOMKilled](#42--oomkilled)
-- [Часть 5: Troubleshooting — боевые инциденты](#-5-troubleshooting---)
+- [Часть 5: Нативные Sidecar-контейнеры (1.28+)](#-5---128)
+  - [5.1 Pod с нативным sidecar-контейнером](#51-pod--sidecar-)
+- [Часть 6: Troubleshooting — боевые инциденты](#-6-troubleshooting---)
   - [Теория для изучения перед частью](#----)
   - [Инцидент 1: Pod `Running`, но `0/1` — readiness бьётся в несуществующий путь](#-1-pod-running--01--readiness----)
   - [Инцидент 2: `CrashLoopBackOff` из-за слишком строгой liveness](#-2-crashloopbackoff-----liveness)
@@ -606,7 +608,44 @@ kubectl -n lab delete pod oom-demo --ignore-not-found
 
 ---
 
-## Часть 5: Troubleshooting — боевые инциденты
+## Часть 5: Нативные Sidecar-контейнеры (1.28+)
+
+В Kubernetes 1.28+ появилась нативная поддержка sidecar-контейнеров. Они объявляются в секции `initContainers` с параметром `restartPolicy: Always`.
+
+**Цель:** создать Pod, где sidecar стартует перед основным приложением и завершается после него, не блокируя завершение Job или Pod'а с `restartPolicy: Never`.
+
+**Ресурс:** `manifests/sidecar/pod.yaml` — Pod `sidecar-demo`.
+
+### 5.1 Pod с нативным sidecar-контейнером
+
+Применим манифест, в котором sidecar имитирует прокси (Vault Agent), а основной контейнер — само приложение:
+
+```bash
+kubectl -n lab apply -f manifests/sidecar/pod.yaml
+```
+
+Понаблюдаем за запуском:
+```bash
+kubectl -n lab get pod sidecar-demo -w
+```
+Вы увидите, что статус `Init` быстро сменяется на `Running`, хотя sidecar (Vault Agent) продолжает работать! Обычный `initContainer` заблокировал бы старт основного приложения.
+
+Посмотрим логи sidecar'а:
+```bash
+kubectl -n lab logs sidecar-demo -c vault-agent
+# starting vault agent proxy
+```
+
+Когда основной контейнер завершит свою работу (через 10 секунд), Pod перейдет в статус `Completed`. Нативный sidecar будет автоматически остановлен Kubernetes'ом, так как основные контейнеры завершились. В старых версиях k8s sidecar-контейнер продолжал бы работать вечно, не давая поду завершиться.
+
+Удалим под:
+```bash
+kubectl -n lab delete pod sidecar-demo
+```
+
+---
+
+## Часть 6: Troubleshooting — боевые инциденты
 
 ### Теория для изучения перед частью
 
@@ -809,6 +848,7 @@ endpoints in ns/lab`.
 | Ресурс | Тип | Namespace | Что демонстрирует |
 |--------|-----|-----------|-------------------|
 | `init-wait-dns` | Pod (init + app) | `lab` | initContainer, порядок запуска, обмен через emptyDir |
+| `sidecar-demo` | Pod (sidecar + app) | `lab` | Нативный sidecar (1.28+), который не блокирует старт и завершение |
 | `probe-demo` | Deployment | `lab` | readiness/liveness, влияние на Endpoints и рестарты |
 | `probe-demo` | Service (ClusterIP) | `lab` | выпадение Pod из Endpoints при NotReady |
 | `oom-demo` | Pod (эфемерный) | `lab` | OOMKilled, exitCode 137, QoS |

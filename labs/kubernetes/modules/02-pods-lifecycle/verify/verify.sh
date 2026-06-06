@@ -19,6 +19,15 @@ else
   warn "init-wait-dns pod is not applied"
 fi
 
+# Verify sidecar pod
+if kubectl -n lab get pod sidecar-demo >/dev/null 2>&1; then
+  RESTART_POLICY=$(kubectl -n lab get pod sidecar-demo -o jsonpath='{.spec.initContainers[0].restartPolicy}' 2>/dev/null || true)
+  [[ "$RESTART_POLICY" == "Always" ]] || warn "sidecar-demo does not have restartPolicy: Always on initContainer"
+  ok "sidecar-demo pod applied, sidecar restartPolicy: $RESTART_POLICY"
+else
+  warn "sidecar-demo pod is not applied"
+fi
+
 # Verify probe-demo has liveness and readiness probes configured
 PROBES=$(kubectl -n lab get deploy probe-demo -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.httpGet.path}' 2>/dev/null || true)
 [[ -n "$PROBES" ]] || warn "probe-demo missing livenessProbe"
