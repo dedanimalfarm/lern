@@ -10,4 +10,9 @@ require_resource lab sts redis
 require_resource lab svc redis-headless
 require_resource lab cronjob redis-backup
 
+# Run the audit script
+if [ -x "$(dirname "$0")/../audit/stateful-audit.sh" ]; then
+  "$(dirname "$0")/../audit/stateful-audit.sh" || fail "Audit script failed"
+fi
+
 ok "project-b verified"
