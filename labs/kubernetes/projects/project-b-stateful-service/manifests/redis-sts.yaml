@@ -1,3 +1,6 @@
+# Канонический Redis StatefulSet: 3 реплики, разнесены по нодам (podAntiAffinity),
+# probes, hardened securityContext (non-root, drop ALL, ROfs), persistent-том на
+# реплику (volumeClaimTemplates + local-path SC). Прод-ориентированный пример.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -5,7 +8,7 @@ metadata:
   namespace: lab
 spec:
   serviceName: redis-headless
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: redis
@@ -14,38 +17,54 @@ spec:
       labels:
         app: redis
     spec:
+      # Pod-уровень: запуск от пользователя redis (uid 999 в redis:alpine), не root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      # Разнести реметики по разным нодам — переживаем отказ ноды (модуль 13).
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - { key: app, operator: In, values: [redis] }
+              topologyKey: kubernetes.io/hostname
       containers:
       - name: redis
         image: redis:7.2-alpine
+        command: ["redis-server", "--appendonly", "yes"]
         ports:
-        - containerPort: 6379
+        - { containerPort: 6379, name: redis }
         readinessProbe:
-          tcpSocket:
-            port: 6379
+          tcpSocket: { port: 6379 }
           initialDelaySeconds: 5
           periodSeconds: 10
         livenessProbe:
-          tcpSocket:
-            port: 6379
+          tcpSocket: { port: 6379 }
           initialDelaySeconds: 15
           periodSeconds: 20
         volumeMounts:
-        - name: data
-          mountPath: /data
+        - { name: data, mountPath: /data }
         resources:
-          requests:
-            cpu: 50m
-            memory: 128Mi
-          limits:
-            cpu: 300m
-            memory: 512Mi
+          requests: { cpu: 50m, memory: 128Mi }
+          limits:   { cpu: 300m, memory: 512Mi }
+        # Контейнер-уровень hardening: проходит restricted-подобный профиль.
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true       # redis пишет только в /data (PVC)
+          capabilities:
+            drop: ["ALL"]
   volumeClaimTemplates:
   - metadata:
       name: data
     spec:
       accessModes: ["ReadWriteOnce"]
+      storageClassName: "local-path"
       resources:
         requests:
           storage: 1Gi

@@ -1,16 +1,40 @@
+# Канонический backup Redis: BGSAVE (асинхронный, НЕ блокирует Redis в отличие от
+# синхронного SAVE) → ждём завершения по LASTSAVE → копируем RDB в PERSISTENT том
+# (PVC redis-backup-pvc), а не в эфемерный /tmp (где бэкап пропал бы с подом).
+# Это и есть смысл «бэкапа»: данные переживают под/ноду.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-backup-pvc
+  namespace: lab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: "local-path"
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: redis-backup
   namespace: lab
 spec:
-  schedule: "0 */6 * * *"
-  concurrencyPolicy: Forbid
+  schedule: "0 */6 * * *"          # каждые 6 часов
+  concurrencyPolicy: Forbid        # не запускать новый бэкап поверх идущего
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
   jobTemplate:
     spec:
+      backoffLimit: 2
       template:
         spec:
           restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            fsGroup: 999
+            seccompProfile: { type: RuntimeDefault }
           containers:
           - name: backup
             image: redis:7.2-alpine
@@ -21,25 +45,28 @@ spec:
               set -e
               HOST="redis-0.redis-headless.lab.svc.cluster.local"
               echo "Triggering BGSAVE on $HOST..."
-              redis-cli -h "$HOST" BGSAVE
-              # Подождать завершения BGSAVE (до 60 секунд)
               BEFORE=$(redis-cli -h "$HOST" LASTSAVE)
-              for i in $(seq 1 60); do
+              redis-cli -h "$HOST" BGSAVE
+              # дождаться завершения BGSAVE (LASTSAVE сменится), максимум 60с
+              for _ in $(seq 1 60); do
                 AFTER=$(redis-cli -h "$HOST" LASTSAVE)
-                if [ "$AFTER" != "$BEFORE" ]; then
-                  echo "BGSAVE completed at $AFTER"
-                  break
-                fi
+                [ "$AFTER" != "$BEFORE" ] && { echo "BGSAVE done at $AFTER"; break; }
                 sleep 1
               done
-              # Скопировать RDB-файл
+              # копия RDB в PERSISTENT том /backup (переживает под)
               TS=$(date +%Y%m%d-%H%M%S)
-              redis-cli -h "$HOST" --rdb "/tmp/redis-${TS}.rdb"
-              ls -lh /tmp/redis-*.rdb
+              redis-cli -h "$HOST" --rdb "/backup/redis-${TS}.rdb"
+              echo "Saved backups in /backup:"; ls -lh /backup/redis-*.rdb
+            volumeMounts:
+            - { name: backup, mountPath: /backup }
             resources:
-              requests:
-                cpu: 10m
-                memory: 32Mi
-              limits:
-                cpu: 100m
-                memory: 64Mi
+              requests: { cpu: 10m, memory: 32Mi }
+              limits:   { cpu: 100m, memory: 64Mi }
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true     # пишем только в /backup (PVC)
+              capabilities: { drop: ["ALL"] }
+          volumes:
+          - name: backup
+            persistentVolumeClaim:
+              claimName: redis-backup-pvc

@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: lab
+# Канонический набор Project B (без дублей). Фиксирует, какие манифесты применяются.
+resources:
+  - redis-svc.yaml          # headless Service redis-headless
+  - redis-sts.yaml          # StatefulSet redis (3 реплики, antiAffinity, hardened)
+  - pdb.yaml                # PodDisruptionBudget redis-pdb
+  - backup-cronjob.yaml     # PVC redis-backup-pvc + CronJob redis-backup (BGSAVE→/backup)
