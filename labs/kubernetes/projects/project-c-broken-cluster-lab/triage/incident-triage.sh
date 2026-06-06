@@ -83,5 +83,39 @@ if [[ "$phase" == "Running" && "$ready" == "true" ]]; then
   first "kubectl -n $NS get endpoints,netpol; kubectl -n $NS logs $POD --tail=30"; exit 0
 fi
 
+# 5) Терминальные фазы: под ЗАВЕРШИЛСЯ (restartPolicy: Never/OnFailure исчерпан).
+# Здесь смотрим state.terminated (текущий, НЕ lastState — под не рестартует).
+treason=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.containerStatuses[0].state.terminated.reason}' 2>/dev/null)
+texit=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}' 2>/dev/null)
+if [[ "$phase" == "Failed" || "$phase" == "Succeeded" ]]; then
+  if [[ "$phase" == "Succeeded" ]]; then
+    diag "под Succeeded (exit 0) — штатное завершение"
+    cause "норма для Job/одноразовой задачи; для сервиса — проверь, почему контейнер ВЫШЕЛ."
+    first "kubectl -n $NS logs $POD --tail=30"; exit 0
+  fi
+  # phase=Failed — разбираем по reason/exitCode терминированного контейнера.
+  case "$treason" in
+    OOMKilled)
+      diag "под Failed: OOMKilled (exit ${texit:-137})"
+      cause "контейнер превысил limits.memory и не рестартует (Never). Модуль 02/12."
+      first "kubectl -n $NS get pod $POD -o jsonpath='{.status.containerStatuses[0].state.terminated}'"; exit 0 ;;
+    Error|"")
+      diag "под Failed (Error, exit ${texit:-?})"
+      cause "контейнер завершился с ненулевым кодом и не рестартует (restartPolicy Never/исчерпан). Exit-код → каталог м02."
+      first "kubectl -n $NS logs $POD --tail=30"; exit 0 ;;
+    Evicted|*)
+      # Evicted — это статус Pod, не контейнера; ловим по pod.status.reason.
+      preason=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.reason}' 2>/dev/null)
+      if [[ "$preason" == "Evicted" ]]; then
+        diag "под Evicted — выселен по давлению ноды"
+        cause "node-pressure eviction (memory/disk). QoS-порядок: BestEffort первым. Модуль 08."
+        first "kubectl -n $NS describe pod $POD | grep -A2 -i evict; kubectl describe node | grep -i pressure"; exit 0
+      fi
+      diag "под Failed (reason=${treason:-${preason:-?}}, exit ${texit:-?})"
+      cause "терминальный сбой — смотри reason/exitCode и события."
+      first "kubectl -n $NS describe pod $POD | grep -A3 Events"; exit 0 ;;
+  esac
+fi
+
 diag "нераспознанное состояние (phase=$phase)"
 first "kubectl -n $NS describe pod $POD"
