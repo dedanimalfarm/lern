@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: lab
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: success-rate
+    interval: 5s
+    # NOTE: In a real system you would use a prometheus query like:
+    # query: sum(irate(http_requests_total{status=~"2..", service="{{args.service-name}}"}[2m])) / sum(irate(http_requests_total{service="{{args.service-name}}"}[2m]))
+    # For this lab without a simulated load generator, we use a mock pass.
+    # We use "pass" provider to simulate a successful check without hanging.
+    successCondition: result == 'pass'
+    provider:
+      job:
+        spec:
+          backoffLimit: 1
+          template:
+            spec:
+              containers:
+              - name: pass
+                image: alpine:3.18
+                command: [sh, -c, "echo 'pass' > /workspace/result.json"]
+                volumeMounts:
+                - name: workspace
+                  mountPath: /workspace
+              restartPolicy: Never
+              volumes:
+              - name: workspace
+                emptyDir: {}

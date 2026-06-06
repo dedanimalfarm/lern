@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rollout-active
+  namespace: lab
+spec:
+  selector:
+    app: demo-rollout-bg
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080

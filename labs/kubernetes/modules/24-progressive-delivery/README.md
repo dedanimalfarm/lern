@@ -4,19 +4,18 @@
 <!-- TOC -->
 - [Предварительные требования](#-)
 - [Стартовая проверка](#-)
-- [1. Развёртывание Argo Rollouts](#1--argo-rollouts)
-- [2. Изучение Canary релиза](#2--canary-)
-- [Практические задания](#-)
-  - [Задание 1. Наблюдение за релизом](#-1---)
-  - [Задание 2. Обновление образа (Trigger a rollout)](#-2---trigger-a-rollout)
-- [Финальная карта ресурсов модуля](#---)
+- [Часть 1: Развёртывание Argo Rollouts](#-1--argo-rollouts)
+- [Часть 2: Canary с ручным подтверждением (Pause)](#-2-canary----pause)
+- [Часть 3: Canary с автоматическим анализом (AnalysisTemplate)](#-3-canary----analysistemplate)
+- [Часть 4: Blue/Green Deployment](#-4-bluegreen-deployment)
+- [Практические задания (управление релизами)](#--)
 - [Чему вы научились](#--)
 - [Уборка](#)
 <!-- /TOC -->
 
-> ⏱ время ~25 мин · сложность 4/5 · пререквизиты: Трек 1 и Трек 3
+> ⏱ время ~35 мин · сложность 4/5 · пререквизиты: Трек 1 и Трек 3
 
-В этом модуле мы разберём продвинутые стратегии развёртывания — Canary (Канареечный релиз) и Blue/Green с использованием контроллера Argo Rollouts. Эти паттерны позволяют минимизировать downtime и риск выкатки сломанного кода в production.
+В этом модуле мы разберём продвинутые стратегии развёртывания — Canary (Канареечный релиз) и Blue/Green с использованием контроллера Argo Rollouts. Эти паттерны позволяют минимизировать downtime и риск выкатки сломанного кода в production, опираясь на метрики.
 
 ## Предварительные требования
 
@@ -30,7 +29,7 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl get nodes
 ```
 
-## 1. Развёртывание Argo Rollouts
+## Часть 1: Развёртывание Argo Rollouts
 
 Argo Rollouts — это Kubernetes-контроллер и набор CRD (`Rollout`, `AnalysisTemplate`), которые расширяют базовые возможности Deployment.
 
@@ -39,14 +38,21 @@ Argo Rollouts — это Kubernetes-контроллер и набор CRD (`Rol
 verify/prepare.sh
 ```
 
-## 2. Изучение Canary релиза
-
-Примените манифесты из папки `manifests`:
+Убедитесь, что плагин работает:
 ```bash
-kubectl apply -k manifests/
+kubectl argo rollouts version
 ```
 
-Мы задеплоили ресурс `Rollout` с именем `demo-rollout`. Обратите внимание на секцию `strategy` в манифесте `rollout.yaml`:
+## Часть 2: Canary с ручным подтверждением (Pause)
+
+Примените манифесты:
+```bash
+kubectl apply -f manifests/rollout.yaml
+kubectl apply -f manifests/service.yaml
+```
+
+Мы задеплоили ресурс `Rollout`. Стратегия `canary` позволяет нам описать шаги (steps).
+Текущая конфигурация в `rollout.yaml` выглядит так:
 ```yaml
   strategy:
     canary:
@@ -55,45 +61,95 @@ kubectl apply -k manifests/
       - pause:
           duration: 5s
       - setWeight: 50
-      - pause:
-          duration: 5s
+      - pause: {}  # Ручная пауза до команды promote!
       - setWeight: 100
 ```
-В реальном сценарии вместо `duration: 5s` мы могли бы использовать бессрочную паузу `- pause: {}` (ожидающую ручного подтверждения) или автоматический `AnalysisRun` с запросами в Prometheus, чтобы проверять, нет ли 500-х ошибок. Для простоты лабораторной здесь используется короткая автоматическая пауза.
 
-## Практические задания
-
-### Задание 1. Наблюдение за релизом
-С помощью плагина kubectl отследите статус развёртывания:
-```bash
-kubectl argo rollouts get rollout demo-rollout -n lab
-```
-
-### Задание 2. Обновление образа (Trigger a rollout)
-Измените образ приложения, чтобы запустить процесс прогрессивной доставки:
+### Запуск обновления
+Измените образ приложения, чтобы запустить rollout:
 ```bash
 kubectl argo rollouts set image demo-rollout app=argoproj/rollouts-demo:yellow -n lab
 ```
 
-И сразу запустите watch:
+### Наблюдение и продвижение (Promote)
+Сразу запустите watch:
 ```bash
 kubectl argo rollouts get rollout demo-rollout -n lab --watch
 ```
-Вы увидите, как Rollout направляет 25% трафика на новую версию (Canary), ждёт 5 секунд, затем 50%, и наконец 100%.
+Вы увидите, что релиз остановился на `setWeight: 50` (состояние `Paused`).
+Чтобы продолжить релиз вручную (promote):
+```bash
+kubectl argo rollouts promote demo-rollout -n lab
+```
 
-## Финальная карта ресурсов модуля
+Если что-то пошло не так, релиз можно отменить (abort):
+```bash
+# kubectl argo rollouts abort demo-rollout -n lab
+```
 
-| Ресурс | Тип | Роль |
-|--------|-----|------|
-| `demo-rollout` | Rollout | Управляет версиями ReplicaSet и распределением трафика. |
-| `demo-rollout-svc` | Service | Направляет трафик на поды, выбранные Rollout'ом. |
+## Часть 3: Canary с автоматическим анализом (AnalysisTemplate)
+
+Ручное подтверждение — это хорошо, но автоматика лучше. `AnalysisTemplate` позволяет Argo Rollouts делать запросы (например, в Prometheus), чтобы проверить успешность релиза.
+
+Применим шаблон анализа:
+```bash
+kubectl apply -f manifests/analysis.yaml
+```
+
+В шаблоне `success-rate` описано:
+```yaml
+    successCondition: result == 'pass'
+```
+*(В реальной жизни здесь был бы PromQL запрос на вычисление процента HTTP 5xx ошибок, но для лабы мы используем мок-проверку)*
+
+Обновите конфигурацию Rollout, раскомментировав блок `analysis` в манифесте (или применив готовый), и запустите новый релиз:
+```bash
+kubectl argo rollouts set image demo-rollout app=argoproj/rollouts-demo:green -n lab
+```
+
+Во время выполнения шага `setWeight: 25` Rollout создаст объект `AnalysisRun`. Посмотреть его статус:
+```bash
+kubectl -n lab get analysisrun
+```
+
+## Часть 4: Blue/Green Deployment
+
+Помимо Canary, Argo Rollouts поддерживает Blue/Green — когда новая (Green) версия разворачивается полностью рядом со старой (Blue), тестируется на отдельном сервисе, и только затем основной (Active) сервис переключается на неё.
+
+Применим манифест с Blue/Green стратегией:
+```bash
+kubectl apply -f manifests/rollout-bg.yaml
+kubectl apply -f manifests/service-active.yaml
+kubectl apply -f manifests/service-preview.yaml
+```
+
+Запустите обновление:
+```bash
+kubectl argo rollouts set image demo-rollout-bg app=argoproj/rollouts-demo:purple -n lab
+```
+
+Посмотрите статус:
+```bash
+kubectl argo rollouts get rollout demo-rollout-bg -n lab
+```
+Здесь вы увидите, что Preview-сервис указывает на новую версию, а Active всё ещё на старую.
+Сделайте promote:
+```bash
+kubectl argo rollouts promote demo-rollout-bg -n lab
+```
+
+## Практические задания (управление релизами)
+
+1. **Abort Rollout**: Запустите обновление `demo-rollout` на образ `argoproj/rollouts-demo:red`. Пока он находится на ручной паузе (50%), выполните команду `kubectl argo rollouts abort demo-rollout -n lab`. Посмотрите, что произойдёт с подами.
+2. **Retry Rollout**: После abort, вы можете изменить образ на правильный или сделать `kubectl argo rollouts retry demo-rollout -n lab`. Попробуйте оба варианта.
 
 ## Чему вы научились
 
 В этом модуле вы научились:
 - Использовать контроллер Argo Rollouts для деплоя приложений.
-- Настраивать стратегии Progressive Delivery (Canary).
-- Управлять весом (Weight) трафика между разными версиями приложения.
+- Настраивать стратегии Progressive Delivery: Canary и Blue/Green.
+- Использовать ручные паузы (`pause: {}`) и команды `promote`/`abort`.
+- Автоматизировать проверки релиза через `AnalysisTemplate`.
 
 ## Уборка
 
