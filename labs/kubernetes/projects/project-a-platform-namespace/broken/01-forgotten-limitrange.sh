@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Сценарий со сломанным namespace: Разработчик жалуется, что его поды зависли в статусе Pending или получают ошибку "failed quota: platform-quota"
 
 # 1. Применим сломанный манифест (без LimitRange)

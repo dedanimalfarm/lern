@@ -1,0 +1,7 @@
+# Подавляем SC1091 (info): shellcheck не может статически отследить
+# `source "$ROOT_DIR/scripts/verify/helpers.sh"` (динамический путь) во всех
+# verify-скриптах. Это намеренный паттерн (общие хелперы), не дефект.
+disable=SC1091
+# SC2317 (info): функции, вызываемые через `trap` (do_cleanup в run-module.sh),
+# shellcheck считает недостижимыми — это ложноположительное для trap-паттерна.
+disable=SC2317
