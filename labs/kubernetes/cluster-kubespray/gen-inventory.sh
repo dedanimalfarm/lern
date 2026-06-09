@@ -17,11 +17,16 @@ print("    ansible_user: ubuntu")
 print("    ansible_ssh_private_key_file: /root/.ssh/kubespray")
 print("    ansible_become: true")
 print("  hosts:")
+# Значения выносим в переменные: бэкслеш-экранирование кавычек внутри
+# выражения f-строки — SyntaxError (вся программа обёрнута в одинарные
+# кавычки shell, поэтому одинарные кавычки в Python-коде недоступны).
 for k, v in nodes.items():
+    ext = v["external"]
+    internal = v["internal"]
     print(f"    {k}:")
-    print(f"      ansible_host: {v[\"external\"]}")
-    print(f"      ip: {v[\"internal\"]}")
-    print(f"      access_ip: {v[\"internal\"]}")
+    print(f"      ansible_host: {ext}")
+    print(f"      ip: {internal}")
+    print(f"      access_ip: {internal}")
 print("  children:")
 print("    kube_control_plane:")
 print("      hosts:")
