@@ -20,7 +20,6 @@
       "Bash(gcloud auth print-access-token:*)",
       "Bash(ssh -i /root/.ssh/kubespray:*)",
       "Bash(bash scripts/:*)",
-      "Bash(bash labs/kubernetes/scripts/:*)",
       "Bash(bash /root/lern/labs/kubernetes/scripts/:*)",
       "Bash(shellcheck:*)",
       "Bash(yamllint:*)",
