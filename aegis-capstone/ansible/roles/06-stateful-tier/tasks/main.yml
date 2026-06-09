@@ -1,14 +1,26 @@
 ---
-# --- APP NODE (Nginx / LB) ---
-# Зачем: Ingress-слой для приема внешнего трафика.
-# Почему так: Группируем задачи через block для чистоты кода и единого условия when.
+# --- APP NODE (Nginx / LB & DB Client) ---
+# Зачем: Ingress-слой для приема внешнего трафика (Nginx) и точка доступа для проверки/администрирования БД (psql).
+# Почему так: Группируем задачи установки прокси и клиента БД через block для чистоты кода и единого условия when.
 - name: Setup App Node Tier
   block:
     - name: Установка Nginx
-      apt: name=nginx state=present update_cache=yes
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Установка клиента PostgreSQL (psql)
+      apt:
+        name: postgresql-client
+        state: present
+        update_cache: yes
 
     - name: Запуск Nginx
-      systemd: name=nginx state=started enabled=yes
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
   when: "'app_nodes' in group_names"
 
 # --- DB NODE (PostgreSQL, Redis, MongoDB) ---

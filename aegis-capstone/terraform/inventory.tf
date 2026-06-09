@@ -67,7 +67,7 @@ resource "local_file" "ssh_config" {
         IdentityFile ~/.ssh/id_ed25519
         StrictHostKeyChecking accept-new
         UserKnownHostsFile /dev/null
-    Host az-*
+    Host az-* !az-app
         ProxyJump az-app
         User ${var.vm_admin_user}
         IdentityFile ~/.ssh/id_ed25519

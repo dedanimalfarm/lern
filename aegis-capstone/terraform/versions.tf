@@ -3,7 +3,7 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "aegis-tfstate-rg"
-    storage_account_name = "aegistfstate52018f"
+    storage_account_name = "aegistfstate040626f"
     container_name       = "tfstate"
     key                  = "aegis-v4.tfstate"
     use_azuread_auth     = true
