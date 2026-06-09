@@ -58,6 +58,9 @@ jobs:
 
       - name: markdown links
         run: |
-          out="$(bash check_links.sh)"
+          # || true: check_links.sh без set -e возвращает код последнего grep
+          # (1, если в последнем файле нет ссылок) — это не ошибка. Падаем
+          # только на реальных BROKEN LINK.
+          out="$(bash check_links.sh || true)"
           echo "$out"
           ! grep -q 'BROKEN LINK' <<<"$out"
