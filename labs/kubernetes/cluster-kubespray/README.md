@@ -55,7 +55,24 @@ cd /root/kubespray
 # снести k8s (VM оставить): ansible-playbook -i .../hosts.yaml reset.yml -b
 ```
 
-## Экономия и снос
+## Однокомандный жизненный цикл (рекомендуемый путь)
+
+Ручные шаги выше автоматизированы в `../scripts/cluster/`:
+
+```bash
+../scripts/cluster/up.sh [--stacks]  # всё с нуля: VM → Kubespray → kubeconfig → bootstrap (~25 мин)
+../scripts/cluster/stop.sh           # остановить VM (платим только за диски)
+../scripts/cluster/start.sh          # поднять обратно; сам обновит state/inventory/kubeconfig (IP меняются!)
+../scripts/cluster/down.sh           # полный снос (terraform destroy, спросит подтверждение)
+```
+
+Кроме того, VM автоматически останавливаются в **22:00 (+04)** — GCE instance
+schedule `lab-autostop` (одноразовое создание: `gcloud compute resource-policies
+create instance-schedule lab-autostop --region us-central1 --vm-stop-schedule
+"0 22 * * *" --timezone Asia/Dubai`; системному агенту Compute нужна роль
+`roles/compute.instanceAdmin.v1`). `up.sh` сам привязывает policy к новым VM.
+
+## Экономия и снос (ручной путь)
 
 ```bash
 # Остановить VM (не платить за CPU; диски остаются; внешние IP МОГУТ смениться):

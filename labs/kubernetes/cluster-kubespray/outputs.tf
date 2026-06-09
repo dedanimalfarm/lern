@@ -12,3 +12,12 @@ output "nodes" {
 output "ssh_hint" {
   value = "ssh -i /root/.ssh/kubespray ${var.ssh_user}@<external-ip>"
 }
+
+# Для scripts/cluster/*.sh: project/zone без парсинга variables.tf.
+output "project_id" {
+  value = var.project_id
+}
+
+output "zone" {
+  value = var.zone
+}
