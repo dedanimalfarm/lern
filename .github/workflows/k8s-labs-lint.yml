@@ -1,0 +1,63 @@
+# Линт k8s-лабораторных (labs/kubernetes) — зеркало локального
+# scripts/qa/lint.sh + check_links.sh, но строгое: любой инструмент с
+# findings валит job (локальный lint.sh мягкий — только печатает).
+# Кластер из CI недоступен, поэтому здесь только статические проверки;
+# живой прогон модулей остаётся за scripts/qa/run-module.sh на стенде.
+name: k8s-labs-lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'labs/kubernetes/**'
+      - '.github/workflows/k8s-labs-lint.yml'
+  pull_request:
+    paths:
+      - 'labs/kubernetes/**'
+      - '.github/workflows/k8s-labs-lint.yml'
+
+defaults:
+  run:
+    working-directory: labs/kubernetes
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yamllint + kubeconform (shellcheck/kubectl уже в runner)
+        run: |
+          pipx install yamllint
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar -xz
+          sudo mv kubeconform /usr/local/bin/kubeconform
+
+      - name: yamllint
+        run: yamllint -c .yamllint modules projects
+
+      - name: kubeconform
+        run: |
+          find modules projects -type d -name charts -prune -o -type f \
+            \( -name '*.yaml' -o -name '*.yml' \) \
+            ! -name 'kustomization.yaml' ! -name 'kustomization.yml' -print0 \
+            | xargs -0 kubeconform -ignore-missing-schemas -strict
+
+      - name: shellcheck
+        run: |
+          find modules projects scripts -type f -name '*.sh' -print0 \
+            | xargs -0 shellcheck
+
+      - name: kustomize build
+        run: |
+          find modules projects \( -name kustomization.yaml -o -name kustomization.yml \) -print0 \
+            | while IFS= read -r -d '' kfile; do
+                dir="$(dirname "$kfile")"
+                kubectl kustomize --load-restrictor LoadRestrictionsNone "$dir" >/dev/null \
+                  || { echo "Kustomize build failed in $dir"; exit 1; }
+              done
+
+      - name: markdown links
+        run: |
+          out="$(bash check_links.sh)"
+          echo "$out"
+          ! grep -q 'BROKEN LINK' <<<"$out"
