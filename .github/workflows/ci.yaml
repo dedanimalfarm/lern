@@ -1,10 +1,18 @@
 name: Kubernetes Labs CI
 
+# path-фильтр: kind-тест 6 модулей не должен гоняться (и краснеть) на
+# коммитах в другие лабы репо (ansible/docker/linux).
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'labs/kubernetes/**'
+      - '.github/workflows/ci.yaml'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - 'labs/kubernetes/**'
+      - '.github/workflows/ci.yaml'
 
 jobs:
   lint:
@@ -41,6 +49,15 @@ jobs:
           version: v0.23.0
           node_image: kindest/node:v1.30.0
 
+      - name: Bootstrap lab namespaces and quotas
+        # На свежем kind нет ns lab — без bootstrap каждый run-module падал
+        # «namespaces "lab" not found» (исторический красный этого workflow).
+        run: |
+          cd labs/kubernetes
+          export KUBECONFIG=~/.kube/config
+          bash scripts/bootstrap/00-create-namespaces.sh
+          bash scripts/bootstrap/01-apply-quotas.sh
+
       - name: Run automated sweep on kind
         run: |
           cd labs/kubernetes
@@ -48,15 +65,17 @@ jobs:
           # Some modules (e.g., ingress, cert-manager, external-secrets) require specific node setups or heavy operators,
           # so we only run basic stateless modules on kind in CI.
           export KUBECONFIG=~/.kube/config
-          echo "Running module 01-kubectl-basics..."
-          bash scripts/qa/run-module.sh modules/01-kubectl-basics
-          echo "Running module 02-pods-lifecycle..."
-          bash scripts/qa/run-module.sh modules/02-pods-lifecycle
-          echo "Running module 03-workloads..."
-          bash scripts/qa/run-module.sh modules/03-workloads
-          echo "Running module 06-scheduling..."
-          bash scripts/qa/run-module.sh modules/06-scheduling
-          echo "Running module 07-config-security..."
-          bash scripts/qa/run-module.sh modules/07-config-security
-          echo "Running module 20-batch-workflows..."
-          bash scripts/qa/run-module.sh modules/20-batch-workflows
+          # clean-module после каждого модуля сносит quota/limitrange —
+          # восстанавливаем перед каждым прогоном, чтобы условия были одинаковые.
+          run_one() {
+            echo "Running module $1..."
+            bash scripts/bootstrap/00-create-namespaces.sh >/dev/null
+            bash scripts/bootstrap/01-apply-quotas.sh >/dev/null
+            bash scripts/qa/run-module.sh "modules/$1"
+          }
+          run_one 01-kubectl-basics
+          run_one 02-pods-lifecycle
+          run_one 03-workloads
+          run_one 06-scheduling
+          run_one 07-config-security
+          run_one 20-batch-workflows
