@@ -11,6 +11,10 @@ stringData:
     apiVersion: 1
     datasources:
     - name: Loki
+      # uid фиксируем сразу: на него ссылается модуль 30 (tracesToLogsV2).
+      # Менять uid у уже запровиженного datasource Grafana не умеет —
+      # провижининг падает «data source not found» (см. модуль 30).
+      uid: loki
       type: loki
       access: proxy
       url: http://loki.lab.svc.cluster.local:3100

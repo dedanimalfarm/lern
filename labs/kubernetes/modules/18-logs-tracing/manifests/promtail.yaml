@@ -17,6 +17,8 @@ data:
       kubernetes_sd_configs:
       - role: pod
       relabel_configs:
+      # __host__ сверяется с HOSTNAME promtail-пода: без env HOSTNAME=spec.nodeName
+      # (см. DaemonSet ниже) имя пода != имя ноды и ВСЕ targets отбрасываются.
       - source_labels: [__meta_kubernetes_pod_node_name]
         target_label: __host__
       - action: labelmap
@@ -27,6 +29,15 @@ data:
       - action: replace
         source_labels: [__meta_kubernetes_pod_name]
         target_label: pod
+      - action: replace
+        source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      # Без __path__ promtail'у НЕЧЕГО тейлить (kubernetes_sd сам путей не даёт):
+      # собираем путь kubelet-логов /var/log/pods/<ns>_<pod>_<uid>/<container>/*.log
+      - replacement: /var/log/pods/*$1/*.log
+        separator: /
+        source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+        target_label: __path__
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -48,6 +59,14 @@ spec:
         image: grafana/promtail:2.9.2
         args:
         - -config.file=/etc/promtail/promtail.yaml
+        env:
+        # promtail фильтрует discovery-targets по совпадению __host__ со СВОИМ
+        # hostname; по умолчанию это имя пода. Пробрасываем имя ноды, иначе
+        # DaemonSet «видит» ноль подов и Loki остаётся пустым.
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         volumeMounts:
         - name: config
           mountPath: /etc/promtail
