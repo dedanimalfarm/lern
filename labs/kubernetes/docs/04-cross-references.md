@@ -17,6 +17,7 @@
 | **Стратегии релиза** | `m03` (RollingUpdate) | `m24` (Progressive Delivery) | От RollingUpdate к Canary, Blue/Green и автоматическому анализу в Argo Rollouts. |
 | **Отказоустойчивость** | `m06` (Scheduling/Affinity) | `m13` (Resilience) | От базового nodeSelector/Affinity к topologySpreadConstraints и PDB. |
 | **Расширяемость API** | `m01` (API-модель) | `m19` (CRD/Operators) | От понимания стандартных ресурсов к созданию собственных CRD и операторов. |
+| **Трейсинг** | `m08` (Observability), `m17`/`m18` (Grafana/Loki) | `m30` (Tracing/OTel) | Третий сигнал наблюдаемости: OTLP-конвейер (SDK → Collector → Tempo), TraceQL и корреляция трейсов с логами по trace_id. |
 
 ## Интеграционные проекты (Capstone)
 

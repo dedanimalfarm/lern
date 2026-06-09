@@ -1,6 +1,6 @@
 # Kubernetes Labs (k8s-labs)
 
-Практический репозиторий для поэтапного освоения Kubernetes. Содержит 21 учебный модуль и 5 итоговых проектов (capstone) для закрепления материала на живом кластере.
+Практический репозиторий для поэтапного освоения Kubernetes. Содержит 27 учебных модулей и 5 итоговых проектов (capstone) для закрепления материала на живом кластере.
 
 ## 🚀 Быстрый старт
 
@@ -48,6 +48,7 @@ kubectl get nodes -o wide
 24. [24-progressive-delivery](modules/24-progressive-delivery) — Progressive Delivery (Canary с Argo Rollouts)
 25. [25-gitops-at-scale](modules/25-gitops-at-scale) — GitOps на масштабе (Kustomize overlays, ApplicationSet, multi-env)
 29. [29-pod-lifecycle-v2](modules/29-pod-lifecycle-v2) — Жизненный цикл пода v2 (native sidecars, scheduling gates, in-place resize)
+30. [30-tracing-otel](modules/30-tracing-otel) — Распределённый трейсинг (OpenTelemetry + Tempo, TraceQL, корреляция с Loki)
 
 ## 🏗 Итоговые проекты (Capstone)
 

@@ -54,7 +54,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 | # | Статус | Новый модуль | Ключевое |
 |---|:---:|--------------|----------|
 | 17 | [x] | **metrics-alerting** `46be54c` | Prometheus+Grafana+Alertmanager, ServiceMonitor, PromQL |
-| 18 | [x] | **logs-tracing** `29bf5f1` | Loki/EFK, Promtail (без трассировки, требует OTel) |
+| 18 | [x] | **logs-tracing** `29bf5f1` | Loki/EFK, Promtail (трассировка вынесена в модуль 30) |
 
 ## Уровень 5 — Extensibility & advanced workloads
 
@@ -85,6 +85,18 @@ progressive delivery, backup/DR. Это и есть план ниже.
 | 26 | [ ] | <span style="color:red">**backup-dr**</span> | Velero (backup/restore), etcd snapshot/restore |
 | 27 | [ ] | <span style="color:red">**upgrades-lifecycle**</span> | cluster/node upgrades, surge, Cluster API |
 | 28 | [ ] | <span style="color:red">**cost-multitenancy**</span> | FinOps, spot/preemptible, hierarchical namespaces, vcluster |
+
+## Уровень 9 — Современные API и Observability v2
+
+| # | Статус | Новый модуль | Ключевое |
+|---|:---:|--------------|----------|
+| 29 | [x] | **pod-lifecycle-v2** | native sidecars (GA 1.33), scheduling gates, in-place resize — прогнан на Kubespray v1.36.1 |
+| 30 | [x] | **tracing-otel** | OTel SDK→Collector→Tempo 3.0, TraceQL, корреляция trace↔log (Loki derivedFields + tracesToLogsV2) — закрывает «без трассировки» из уровня 4; прогнан на Kubespray v1.36.1 |
+
+Дальние кандидаты уровня 9+: service mesh (Linkerd/Istio ambient — последний
+непокрытый пункт исходного списка), admission webhooks hands-on, supply-chain
+security (trivy/cosign/Kyverno verifyImages), runtime security + audit
+(Falco/kube-bench/audit policy), Kueue/KEDA practice.
 
 ---
 
