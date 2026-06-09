@@ -1,0 +1,45 @@
+# ОБНОВЛЁННАЯ версия datasource Loki из модуля 18 (Secret тот же —
+# loki-datasource, apply перезапишет): добавлены фиксированный uid и
+# derivedFields — обратная связка «лог → трейс».
+# derivedFields вытаскивает trace_id из строки лога регуляркой и рисует рядом
+# ссылку, открывающую этот trace в Tempo (split view в Explore).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loki-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+type: Opaque
+stringData:
+  loki-datasource.yaml: |
+    apiVersion: 1
+    # Грабли Grafana: если Loki уже запровижен БЕЗ uid (старый файл модуля 18),
+    # то «обновить» его на uid: loki нельзя — провижининг ищет запись по новому
+    # uid, не находит и валит ВЕСЬ reload с 500 («data source not found»),
+    # блокируя заодно и Tempo. deleteDatasources убирает старую запись перед
+    # пересозданием; на свежем стенде (18-й уже с uid: loki) — безвредный no-op.
+    deleteDatasources:
+    - name: Loki
+      orgId: 1
+    datasources:
+    - name: Loki
+      uid: loki                      # на этот uid ссылается tracesToLogsV2 в Tempo
+      type: loki
+      access: proxy
+      url: http://loki.lab.svc.cluster.local:3100
+      isDefault: false
+      version: 1
+      jsonData:
+        derivedFields:
+        # Формат строки задаёт OTEL_PYTHON_LOG_CORRELATION:
+        #   ... [trace_id=4bf92f3577b34da6a3ce929d0e0e4736 span_id=... ] ...
+        # Ровно 32 hex-символа: строки вне активного спана содержат
+        # trace_id=0 (werkzeug access-log) — на них ссылка не нужна.
+        - name: TraceID
+          datasourceUid: tempo
+          matcherRegex: 'trace_id=([0-9a-f]{32})'
+          # $$ — экранирование для Grafana provisioning (иначе $ съест
+          # интерполяция переменных окружения при чтении файла).
+          url: '$${__value.raw}'
+          urlDisplayLabel: 'Трейс в Tempo'

@@ -1,0 +1,122 @@
+# Grafana Tempo — бэкенд хранения трейсов, режим monolithic (single binary).
+# Для лабы этого достаточно: один процесс совмещает distributor (приём OTLP),
+# ingester (WAL+блоки), querier и compactor. В проде эти роли разносят
+# (microservices mode), но API и конфиг остаются теми же.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+  namespace: lab
+data:
+  tempo.yaml: |
+    server:
+      http_listen_port: 3200          # HTTP API: /ready, /api/search, /api/traces/<id>
+
+    distributor:
+      receivers:
+        # Tempo умеет принимать OTLP сам — Collector в цепочке нужен не для
+        # «протокола», а для буферизации/обогащения/fan-out (см. Часть 2).
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+
+    # ВАЖНО (Tempo 3.0): легаси-блоки ingester/compactor из конфигов 2.x
+    # УДАЛЕНЫ — их заменила новая ingest-архитектура, и со старыми полями
+    # Tempo не стартует («field ingester not found in type app.Config»).
+    # Для миграции боевых конфигов есть `tempo-cli migrate config`; лабе
+    # хватает дефолтов новой архитектуры.
+
+    storage:
+      trace:
+        backend: local                # файловая система пода (emptyDir ниже);
+        wal:                          # в проде — S3/GCS, меняется только этот блок
+          path: /var/tempo/wal
+        local:
+          path: /var/tempo/blocks
+
+    usage_report:
+      reporting_enabled: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  namespace: lab
+  labels:
+    app: tempo
+spec:
+  replicas: 1
+  # Recreate, а не RollingUpdate: квота ns lab подобрана впритык, surge-под
+  # (старый + новый одновременно) в requests.memory не помещается — rollout
+  # повисал бы на quota exceeded. Для single-replica лабы даунтайм в секунды ок.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tempo
+  template:
+    metadata:
+      labels:
+        app: tempo
+    spec:
+      containers:
+      - name: tempo
+        image: grafana/tempo:3.0.2
+        args:
+        - -config.file=/etc/tempo/tempo.yaml
+        ports:
+        - containerPort: 3200
+          name: http
+        - containerPort: 4317
+          name: otlp-grpc
+        - containerPort: 4318
+          name: otlp-http
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3200
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        # Бюджет подобран под ResourceQuota ns lab (см. README, «Карта ресурсов»):
+        # модуль 30 живёт рядом со стеком модуля 18 (Loki+Promtail).
+        resources:
+          requests:
+            cpu: 100m
+            memory: 192Mi
+          limits:
+            cpu: 200m
+            memory: 384Mi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/tempo
+        - name: data
+          mountPath: /var/tempo
+      volumes:
+      - name: config
+        configMap:
+          name: tempo-config
+      - name: data
+        emptyDir: {}                  # трейсы переживают рестарт контейнера,
+                                      # но не пересоздание пода — для лабы ок
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  namespace: lab
+spec:
+  selector:
+    app: tempo
+  ports:
+  - name: http
+    port: 3200
+    targetPort: 3200
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318

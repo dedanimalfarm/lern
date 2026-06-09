@@ -1,0 +1,39 @@
+# Генератор нагрузки: раз в 2 секунды дёргает frontend, чтобы в Tempo/Grafana
+# всегда были свежие трейсы (Explore без данных — бесполезен). Деплоймент, а не
+# Job: трафик нужен постоянно, пока модуль развёрнут.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen
+  namespace: lab
+  labels:
+    app: loadgen
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loadgen
+  template:
+    metadata:
+      labels:
+        app: loadgen
+    spec:
+      containers:
+      - name: loadgen
+        image: busybox:1.36
+        command: ["sh", "-c"]
+        args:
+        - |
+          # || true: 5xx от frontend (симулированные ошибки backend) не должны
+          # прерывать цикл — это полезный сигнал для TraceQL {status=error}.
+          while true; do
+            wget -qO- http://frontend:5000/ >/dev/null 2>&1 || true
+            sleep 2
+          done
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 20m
+            memory: 32Mi

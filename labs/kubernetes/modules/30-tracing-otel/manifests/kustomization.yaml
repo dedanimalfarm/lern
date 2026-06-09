@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Порядок отражает поток данных: бэкенд (Tempo) → коллектор → приложения →
+# нагрузка → интеграция с Grafana. Datasource-секреты живут в ns monitoring
+# (стек модулей 17/18); ns создаёт verify/prepare.sh, если его ещё нет.
+resources:
+- tempo.yaml
+- otel-collector.yaml
+- backend.yaml
+- frontend.yaml
+- loadgen.yaml
+- tempo-datasource.yaml
+- loki-datasource-v2.yaml

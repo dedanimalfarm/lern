@@ -1,0 +1,48 @@
+# СЛОМАННЫЙ конфиг коллектора: exporter указывает на 3200 — это HTTP query API
+# Tempo, а не OTLP/gRPC ingest (4317). Приложения работают, коллектор принимает
+# спаны, но экспорт молча умирает с ретраями — «трейсы пропали».
+# Применить поверх рабочего: kubectl apply -f collector-config-broken.yaml
+# (имя ConfigMap то же), затем kubectl -n lab rollout restart deploy/otel-collector
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: lab
+data:
+  config.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+      batch:
+        send_batch_size: 1024
+        timeout: 2s
+
+    exporters:
+      otlp/tempo:
+        endpoint: tempo.lab.svc.cluster.local:3200   # ← ОШИБКА: query-порт, не ingest
+        tls:
+          insecure: true
+      debug:
+        verbosity: normal
+
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/tempo, debug]

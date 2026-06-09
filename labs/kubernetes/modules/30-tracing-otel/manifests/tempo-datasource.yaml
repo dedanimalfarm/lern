@@ -1,0 +1,33 @@
+# Datasource Tempo для Grafana из модуля 17 (kube-prometheus-stack).
+# Механика та же, что у Loki в модуле 18: сайдкар grafana-sc-datasources
+# подхватывает Secret с лейблом grafana_datasource: "1" и кладёт файл в
+# /etc/grafana/provisioning/datasources (горячая перезагрузка, без рестарта).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tempo-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+type: Opaque
+stringData:
+  tempo-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Tempo
+      # uid фиксируем руками: на него ссылается derivedFields в datasource Loki
+      # (loki-datasource-v2.yaml). Автогенерённый uid связать нельзя.
+      uid: tempo
+      type: tempo
+      access: proxy
+      url: http://tempo.lab.svc.cluster.local:3200
+      isDefault: false
+      version: 1
+      jsonData:
+        # Кнопка «логи этого спана»: из спана в Tempo → запрос в Loki.
+        # Сдвиги ±5m страхуют от рассинхрона часов и запаздывания доставки логов.
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: '-5m'
+          spanEndTimeShift: '5m'
+          filterByTraceID: true

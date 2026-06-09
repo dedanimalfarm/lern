@@ -1,0 +1,31 @@
+# Часть 2: тот же telemetrygen, но теперь через OTel Collector — как ходят
+# настоящие приложения. Отличие от telemetrygen-direct.yaml ровно одно:
+# endpoint. В логах коллектора видно прохождение батча (debug exporter).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: telemetrygen-via-collector
+  namespace: lab
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: telemetrygen
+        image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.153.0
+        args:
+        - traces
+        - --otlp-endpoint=otel-collector.lab.svc.cluster.local:4317  # ← коллектор
+        - --otlp-insecure
+        - --traces=5
+        - --otlp-attributes=service.name="telemetrygen-collector"
+        - --status-code=Ok
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi

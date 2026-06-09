@@ -1,0 +1,33 @@
+# Часть 1: первый трейс БЕЗ приложения и БЕЗ коллектора — telemetrygen
+# (утилита проекта OpenTelemetry) шлёт синтетические спаны OTLP/gRPC прямо в
+# Tempo. Изолирует механику «OTLP → бэкенд» от всего остального.
+# Лежит в extras/ (не в manifests/): Job одноразовый, перед повтором —
+#   kubectl -n lab delete job telemetrygen-direct
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: telemetrygen-direct
+  namespace: lab
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: telemetrygen
+        image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.153.0
+        args:
+        - traces
+        - --otlp-endpoint=tempo.lab.svc.cluster.local:4317   # OTLP ingest Tempo
+        - --otlp-insecure
+        - --traces=5                                          # 5 трейсов и выход
+        - --otlp-attributes=service.name="telemetrygen"
+        - --status-code=Ok
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi

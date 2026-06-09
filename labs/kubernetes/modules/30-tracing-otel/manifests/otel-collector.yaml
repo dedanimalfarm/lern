@@ -1,0 +1,127 @@
+# OpenTelemetry Collector — телеметрический «роутер» между приложениями и
+# бэкендами. Конфиг = главный учебный артефакт модуля: пайплайн собирается из
+# receivers (вход) → processors (обработка) → exporters (выход).
+# Зачем он, если Tempo принимает OTLP напрямую: батчинг и защита по памяти,
+# обогащение атрибутами, fan-out в несколько бэкендов и смена бэкенда без
+# переконфигурации приложений (приложения знают ТОЛЬКО адрес коллектора).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: lab
+data:
+  config.yaml: |
+    extensions:
+      health_check:                   # /  на :13133 — для readinessProbe
+        endpoint: 0.0.0.0:13133
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317    # SDK приложений шлют сюда (gRPC)
+          http:
+            endpoint: 0.0.0.0:4318    # запасной путь: curl/браузерные SDK
+
+    processors:
+      # memory_limiter ставят ПЕРВЫМ в пайплайне: при давлении по памяти он
+      # отбрасывает данные на входе, не давая коллектору словить OOMKill.
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+      # batch копит спаны и шлёт пачками — меньше RPC, выше пропускная
+      # способность. Стандартная пара процессоров для любого продакшена.
+      batch:
+        send_batch_size: 1024
+        timeout: 2s
+
+    exporters:
+      # ВНИМАНИЕ на порт: 4317 — это OTLP/gRPC ingest Tempo. Перепутать с 3200
+      # (HTTP query API) — классическая авария, разбирается в broken/scenario-01.
+      otlp/tempo:
+        endpoint: tempo.lab.svc.cluster.local:4317
+        tls:
+          insecure: true              # внутри кластера, без TLS (лаба)
+      # debug печатает сводку по каждому батчу в stdout коллектора — первый
+      # инструмент диагностики «доходят ли спаны до коллектора вообще».
+      debug:
+        verbosity: normal
+
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/tempo, debug]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: lab
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  # Recreate: коллектор рестартят в broken/scenario-01 (rollout restart), а
+  # surge-под при заполненной квоте lab может не пройти по requests.memory.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:0.153.0
+        args:
+        - --config=/etc/otelcol/config.yaml
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+        - containerPort: 4318
+          name: otlp-http
+        - containerPort: 13133
+          name: health
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 50m
+            memory: 96Mi
+          limits:
+            cpu: 100m
+            memory: 192Mi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/otelcol
+      volumes:
+      - name: config
+        configMap:
+          name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: lab
+spec:
+  selector:
+    app: otel-collector
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318
