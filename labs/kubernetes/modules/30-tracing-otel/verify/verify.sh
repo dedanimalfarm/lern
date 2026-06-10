@@ -26,7 +26,9 @@ require_deployment_ready lab frontend 360s
 # ВАЖНО: `|| true` в подстановках обязателен — под set -euo pipefail пустой
 # результат grep (exit 1) иначе молча убивает скрипт ДО строки с fail.
 TRACE_ID=""
-for _ in $(seq 1 10); do
+# Окно ~4 мин: при самом первом прогоне после деплоя Tempo индексация может
+# занять 1-2+ мин (наблюдалось в QA) — 100с окна давали flaky-FAIL.
+for _ in $(seq 1 24); do
   kubectl -n lab exec deploy/frontend -- wget -qO- http://localhost:5000/ >/dev/null 2>&1 || true
   sleep 10
   # TraceQL: {resource.service.name="frontend"} (urlencoded). Легаси-параметр
@@ -36,7 +38,7 @@ for _ in $(seq 1 10); do
   TRACE_ID=$(printf '%s' "$SEARCH" | grep -o '"traceID":"[0-9a-f]*"' | head -1 | cut -d'"' -f4 || true)
   [[ -n "$TRACE_ID" ]] && break
 done
-[[ -n "$TRACE_ID" ]] || fail "Tempo search не вернул трейсов frontend за ~100с (пайплайн разорван? см. логи otel-collector)"
+[[ -n "$TRACE_ID" ]] || fail "Tempo search не вернул трейсов frontend за ~4 мин (пайплайн разорван? см. логи otel-collector)"
 ok "tempo search: трейс найден (traceID=${TRACE_ID})"
 
 # Найденный трейс может быть от запроса, где спаны backend ещё в полёте —
