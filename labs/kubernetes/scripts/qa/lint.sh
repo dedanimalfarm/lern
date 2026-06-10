@@ -8,7 +8,7 @@ yamllint -c "$ROOT_DIR/.yamllint" "$ROOT_DIR/modules" "$ROOT_DIR/projects" || ec
 
 echo "=== Running kubeconform ==="
 find "$ROOT_DIR/modules" "$ROOT_DIR/projects" -type d -name "charts" -prune -o -type f \( -name "*.yaml" -o -name "*.yml" \) \
-  ! -name "kustomization.yaml" ! -name "kustomization.yml" -print0 | \
+  ! -name "kustomization.yaml" ! -name "kustomization.yml" ! -name "helm-values.yaml" -print0 | \
   xargs -0 kubeconform -ignore-missing-schemas -strict || echo "Kubeconform found issues."
 
 echo "=== Running shellcheck ==="

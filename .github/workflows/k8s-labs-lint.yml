@@ -39,7 +39,8 @@ jobs:
         run: |
           find modules projects -type d -name charts -prune -o -type f \
             \( -name '*.yaml' -o -name '*.yml' \) \
-            ! -name 'kustomization.yaml' ! -name 'kustomization.yml' -print0 \
+            ! -name 'kustomization.yaml' ! -name 'kustomization.yml' \
+            ! -name 'helm-values.yaml' -print0 \
             | xargs -0 kubeconform -ignore-missing-schemas -strict
 
       - name: shellcheck

@@ -41,8 +41,8 @@ NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="
 if [[ -n "$NODE_PORT" && -n "$NODE_IP" ]]; then
   # Try to reach the endpoint, allowing some time for Envoy to configure
   SUCCESS=false
-  for i in {1..10}; do
-    RES=$(curl -s http://$NODE_IP:$NODE_PORT/store || true)
+  for _ in {1..10}; do
+    RES=$(curl -s "http://${NODE_IP}:${NODE_PORT}/store" || true)
     if echo "$RES" | grep -q "Store V"; then
       SUCCESS=true
       break
