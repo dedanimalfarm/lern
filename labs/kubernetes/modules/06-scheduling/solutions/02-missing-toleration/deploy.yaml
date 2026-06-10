@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cp-only-app
+  labels:
+    app: cp-only-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cp-only-app
+  template:
+    metadata:
+      labels:
+        app: cp-only-app
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: cp-only-app
+        image: nginx:1.27-alpine

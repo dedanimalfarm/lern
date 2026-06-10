@@ -76,7 +76,7 @@ kubectl -n lab exec -it <pod-name> -- wget -qO- localhost/does-not-exist
 Исправить `readinessProbe.httpGet.path` на `/`.
 
 ```bash
-kubectl -n lab apply -f ../../solutions/02-readiness-fail/deploy.yaml
+kubectl -n lab apply -f ../../solutions/01-readiness-fail/deploy.yaml
 kubectl -n lab rollout status deploy/probe-demo --timeout=120s
 kubectl -n lab get endpoints probe-demo -o wide
 ```

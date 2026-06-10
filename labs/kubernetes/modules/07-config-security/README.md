@@ -446,6 +446,10 @@ kubectl -n lab auth can-i delete pods --as=system:serviceaccount:lab:pod-reader
 #   resource "pods" ... Лечение: добавить нужный verb в Role ОСОЗНАННО (least privilege).
 ```
 
+Hands-on версия этого инцидента — `broken/scenario-02/`: клиент в поде получает
+от API `HTTP 403`, потому что Role и ServiceAccount созданы, а СВЯЗИ между ними
+нет. Решение — RoleBinding (`solutions/02-rbac-forbidden/`).
+
 ### Инцидент 3: `readOnlyRootFilesystem` ломает приложение
 
 ```bash

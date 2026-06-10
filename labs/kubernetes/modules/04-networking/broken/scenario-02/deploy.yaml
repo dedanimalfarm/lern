@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: net-demo-port
+  labels:
+    app: net-demo-port
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: net-demo-port
+  template:
+    metadata:
+      labels:
+        app: net-demo-port
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80

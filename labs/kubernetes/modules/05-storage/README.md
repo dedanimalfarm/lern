@@ -858,8 +858,14 @@ kubectl -n lab delete pvc lonely-pvc
 
 > **Только многонодовый кластер.** На одной ноде не воспроизводится.
 
-**Воспроизведение (идея):** Deployment с `replicas: 2`, общий RWO-PVC, поды
-раскиданы на разные ноды — второй не сможет примонтировать том.
+**Воспроизведение:** готовая поломка в `broken/scenario-02/` — Deployment с
+`replicas: 2`, общим RWO-PVC и anti-affinity, раскидывающим поды по нодам.
+
+> ⚠️ Проявление зависит от провижинера. На облачных CSI-драйверах блочных
+> дисков — `Multi-Attach error` (ниже). На нашем local-path том привязан к ноде
+> через `nodeAffinity` PV, поэтому второй под висит в `Pending` с
+> `didn't match PersistentVolume's node affinity` — см. README сценария; там же
+> разобран deadlock «RollingUpdate + RWO» и зачем нужен `strategy: Recreate`.
 
 **Диагностика:**
 

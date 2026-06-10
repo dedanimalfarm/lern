@@ -477,6 +477,11 @@ kubectl -n lab rollout status deploy/unschedulable-demo --timeout=120s
 реально есть на нодах (`kubectl get nodes --show-labels`); для «желательного»
 размещения брать `preferred` affinity вместо жёсткого selector.
 
+**Самостоятельная задача — `broken/scenario-02/`:** под обязан (через
+`nodeSelector`) встать на control-plane ноду, но всё равно `Pending` — забыт
+toleration к taint'у `node-role.kubernetes.io/control-plane:NoSchedule`
+(`solutions/02-missing-toleration/`).
+
 ### Инцидент 2: `Pending` из-за нехватки ресурсов
 
 ```bash

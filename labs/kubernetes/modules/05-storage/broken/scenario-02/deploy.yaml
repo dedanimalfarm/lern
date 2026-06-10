@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-attach-demo
+  labels:
+    app: multi-attach-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: multi-attach-demo
+  template:
+    metadata:
+      labels:
+        app: multi-attach-demo
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - multi-attach-demo
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: shared-data

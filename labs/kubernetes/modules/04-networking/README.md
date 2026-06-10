@@ -526,6 +526,13 @@ kubectl -n lab describe netpol default-deny
 #         только к поду CoreDNS — иначе резолв останется сломанным (см. note в 4.1).
 ```
 
+### Инцидент 3: Endpoints заполнены, но `Connection refused` (targetPort mismatch)
+
+Самостоятельная задача в `broken/scenario-02/`: Service находит поды (endpoints
+НЕ пустые — selector верен!), но шлёт трафик на порт, который контейнер не
+слушает. README сценария содержит симптом, подсказки и решение
+(`solutions/02-targetport-mismatch/`).
+
 ### Бонус: диагностика цепочки Ingress → Service → Endpoints → Pod
 
 ```bash

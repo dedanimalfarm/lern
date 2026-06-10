@@ -752,7 +752,7 @@ kubectl -n lab describe pod -l app=probe-demo | grep -A2 "Readiness probe failed
 
 ```bash
 # Вернуть корректный путь / (готовый манифест)
-kubectl -n lab apply -f solutions/02-readiness-fail/deploy.yaml
+kubectl -n lab apply -f solutions/01-readiness-fail/deploy.yaml
 kubectl -n lab rollout status deploy/probe-demo --timeout=120s
 kubectl -n lab get endpoints probe-demo -o wide
 # probe-demo   10.244.0.12:80   ...   <- backend вернулся
@@ -803,6 +803,11 @@ kubectl -n lab delete pod liveness-crash --ignore-not-found
 > Опасный антипаттерн: слишком агрессивная liveness (малый delay/threshold)
 > устраивает рестарт-шторм у нормального приложения. liveness должна быть
 > снисходительнее readiness.
+
+**Самостоятельная задача — `broken/scenario-02/`:** другой вариант того же
+класса: приложение стартует 15 секунд, а агрессивная liveness убивает его
+раньше. Правильное решение — не раздувать `initialDelaySeconds`, а защитить
+медленный старт `startupProbe` (`solutions/02-liveness-crashloop/`).
 
 ### Бонус: быстрая диагностика lifecycle
 

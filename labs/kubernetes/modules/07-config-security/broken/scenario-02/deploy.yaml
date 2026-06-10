@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-client
+  labels:
+    app: api-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-client
+  template:
+    metadata:
+      labels:
+        app: api-client
+    spec:
+      serviceAccountName: api-reader
+      containers:
+      - name: api-client
+        image: curlimages/curl:8.11.1
+        # Клиент ходит в Kubernetes API напрямую: kubelet монтирует в под
+        # токен ServiceAccount'а (/var/run/secrets/kubernetes.io/serviceaccount/),
+        # и любой HTTP-клиент авторизуется им через заголовок Authorization:
+        # Bearer. GET /api/v1/namespaces/lab/configmaps = RBAC-verb "list".
+        command:
+        - /bin/sh
+        - -c
+        - |
+          SA_DIR=/var/run/secrets/kubernetes.io/serviceaccount
+          while true; do
+            echo "Attempting to list configmaps via API..."
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              --cacert "$SA_DIR/ca.crt" \
+              -H "Authorization: Bearer $(cat "$SA_DIR/token")" \
+              "https://kubernetes.default.svc/api/v1/namespaces/lab/configmaps")
+            echo "API answered: HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "Success! Sleeping 60s..."
+              sleep 60
+            else
+              echo "Failed to list configmaps. Exiting."
+              exit 1
+            fi
+          done

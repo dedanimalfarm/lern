@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-attach-demo
+  labels:
+    app: multi-attach-demo
+spec:
+  replicas: 1
+  # Recreate обязателен для RWO-тома: при RollingUpdate новый под не может
+  # быть размещён, пока живёт старый (anti-affinity старого пода блокирует
+  # его узел, а nodeAffinity локального PV — все остальные) -> deadlock.
+  # Recreate сначала убивает старый под (освобождая том и узел) и только
+  # потом создаёт новый.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: multi-attach-demo
+  template:
+    metadata:
+      labels:
+        app: multi-attach-demo
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: shared-data
