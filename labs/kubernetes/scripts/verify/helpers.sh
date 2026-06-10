@@ -32,7 +32,9 @@ require_deployment_ready() {
 require_statefulset_ready() {
   local ns="$1"
   local name="$2"
+  local timeout="${3:-120s}"
   kubectl -n "$ns" get sts "$name" >/dev/null 2>&1 || fail "statefulset/$name not found in ns/$ns"
+  kubectl -n "$ns" rollout status sts/"$name" --timeout="$timeout" >/dev/null || fail "statefulset/$name not ready"
   local ready
   ready=$(kubectl -n "$ns" get sts "$name" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
   [[ "${ready:-0}" -ge 1 ]] || fail "statefulset/$name has no ready replicas"

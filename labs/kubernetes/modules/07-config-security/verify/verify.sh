@@ -7,6 +7,9 @@ source "$ROOT_DIR/scripts/verify/helpers.sh"
 need_bin kubectl
 require_namespace lab
 require_resource lab sa pod-reader
+# RBAC-кэш авторизатора в apiserver обновляется асинхронно: auth can-i сразу
+# после применения Role/RoleBinding может ответить "no" на свежие права.
+sleep 2
 
 can_get=$(kubectl -n lab auth can-i get pods --as=system:serviceaccount:lab:pod-reader || true)
 [[ "$can_get" == "yes" ]] || fail "serviceaccount pod-reader cannot get pods"
