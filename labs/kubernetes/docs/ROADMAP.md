@@ -84,7 +84,7 @@ progressive delivery, backup/DR. Это и есть план ниже.
 |---|:---:|--------------|----------|
 | 26 | [ ] | <span style="color:red">**backup-dr**</span> | Velero (backup/restore), etcd snapshot/restore |
 | 27 | [ ] | <span style="color:red">**upgrades-lifecycle**</span> | cluster/node upgrades, surge, Cluster API |
-| 28 | [ ] | <span style="color:red">**cost-multitenancy**</span> | FinOps, spot/preemptible, hierarchical namespaces, vcluster |
+| 28 | [x] | [28-cost-multitenancy](../modules/28-cost-multitenancy) ✅ ГОТОВ | HNC (иерархия ns, propagation), vcluster 0.34 (hard multi-tenancy, host-квота), FinOps showback/rightsizing на PromQL |
 
 ## Уровень 9 — Современные API и Observability v2
 

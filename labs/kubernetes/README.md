@@ -47,6 +47,7 @@ kubectl get nodes -o wide
 23. [23-gateway-api](modules/23-gateway-api) — Gateway API (преемник Ingress: HTTPRoute, traffic splitting, TLS)
 24. [24-progressive-delivery](modules/24-progressive-delivery) — Progressive Delivery (Canary с Argo Rollouts)
 25. [25-gitops-at-scale](modules/25-gitops-at-scale) — GitOps на масштабе (Kustomize overlays, ApplicationSet, multi-env)
+28. [28-cost-multitenancy](modules/28-cost-multitenancy) — Multi-tenancy и стоимость (HNC, vcluster, FinOps/showback)
 29. [29-pod-lifecycle-v2](modules/29-pod-lifecycle-v2) — Жизненный цикл пода v2 (native sidecars, scheduling gates, in-place resize)
 30. [30-tracing-otel](modules/30-tracing-otel) — Распределённый трейсинг (OpenTelemetry + Tempo, TraceQL, корреляция с Loki)
 

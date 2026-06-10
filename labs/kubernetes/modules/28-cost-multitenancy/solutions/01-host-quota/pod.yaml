@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: greedy-app
+spec:
+  containers:
+  - name: app
+    image: nginx:1.27-alpine
+    # Влезаем в ОСТАТОК host-квоты ns lab: vcluster (limits cpu 1) + его
+    # coredns (200m) уже забронировали 1.2 из 2 CPU лимитов. Прежние 1500m
+    # не помещались; 300m — помещаются.
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 300m
+        memory: 128Mi

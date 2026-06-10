@@ -1,0 +1,17 @@
+# Применяется ВНУТРЬ vcluster (см. README сценария):
+#   kubectl --kubeconfig vcluster.yaml apply -f pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: greedy-app
+spec:
+  containers:
+  - name: app
+    image: nginx:1.27-alpine
+    resources:
+      requests:
+        cpu: 500m
+        memory: 256Mi
+      limits:
+        cpu: "1500m"
+        memory: 512Mi

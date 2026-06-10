@@ -1,0 +1,28 @@
+# Values для vendored-рендера manifests/01-vcluster.yaml (см. шапку манифеста).
+controlPlane:
+  statefulSet:
+    image:
+      repository: loft-sh/vcluster-oss
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+        ephemeral-storage: 400Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+        ephemeral-storage: 8Gi
+    persistence:
+      volumeClaim:
+        size: 2Gi
+  # Дефолтный coredns внутри vcluster несёт limits.cpu=1 — синхронизированный
+  # в host под съедал бы половину limits.cpu квоты lab (2). Ужимаем.
+  coredns:
+    deployment:
+      resources:
+        requests:
+          cpu: 20m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 170Mi
