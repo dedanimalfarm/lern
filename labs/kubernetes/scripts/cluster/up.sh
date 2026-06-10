@@ -5,8 +5,11 @@
 # Kubespray переиграет роли без разрушения (но потратит ~15 мин).
 #
 # Использование:
-#   ./up.sh             # кластер + bootstrap (ns, квоты, metrics-server)
+#   ./up.sh             # кластер + bootstrap (ns, квоты, metrics-server, storage)
 #   ./up.sh --stacks    # + стеки наблюдаемости (kube-prometheus-stack, Loki)
+#   ./up.sh --addons    # --stacks + ВСЕ persistent-аддоны лабы (ingress-nginx,
+#                       #   Argo CD, cert-manager, sealed-secrets, ESO, VSO+Vault,
+#                       #   Envoy Gateway) — полное восстановление стенда
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -67,6 +70,11 @@ echo "=== [5/6] Bootstrap лабы ==="
 bash "$ROOT_DIR/scripts/bootstrap/00-create-namespaces.sh"
 bash "$ROOT_DIR/scripts/bootstrap/01-apply-quotas.sh"
 bash "$ROOT_DIR/scripts/bootstrap/02-install-metrics-server.sh"
+# Storage обязателен в базовом наборе: без default-StorageClass любой PVC без
+# storageClassName виснет в Pending (модули 03/05/21 и др.). Скрипт не только
+# ставит local-path, но и вешает аннотацию is-default-class — установка «голым
+# манифестом» её НЕ содержит (на этом уже горели: baseline-QA m05 FAIL).
+bash "$ROOT_DIR/scripts/bootstrap/05-install-storage.sh"
 
 echo "=== [6/6] Авто-стоп VM (экономия) ==="
 # Policy lab-autostop — региональный ресурс, переживает destroy VM; привязку
@@ -78,13 +86,24 @@ for n in "${NODE_NAMES[@]}"; do
     || echo "  $n: policy уже привязана или отсутствует (см. docs/ROADMAP/CLAUDE.md)"
 done
 
-if [[ "${1:-}" == "--stacks" ]]; then
+if [[ "${1:-}" == "--stacks" || "${1:-}" == "--addons" ]]; then
   echo "=== [extra] Стеки наблюдаемости (модули 17/18) ==="
   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
   helm repo update >/dev/null
   helm upgrade --install kps prometheus-community/kube-prometheus-stack \
     -n monitoring --create-namespace --wait --timeout 10m
   kubectl apply -f "$ROOT_DIR/modules/18-logs-tracing/manifests/"
+fi
+
+if [[ "${1:-}" == "--addons" ]]; then
+  echo "=== [extra] Persistent-аддоны лабы ==="
+  # Порядок не критичен, но Argo CD дольше всех раскатывается — первым.
+  # Без этих аддонов модули 09/16/22/23/25 и capstone падают в QA.
+  for s in 06-install-argocd.sh 03-install-ingress.sh 07-install-cert-manager.sh \
+           08-install-sealed-secrets.sh 09-install-external-secrets.sh \
+           10-install-vault-secrets-operator.sh 11-install-gateway-api.sh; do
+    bash "$ROOT_DIR/scripts/bootstrap/$s"
+  done
 fi
 
 echo

@@ -10,8 +10,10 @@
   inventory: `/root/kubespray/inventory/labcluster/`.
 - `export KUBECONFIG=/root/.kube/kubespray.conf` — для ВСЕХ kubectl-команд.
 - Жизненный цикл — только через `scripts/cluster/`:
-  `up.sh [--stacks]` (полный подъём ~25 мин), `start.sh` (после остановки;
-  сам обновляет IP в state/inventory/kubeconfig), `stop.sh`, `down.sh`.
+  `up.sh [--stacks|--addons]` (полный подъём ~25 мин; `--addons` =
+  + ВСЕ persistent-аддоны — для полного восстановления стенда), `start.sh`
+  (после остановки; сам обновляет IP в state/inventory/kubeconfig),
+  `stop.sh`, `down.sh`.
 - VM сами стопятся в 22:00 (+04) — resource policy `lab-autostop`.
   После любого stop/start внешние IP МЕНЯЮТСЯ → поднимать только `start.sh`.
 - Стеки наблюдаемости: kube-prometheus-stack `kps` в ns `monitoring` (helm),
