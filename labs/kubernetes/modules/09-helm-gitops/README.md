@@ -13,10 +13,10 @@
   - [Теория для изучения перед частью](#----)
   - [2.1 Application и AppProject](#21-application--appproject)
   - [2.2 Реальный прогон с Argo CD](#22----argo-cd)
-- [Часть 4: Troubleshooting](#-4-troubleshooting)
+- [Часть 3: Troubleshooting](#-3-troubleshooting)
   - [Системная методология (по двум осям статуса)](#-----)
   - [Инцидент 1: Argo CD не синхронизирует — неверный `path`](#-1-argo-cd-----path)
-- [Часть 5: Управление секретами (SOPS + Helm Secrets)](#-5----sops--helm-secrets)
+- [Часть 4: Управление секретами (SOPS + Helm Secrets)](#-4----sops--helm-secrets)
 - [Проверка модуля](#-)
 - [Финальная карта ресурсов модуля](#---)
 - [Теоретические вопросы (итоговые)](#--)
@@ -340,7 +340,7 @@ kubectl -n lab get deploy demo-app
 
 ---
 
-## Часть 4: Troubleshooting
+## Часть 3: Troubleshooting
 
 ### Системная методология (по двум осям статуса)
 
@@ -407,7 +407,7 @@ kubectl apply -f solutions/01-argocd-path/app.yaml   # path -> .../charts/demo-a
 
 ---
 
-## Часть 5: Управление секретами (SOPS + Helm Secrets)
+## Часть 4: Управление секретами (SOPS + Helm Secrets)
 
 GitOps требует хранения всех манифестов в Git, но хранить секреты в открытом виде или в Base64 (как в обычных `Secret`) небезопасно. Решение — шифровать секреты перед коммитом и расшифровывать их прямо перед деплоем. Одно из популярных решений для этого — SOPS (Secrets OPerationS) от Mozilla совместно с плагином Helm Secrets.
 
