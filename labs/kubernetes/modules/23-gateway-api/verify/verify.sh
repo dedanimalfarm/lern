@@ -34,4 +34,28 @@ else
   warn "HTTPRoute traffic split weights are not 90/10 (found v1=$WEIGHT_V1, v2=$WEIGHT_V2)"
 fi
 
+# Verify actual routing via curl
+NODE_PORT=$(kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gateway-namespace=lab-gateway,gateway.envoyproxy.io/owning-gateway-name=demo-gateway -o jsonpath='{.items[0].spec.ports[0].nodePort}' 2>/dev/null || true)
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}' || true)
+
+if [[ -n "$NODE_PORT" && -n "$NODE_IP" ]]; then
+  # Try to reach the endpoint, allowing some time for Envoy to configure
+  SUCCESS=false
+  for i in {1..10}; do
+    RES=$(curl -s http://$NODE_IP:$NODE_PORT/store || true)
+    if echo "$RES" | grep -q "Store V"; then
+      SUCCESS=true
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$SUCCESS" == "true" ]]; then
+    ok "HTTPRoute is successfully routing traffic to /store"
+  else
+    fail "HTTPRoute failed to route traffic to /store (Got: $RES)"
+  fi
+else
+  warn "Could not determine NodePort or NodeIP to verify HTTPRoute traffic"
+fi
+
 ok "module 23 verified"
