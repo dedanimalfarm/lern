@@ -1,0 +1,6 @@
+{
+  // экспорт из CRM, сборка 2026-06-10
+  "title": 'Импорт из CRM: не работает выгрузка',
+  "priority": "high",
+  "requester": "crm-bot@corp.example",
+}

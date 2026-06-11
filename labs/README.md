@@ -32,6 +32,13 @@
 | [`bash`](./bash/) | Bash: циклы и условия (+ solutions) | 2 |
 | [`git`](./git/) | Git: ветвление, серверная часть, инструменты | 3 |
 
+### API и интеграции
+
+| Папка | О чём | Кол-во |
+|-------|-------|--------|
+| [`api`](./api/) | Работа с API для L2-поддержки: HTTP/curl, JSON/jq, REST и чтение документации (OpenAPI), Postman, аутентификация (API key/Basic/JWT), вебхуки и боевые инциденты, capstone на Jira Service Management Cloud; свой учебный Helpdesk API (Python stdlib) с fault-injection | 7 модулей |
+| [`devops-junior-screening`](./devops-junior-screening/) | Учебный сборник по вакансии Junior DevOps: Linux, сети, Ansible, observability, secrets, backup, WireGuard + финальное тестовое | 13 + FINAL-TEST |
+
 ## Откуда что приехало
 
 | Новое расположение | Прежнее расположение |

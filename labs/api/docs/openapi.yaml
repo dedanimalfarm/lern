@@ -1,0 +1,475 @@
+# Спецификация Helpdesk API (учебный стенд курса labs/api).
+# Это «техническая документация», которую студент учится ЧИТАТЬ в модуле 03:
+# все ответы на вопросы заданий находятся в этом файле.
+# Сервер отдаёт этот же файл по GET /openapi.yaml.
+openapi: 3.0.3
+info:
+  title: Helpdesk API
+  version: "1.0"
+  description: |
+    REST API учебной тикет-системы службы поддержки.
+
+    Базовый URL: `http://localhost:8080`
+
+    ## Аутентификация
+    Зависит от режима запуска стенда (`AUTH_MODE`):
+    - `off` — без аутентификации (по умолчанию);
+    - `apikey` — каждый запрос к `/api/v1/*` требует заголовок `X-API-Key`;
+    - `token` — сначала получите токен через `POST /api/v1/auth/token`
+      (HTTP Basic), затем передавайте `Authorization: Bearer <token>`.
+
+    ## Формат ошибок
+    Все ошибки возвращаются единым конвертом:
+    ```json
+    {"error": {"code": "not_found", "message": "...", "details": ...}}
+    ```
+
+    ## Идемпотентность
+    `POST /api/v1/tickets` поддерживает заголовок `Idempotency-Key`:
+    повторный запрос с тем же ключом не создаёт дубль, а возвращает
+    сохранённый первый ответ (с заголовком `Idempotency-Replayed: true`).
+
+    ## Вебхуки
+    Если стенд запущен с `WEBHOOK_URL`, система отправляет POST-события
+    `ticket.created`, `ticket.status_changed`, `ticket.deleted` на указанный
+    URL. Тело события: `{"event": "...", "ticket": {...}, "sent_at": "..."}`.
+
+servers:
+  - url: http://localhost:8080
+
+tags:
+  - name: service
+    description: Служебные эндпоинты (health, информация об API)
+  - name: auth
+    description: Получение токена доступа
+  - name: tickets
+    description: Тикеты службы поддержки
+
+paths:
+  /health:
+    get:
+      tags: [service]
+      summary: Проверка живости сервиса
+      description: >
+        Не требует аутентификации и не подвержен rate limit —
+        предназначен для мониторинга и балансировщиков.
+      responses:
+        "200":
+          description: Сервис работает
+          content:
+            application/json:
+              example: {"status": "ok", "uptime_s": 120}
+
+  /api/v1/auth/token:
+    post:
+      tags: [auth]
+      summary: Обменять логин/пароль на Bearer-токен
+      description: |
+        Работает только при `AUTH_MODE=token`. Кредиты передаются
+        в заголовке `Authorization: Basic base64(login:password)`.
+
+        Учебные пользователи:
+        | login | password | role |
+        |---|---|---|
+        | support | support123 | agent |
+        | admin | admin123 | admin |
+
+        Роль `agent` может читать, создавать и изменять тикеты;
+        удаление (`DELETE`) доступно только роли `admin`.
+      security:
+        - basicAuth: []
+      responses:
+        "200":
+          description: Токен выдан
+          content:
+            application/json:
+              example:
+                access_token: "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.…"
+                token_type: Bearer
+                expires_in: 3600
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/whoami:
+    get:
+      tags: [auth]
+      summary: Кто я с точки зрения API
+      description: Возвращает субъект и роль текущей аутентификации.
+      responses:
+        "200":
+          description: Информация о текущем клиенте
+          content:
+            application/json:
+              example: {"sub": "support", "role": "agent", "auth_mode": "token"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/tickets:
+    get:
+      tags: [tickets]
+      summary: Список тикетов (с фильтрами и пагинацией)
+      parameters:
+        - name: status
+          in: query
+          description: Фильтр по статусу
+          schema:
+            type: string
+            enum: [open, in_progress, resolved, closed]
+        - name: priority
+          in: query
+          description: Фильтр по приоритету
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: q
+          in: query
+          description: Поиск по подстроке в title (регистронезависимый)
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Номер страницы, начиная с 1
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: per_page
+          in: query
+          description: Размер страницы
+          schema:
+            type: integer
+            default: 5
+            minimum: 1
+            maximum: 50
+      responses:
+        "200":
+          description: >
+            Страница списка. Общее число подходящих тикетов дублируется
+            в заголовке ответа `X-Total-Count`.
+          headers:
+            X-Total-Count:
+              description: Сколько всего тикетов подходит под фильтры
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [tickets]
+      summary: Создать тикет
+      description: |
+        Требует `Content-Type: application/json`, иначе — `415`.
+        Поле `status` при создании задаётся сервером (всегда `open`)
+        и в теле запроса не допускается.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: >
+            Любая уникальная строка. Повтор запроса с тем же ключом
+            вернёт первый результат вместо создания дубля.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketCreate"
+            example:
+              title: "Не работает второй монитор"
+              priority: high
+              requester: "user@corp.example"
+      responses:
+        "201":
+          description: Тикет создан
+          headers:
+            Location:
+              description: Путь к созданному тикету
+              schema:
+                type: string
+                example: /api/v1/tickets/9
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "400":
+          $ref: "#/components/responses/BadJson"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/tickets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [tickets]
+      summary: Получить тикет по id
+      responses:
+        "200":
+          description: Тикет
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [tickets]
+      summary: Частично изменить тикет
+      description: >
+        Меняет ТОЛЬКО присланные поля. Допустимы: title, description,
+        priority, status, assignee. Это безопасный способ, например,
+        перевести тикет в работу: `{"status": "in_progress"}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example: {"status": "in_progress", "assignee": "support"}
+      responses:
+        "200":
+          description: Обновлённый тикет
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    put:
+      tags: [tickets]
+      summary: Полностью заменить тикет
+      description: |
+        **Внимание:** PUT — это полная замена представления. Все поля,
+        не присланные в теле, сбрасываются к значениям по умолчанию
+        (description → "", priority → medium, status → open,
+        assignee → null, requester → null). Если вам нужно поменять
+        одно поле — используйте PATCH.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketReplace"
+      responses:
+        "200":
+          description: Заменённый тикет
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [tickets]
+      summary: Удалить тикет
+      description: >
+        В режиме `AUTH_MODE=token` требует роль `admin`;
+        роль `agent` получит `403 Forbidden`.
+      responses:
+        "204":
+          description: Удалено, тело ответа пустое
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "VPN не подключается из дома"
+        description:
+          type: string
+          example: ""
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed]
+          example: open
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+          example: high
+        requester:
+          type: string
+          nullable: true
+          description: E-mail заявителя
+          example: "anna.petrova@corp.example"
+        assignee:
+          type: string
+          nullable: true
+          description: Логин назначенного агента поддержки
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-06-01T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-06-01T09:00:00Z"
+
+    TicketCreate:
+      type: object
+      required: [title]
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+        description:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+          default: medium
+        requester:
+          type: string
+          description: E-mail заявителя (строка с @)
+
+    TicketReplace:
+      type: object
+      required: [title]
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+        description:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed]
+        assignee:
+          type: string
+          nullable: true
+        requester:
+          type: string
+
+    TicketPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ticket"
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 5
+        total:
+          type: integer
+          example: 8
+        pages:
+          type: integer
+          example: 2
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: not_found
+            message:
+              type: string
+            details:
+              description: Список ошибок валидации или подробности парсера
+              nullable: true
+
+  responses:
+    Unauthorized:
+      description: Аутентификация отсутствует или не принята (401)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: {code: missing_token, message: "нужен заголовок Authorization: Bearer <token>; токен выдаёт POST /api/v1/auth/token"}
+    Forbidden:
+      description: Аутентификация принята, но прав не хватает (403)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: {code: forbidden, message: "роль 'agent' не может удалять тикеты (нужна роль admin)"}
+    NotFound:
+      description: Ресурс не существует (404)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: {code: not_found, message: "тикет 999 не существует"}
+    BadJson:
+      description: Тело запроса — не валидный JSON (400)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: invalid_json
+              message: "тело запроса — не валидный JSON"
+              details: {position: "line 1 column 2", parser: "Expecting property name enclosed in double quotes"}
+    UnsupportedMediaType:
+      description: Неверный или отсутствующий Content-Type (415)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: {code: unsupported_media_type, message: "ожидается Content-Type: application/json, получен: '<нет>'"}
+    ValidationFailed:
+      description: JSON разобран, но данные не прошли валидацию (422)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: validation_failed
+              message: "тело запроса не прошло валидацию"
+              details:
+                - {field: title, message: "обязательное поле"}
+                - {field: priority, message: "допустимые значения: low, medium, high, critical"}
