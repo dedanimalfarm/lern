@@ -12,10 +12,19 @@ if ! kubectl get gatewayclass eg >/dev/null 2>&1; then
   fail "GatewayClass 'eg' is missing. Did you run the bootstrap script?"
 fi
 
-# Check Gateway
+# Check Gateway: ждём Programmed по-настоящему (Envoy-проксе нужно
+# отскейлиться и принять конфиг; на нагруженном стенде это 30-120с).
+# Одноразовый warn здесь приводил к флаки: verify уходил дальше и curl
+# зависал на NodePort, у которого ещё нет бэкендов.
 require_resource lab-gateway gateway demo-gateway
-GW_STATUS=$(kubectl get gateway demo-gateway -n lab-gateway -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}')
-[[ "$GW_STATUS" == "True" ]] || warn "Gateway demo-gateway is not yet Programmed"
+GW_STATUS=""
+for _ in $(seq 1 36); do
+  GW_STATUS=$(kubectl get gateway demo-gateway -n lab-gateway -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}' 2>/dev/null || true)
+  [[ "$GW_STATUS" == "True" ]] && break
+  sleep 5
+done
+[[ "$GW_STATUS" == "True" ]] || fail "Gateway demo-gateway не стал Programmed за 180с"
+ok "Gateway demo-gateway is Programmed"
 
 # Check HTTPRoute
 require_resource lab-gateway httproute store-route
@@ -34,28 +43,29 @@ else
   warn "HTTPRoute traffic split weights are not 90/10 (found v1=$WEIGHT_V1, v2=$WEIGHT_V2)"
 fi
 
-# Verify actual routing via curl
-NODE_PORT=$(kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gateway-namespace=lab-gateway,gateway.envoyproxy.io/owning-gateway-name=demo-gateway -o jsonpath='{.items[0].spec.ports[0].nodePort}' 2>/dev/null || true)
-NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}' || true)
+# Verify actual routing: curl ИЗНУТРИ кластера на ClusterIP Envoy-сервиса.
+# NodePort с внутренними GCP-IP отсюда недостижим (рабочая машина не в VPC) —
+# хостовый curl давал ложные FAIL/зависания; in-cluster проверка детерминирована.
+EG_SVC_IP=$(kubectl get svc -n envoy-gateway-system \
+  -l gateway.envoyproxy.io/owning-gateway-namespace=lab-gateway,gateway.envoyproxy.io/owning-gateway-name=demo-gateway \
+  -o jsonpath='{.items[0].spec.clusterIP}' 2>/dev/null || true)
 
-if [[ -n "$NODE_PORT" && -n "$NODE_IP" ]]; then
-  # Try to reach the endpoint, allowing some time for Envoy to configure
-  SUCCESS=false
-  for _ in {1..10}; do
-    RES=$(curl -s "http://${NODE_IP}:${NODE_PORT}/store" || true)
-    if echo "$RES" | grep -q "Store V"; then
-      SUCCESS=true
-      break
-    fi
-    sleep 2
+if [[ -n "$EG_SVC_IP" ]]; then
+  RES=""
+  for _ in {1..12}; do
+    RES=$(kubectl -n lab-gateway run curl-probe-23 --image=curlimages/curl:8.11.1 \
+      --restart=Never --rm -i --quiet --timeout=60s -- -s -m 5 "http://${EG_SVC_IP}/store" 2>/dev/null || true)
+    if echo "$RES" | grep -q "Store V"; then break; fi
+    kubectl -n lab-gateway delete pod curl-probe-23 --ignore-not-found >/dev/null 2>&1
+    sleep 5
   done
-  if [[ "$SUCCESS" == "true" ]]; then
-    ok "HTTPRoute is successfully routing traffic to /store"
+  if echo "$RES" | grep -q "Store V"; then
+    ok "HTTPRoute is successfully routing traffic to /store (in-cluster)"
   else
     fail "HTTPRoute failed to route traffic to /store (Got: $RES)"
   fi
 else
-  warn "Could not determine NodePort or NodeIP to verify HTTPRoute traffic"
+  warn "Could not determine Envoy service ClusterIP to verify HTTPRoute traffic"
 fi
 
 ok "module 23 verified"
