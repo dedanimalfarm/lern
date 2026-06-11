@@ -14,6 +14,7 @@ setup_bridge() {
         
         # Настройка NAT для выхода контейнеров в интернет
         sysctl -w net.ipv4.ip_forward=1 >/dev/null
+        sysctl -w net.ipv4.conf.all.route_localnet=1 >/dev/null
         DEFAULT_IFACE=$(ip route show default | awk '/default/ {print $5}' | head -1)
         iptables -t nat -A POSTROUTING -s $SUBNET.0/24 -o $DEFAULT_IFACE -j MASQUERADE
         echo 2 > $IP_FILE
@@ -59,6 +60,7 @@ run_container() {
         
         # Для доступности через localhost (loopback routing)
         iptables -t nat -A OUTPUT -o lo -p tcp --dport $HOST_PORT -j DNAT --to-destination $CONT_IP:$CONT_PORT
+        iptables -t nat -A POSTROUTING -s 127.0.0.1 -d $CONT_IP -p tcp --dport $CONT_PORT -j MASQUERADE
     fi
     
     # Запускаем payload в фоне: простой веб-сервер
