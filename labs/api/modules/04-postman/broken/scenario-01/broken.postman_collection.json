@@ -1,0 +1,77 @@
+{
+  "info": {
+    "_postman_id": "c333e48b-0728-49fd-8b39-90686c008230",
+    "name": "Сменный smoke-набор (сломан)",
+    "description": "Коллекция от предыдущей смены: «после переезда API все тесты красные». Импортируйте, запустите Runner'ом, почините оба запроса до зелёного состояния и экспортируйте в /tmp/api-lab/m04-fixed-collection.json.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Список тикетов",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('статус 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('в ответе массив items', function () {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.items).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/ticket?per_page=50",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "ticket"],
+          "query": [
+            {"key": "per_page", "value": "50"}
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Создать тикет",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('статус 201 Created', function () {",
+              "    pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Smoke: создание заявки\",\n  \"priority\": \"low\"\n}",
+          "options": {
+            "raw": {"language": "text"}
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/tickets",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "tickets"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

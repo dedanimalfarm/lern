@@ -1,0 +1,94 @@
+{
+  "info": {
+    "_postman_id": "c333e48b-0728-49fd-8b39-90686c008230",
+    "name": "Сменный smoke-набор (починен)",
+    "description": "Эталонное решение broken/scenario-01: путь /api/v1/tickets (множественное число) и Body raw->JSON (Content-Type: application/json).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Список тикетов",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('статус 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('в ответе массив items', function () {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.items).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/tickets?per_page=50",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "tickets"
+          ],
+          "query": [
+            {
+              "key": "per_page",
+              "value": "50"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Создать тикет",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('статус 201 Created', function () {",
+              "    pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Smoke: создание заявки\",\n  \"priority\": \"low\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/tickets",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "tickets"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
