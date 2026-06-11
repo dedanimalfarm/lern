@@ -14,7 +14,7 @@ kubectl -n lab delete job telemetrygen-direct telemetrygen-via-collector \
 # (datasource-секреты в monitoring) он удалить не может, добиваем здесь.
 kubectl -n monitoring delete secret tempo-datasource --ignore-not-found=true 2>/dev/null
 
-M18_DS="$MODULE_DIR/../18-logs-tracing/manifests/datasource.yaml"
+M18_DS="$MODULE_DIR/../18-centralized-logging/manifests/datasource.yaml"
 if [[ -f "$M18_DS" ]] && kubectl get ns monitoring >/dev/null 2>&1; then
   kubectl apply -f "$M18_DS" >/dev/null 2>&1 \
     && echo "cleanup: исходный loki-datasource (модуль 18) восстановлен"

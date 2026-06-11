@@ -16,6 +16,12 @@ data:
     - job_name: kubernetes-pods
       kubernetes_sd_configs:
       - role: pod
+      # containerd пишет логи в CRI-формате: "<ts> <stdout|stderr> <F|P> <строка>".
+      # Без stage `cri` префикс попадает в тело лога в Loki, и парсеры LogQL
+      # (| json, | logfmt, | pattern) ломаются о него — строка не начинается
+      # с JSON. Stage отрезает префикс и кладёт stream в метку.
+      pipeline_stages:
+      - cri: {}
       relabel_configs:
       # __host__ сверяется с HOSTNAME promtail-пода: без env HOSTNAME=spec.nodeName
       # (см. DaemonSet ниже) имя пода != имя ноды и ВСЕ targets отбрасываются.

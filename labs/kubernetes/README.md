@@ -39,7 +39,7 @@ kubectl get nodes -o wide
 15. [15-network-policy-enforced](modules/15-network-policy-enforced) — NetworkPolicy с реальным enforcement (микросегментация)
 16. [16-secrets-management](modules/16-secrets-management) — Управление секретами (encryption-at-rest, Sealed Secrets, ESO, Vault dynamic)
 17. [17-metrics-alerting](modules/17-metrics-alerting) — Метрики и алертинг (Prometheus + Grafana + Alertmanager)
-18. [18-logs-tracing](modules/18-logs-tracing) — Централизованное логирование (Loki + Promtail)
+18. [18-centralized-logging](modules/18-centralized-logging) — Централизованное логирование (Loki + Promtail)
 19. [19-crd-operators](modules/19-crd-operators) — CRD и операторы (расширение Kubernetes API)
 20. [20-batch-workflows](modules/20-batch-workflows) — Батч-нагрузки и workflows (Job parallelism, Indexed, podFailurePolicy, CronJob)
 21. [21-stateful-systems](modules/21-stateful-systems) — Базы данных и Stateful-системы (CloudNativePG)

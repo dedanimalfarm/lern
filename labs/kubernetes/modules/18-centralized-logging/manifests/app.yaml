@@ -1,0 +1,92 @@
+# Два генератора логов для практики LogQL:
+# - log-generator: классические текстовые строки "<ts> LEVEL message"
+#   (line-фильтры, pattern-парсер);
+# - payment-api: структурированные JSON-логи c level/status/duration_ms
+#   (json-парсер, label-фильтры, unwrap-метрики).
+# Оба — busybox c awk: самодостаточно, без внешних образов-генераторов
+# (chentex/random-logger жил только с тегом :latest и не развивается).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-generator
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: log-generator
+  template:
+    metadata:
+      labels:
+        app: log-generator
+    spec:
+      containers:
+      - name: generator
+        image: busybox:1.36
+        command: ["/bin/sh", "-c"]
+        # awk: srand() один раз, дальше rand() выбирает уровень с весами
+        # 70% INFO / 15% WARN / 10% ERROR / 5% DEBUG; system("sleep") даёт
+        # ~2 строки в секунду — достаточно для rate() и не заливает Loki.
+        args:
+        - |
+          awk 'BEGIN {
+            srand();
+            split("user login,cache refreshed,task scheduled,payment queued,gc finished", msgs, ",");
+            while (1) {
+              r = rand();
+              lvl = (r < 0.70) ? "INFO" : (r < 0.85) ? "WARN" : (r < 0.95) ? "ERROR" : "DEBUG";
+              cmd = "date -Iseconds"; cmd | getline ts; close(cmd);
+              printf("%s %s %s id=%d\n", ts, lvl, msgs[int(rand()*5)+1], int(rand()*9000)+1000);
+              system("sleep 0.5");
+            }
+          }'
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-api
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-api
+  template:
+    metadata:
+      labels:
+        app: payment-api
+    spec:
+      containers:
+      - name: api
+        image: busybox:1.36
+        command: ["/bin/sh", "-c"]
+        # JSON-логи «как у настоящего сервиса»: 70% status=200, 15% 404,
+        # 15% 500 (level=error); duration_ms 50-500 — поле для unwrap.
+        args:
+        - |
+          awk 'BEGIN {
+            srand();
+            split("/api/pay,/api/refund,/api/balance", paths, ",");
+            while (1) {
+              r = rand();
+              status = (r < 0.70) ? 200 : (r < 0.85) ? 404 : 500;
+              lvl = (status == 500) ? "error" : "info";
+              dur = int(rand()*450) + 50;
+              printf("{\"level\":\"%s\",\"status\":%d,\"path\":\"%s\",\"duration_ms\":%d,\"msg\":\"request handled\"}\n", lvl, status, paths[int(rand()*3)+1], dur);
+              system("sleep 0.7");
+            }
+          }'
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi

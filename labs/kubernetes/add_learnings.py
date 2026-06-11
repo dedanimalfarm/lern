@@ -20,7 +20,7 @@ learnings = {
     "15-network-policy-enforced": "- Реализации микросегментации через NetworkPolicy\n- Концепции Zero-Trust в кластере (default-deny)\n- Разрешению специфичного Ingress/Egress трафика",
     "16-secrets-management": "- Шифрованию секретов в etcd (encryption-at-rest)\n- Использованию Sealed Secrets для хранения секретов в Git\n- Интеграции с внешними хранилищами через External Secrets Operator",
     "17-metrics-alerting": "- Развёртыванию kube-prometheus-stack\n- Сбору метрик приложений через ServiceMonitor\n- Настройке правил алертинга в Prometheus/Alertmanager",
-    "18-logs-tracing": "- Развёртыванию стека логирования Loki + Promtail\n- Работе с LogQL для запросов по логам\n- Диагностике конфигурации агентов сбора логов",
+    "18-centralized-logging": "- Развёртыванию стека логирования Loki + Promtail\n- Работе с LogQL для запросов по логам\n- Диагностике конфигурации агентов сбора логов",
     "19-crd-operators": "- Расширению Kubernetes API через CustomResourceDefinition\n- Пониманию паттерна Operator/Controller\n- Управлению кастомными ресурсами через kubectl",
     "20-batch-workflows": "- Запуску параллельных и индексированных (Indexed) Job\n- Настройке политик обработки ошибок (podFailurePolicy)\n- Периодическим бэкапам и батч-задачам через CronJob",
     "21-stateful-systems": "- Управлению базами данных с помощью операторов (CloudNativePG)\n- Разнице между оператором и ручным StatefulSet\n- Механизмам Failover и High Availability в БД на Kubernetes",

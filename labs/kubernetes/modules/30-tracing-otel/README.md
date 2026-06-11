@@ -492,7 +492,7 @@ kubectl -n monitoring port-forward svc/kps-grafana 3909:80 &
 kubectl delete -k manifests/ --ignore-not-found
 kubectl -n lab delete job telemetrygen-direct telemetrygen-via-collector --ignore-not-found
 # Вернуть исходный datasource Loki модуля 18 (наш v2 удалился вместе с manifests):
-kubectl apply -f ../18-logs-tracing/manifests/datasource.yaml
+kubectl apply -f ../18-centralized-logging/manifests/datasource.yaml
 ```
 
 > Развитие темы: метрики из спанов (Tempo metrics-generator + TraceQL metrics,

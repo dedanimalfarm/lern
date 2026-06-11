@@ -64,5 +64,5 @@ kubectl -n lab delete pods -l app=promtail
 
 Очистите ресурсы после завершения:
 ```bash
-../../scripts/clean/clean-module.sh modules/18-logs-tracing
+../../scripts/clean/clean-module.sh modules/18-centralized-logging
 ```

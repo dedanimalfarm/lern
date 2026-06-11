@@ -92,7 +92,7 @@ if [[ "${1:-}" == "--stacks" || "${1:-}" == "--addons" ]]; then
   helm repo update >/dev/null
   helm upgrade --install kps prometheus-community/kube-prometheus-stack \
     -n monitoring --create-namespace --wait --timeout 10m
-  kubectl apply -f "$ROOT_DIR/modules/18-logs-tracing/manifests/"
+  kubectl apply -f "$ROOT_DIR/modules/18-centralized-logging/manifests/"
 fi
 
 if [[ "${1:-}" == "--addons" ]]; then
