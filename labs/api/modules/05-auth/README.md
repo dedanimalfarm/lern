@@ -333,9 +333,14 @@ curl -s -o /dev/null -w '%{http_code}\n' -X DELETE -H "Authorization: Bearer $AD
 ---
 
 ```bash
+# Токен берём ДО включения лимита: POST /api/v1/auth/token — тоже /api/v1/*
+# и съел бы один из 5 слотов окна (классические грабли: «почему 200 только
+# четыре?»). Рестарт стенда обнулит окно, а токен останется валидным —
+# подпись и TTL от рестарта не зависят.
+TOKEN=$(curl -s -X POST -u support:support123 http://localhost:8080/api/v1/auth/token | jq -r .access_token)
+
 # Стенд с лимитом 5 запросов / 10 секунд
 AUTH_MODE=token RATE_LIMIT=5 scripts/api.sh up
-TOKEN=$(curl -s -X POST -u support:support123 http://localhost:8080/api/v1/auth/token | jq -r .access_token)
 
 for i in $(seq 1 7); do
   printf '%s ' "$(curl -s -o /dev/null -w '%{http_code}' \
