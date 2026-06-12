@@ -1,3 +1,10 @@
+-- Создание БД (если не существует)
+SELECT 'CREATE DATABASE shop_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'shop_db')\gexec
+\c shop_db
+
+-- Очистка (для идемпотентности)
+DROP TABLE IF EXISTS order_items, orders, products, users CASCADE;
+
 -- Структура таблиц
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,

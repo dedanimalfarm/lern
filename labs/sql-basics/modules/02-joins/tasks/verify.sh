@@ -1,4 +1,32 @@
 #!/bin/bash
-if [ ! -f "solution.sql" ]; then echo "Файл solution.sql не найден!"; exit 1; fi
-PGPASSWORD=secretpassword psql -h 127.0.0.1 -U postgres -d shop_db -f solution.sql > /dev/null 2>&1
-if [ $? -eq 0 ]; then echo "PASS: Запросы выполнились без ошибок!"; else echo "FAIL: В запросах синтаксическая ошибка."; fi
+# Проверка решений модуля 02: JOINs
+SOLUTION_FILE="solution.sql"
+DB_NAME="shop_db"
+
+if [ ! -f "$SOLUTION_FILE" ]; then
+    echo "❌ Файл $SOLUTION_FILE не найден!"
+    exit 1
+fi
+
+# Автоопределение метода подключения
+if sudo -u postgres psql -d "$DB_NAME" -c "SELECT 1" > /dev/null 2>&1; then
+    PSQL_CMD="sudo -u postgres psql -d $DB_NAME"
+elif PGPASSWORD=secretpassword psql -h 127.0.0.1 -U postgres -d "$DB_NAME" -c "SELECT 1" > /dev/null 2>&1; then
+    PSQL_CMD="PGPASSWORD=secretpassword psql -h 127.0.0.1 -U postgres -d $DB_NAME"
+else
+    echo "❌ Не удалось подключиться к БД $DB_NAME"
+    exit 1
+fi
+
+echo "🔍 Проверка решений модуля 02: JOINs"
+echo "============================================="
+
+# Проверка синтаксиса через stdin (cd /tmp решает проблему прав на чтение /root для пользователя postgres)
+if eval "(cd /tmp && $PSQL_CMD) < $SOLUTION_FILE" > /dev/null 2>&1; then
+    echo "✅ Все запросы выполнились без ошибок!"
+else
+    echo "❌ В запросах обнаружена синтаксическая ошибка."
+    echo "Подробности:"
+    eval "(cd /tmp && $PSQL_CMD) < $SOLUTION_FILE" 2>&1 | grep -i error
+    exit 1
+fi
