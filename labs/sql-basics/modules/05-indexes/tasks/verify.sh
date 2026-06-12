@@ -22,7 +22,7 @@ echo "🔍 Проверка решений модуля 05: Индексы и о
 echo "============================================="
 
 # Предварительное удаление индексов для обеспечения идемпотентности проверки
-eval "(cd /tmp && $PSQL_CMD -c \"DROP INDEX IF EXISTS idx_products_cat_price, idx_users_reg_date;\")" > /dev/null 2>&1
+eval "(cd /tmp && $PSQL_CMD -c \"DROP INDEX IF EXISTS idx_products_cat_price, idx_orders_cancelled, idx_products_covering, idx_users_reg_date;\")" > /dev/null 2>&1
 
 # Проверка синтаксиса через stdin (cd /tmp решает проблему прав на чтение /root для пользователя postgres)
 if eval "(cd /tmp && $PSQL_CMD -v ON_ERROR_STOP=1) < $SOLUTION_FILE" > /dev/null 2>&1; then
