@@ -65,6 +65,9 @@ spec:
             cpu: 100m
             memory: 256Mi
           limits:
+            # cpu-limit задан явно: иначе LimitRange lab добивает дефолтные
+            # 300m и стек м18 зря выедает квоту ns (мешал м24 — ReplicaFailure).
+            cpu: 200m
             memory: 512Mi
         volumeMounts:
         - name: config

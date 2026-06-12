@@ -89,6 +89,8 @@ spec:
             cpu: 50m
             memory: 64Mi
           limits:
+            # см. аналогичный комментарий в loki.yaml (LimitRange-дефолт 300m)
+            cpu: 100m
             memory: 128Mi
       volumes:
       - name: config
