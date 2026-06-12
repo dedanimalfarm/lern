@@ -12,4 +12,8 @@ WHERE category = 'Электроника' AND price < 100000;
 SELECT * FROM products 
 ORDER BY price DESC 
 LIMIT 3;
+
+-- 4. Пользователи с заполненной датой регистрации (не NULL)
+SELECT name FROM users 
+WHERE registration_date IS NOT NULL;
 ```

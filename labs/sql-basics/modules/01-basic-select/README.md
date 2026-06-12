@@ -50,10 +50,30 @@ WHERE category = 'Электроника'
   AND price BETWEEN 50000 AND 150000;
 ```
 
+### 1. Текстовый поиск с LIKE и ILIKE
 Для поиска по текстовым шаблонам применяется оператор `LIKE`. Знак процента `%` заменяет любое количество символов.
+По умолчанию `LIKE` в PostgreSQL **чувствителен к регистру**. Чтобы искать без учета регистра, используйте оператор `ILIKE`:
+
 ```sql
-SELECT name FROM products WHERE name LIKE 'Ноутбук%';
+-- Найдет 'Product_1', но пропустит 'product_1'
+SELECT name FROM products WHERE name LIKE 'Product%';
+
+-- Найдет 'Product_1', 'product_1', 'PRODUCT_1' и т.д.
+SELECT name FROM products WHERE name ILIKE 'product%';
 ```
+
+### 2. Фильтрация пустых значений (IS NULL)
+Значение `NULL` обозначает отсутствие данных. Сравнить его через `=` нельзя (выражение `column = NULL` всегда вернет ложь/unknown).
+Для поиска пустых или непустых значений используются специальные операторы `IS NULL` и `IS NOT NULL`:
+
+```sql
+-- Найти пользователей, у которых не указана дата регистрации (если такое поле допускает NULL)
+SELECT name FROM users WHERE registration_date IS NULL;
+
+-- Найти всех пользователей с заполненной датой регистрации
+SELECT name FROM users WHERE registration_date IS NOT NULL;
+```
+
 
 ---
 
