@@ -1,0 +1,25 @@
+# «Кто-то поправил адрес Prometheus» — типовая поломка интеграции.
+# Применяется ПОВЕРХ работающего модуля (перезаписывает AnalysisTemplate).
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: lab
+spec:
+  args:
+    - name: app
+  metrics:
+    - name: pods-ready-fraction
+      initialDelay: 20s
+      interval: 15s
+      count: 4
+      failureLimit: 1
+      successCondition: len(result) > 0 && result[0] >= 0.9
+      provider:
+        prometheus:
+          # was: kps-kube-prometheus-stack-prometheus.monitoring.svc:9090
+          address: http://prometheus.monitoring.svc:9090
+          query: >
+            sum(kube_pod_status_ready{namespace="lab", condition="true", pod=~"{{args.app}}-.*"})
+            /
+            count(kube_pod_status_ready{namespace="lab", condition="true", pod=~"{{args.app}}-.*"})

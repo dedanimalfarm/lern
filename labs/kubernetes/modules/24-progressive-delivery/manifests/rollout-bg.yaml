@@ -19,6 +19,17 @@ spec:
         image: argoproj/rollouts-demo:blue
         ports:
         - containerPort: 8080
+        # Явные ресурсы обязательны: ns lab под ResourceQuota (limits.cpu=2),
+        # а LimitRange выдаёт контейнеру без ресурсов 300m limits — 8 подов
+        # двух rollout'ов (плюс canary-surge) в квоту не влезают (ловили
+        # ReplicaFailure вживую).
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
   strategy:
     blueGreen:
       activeService: rollout-active
