@@ -1,0 +1,86 @@
+# QA api-лабораторных (labs/api) — зеркало QA-контракта из labs/api/CLAUDE.md:
+# shellcheck по всем *.sh, json.tool по JSON-артефактам, yaml.safe_load по
+# openapi.yaml. Стенд — чистая стандартная библиотека Python, поэтому в
+# отличие от k8s-labs здесь возможен и живой smoke: поднимаем Helpdesk API
+# прямо в runner и гоняем Postman-коллекцию курса newman'ом.
+name: api-labs-lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'labs/api/**'
+      - '.github/workflows/api-labs-lint.yml'
+  pull_request:
+    paths:
+      - 'labs/api/**'
+      - '.github/workflows/api-labs-lint.yml'
+
+defaults:
+  run:
+    working-directory: labs/api
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: |
+          find . -type f -name '*.sh' -print0 | xargs -0 shellcheck -x
+
+      - name: JSON-артефакты валидны (кроме умышленно сломанного payload)
+        run: |
+          # broken/scenario-01/payload.json модуля 02 ОБЯЗАН быть невалидным —
+          # это учебный артефакт; CI охраняет и его «сломанность».
+          BROKEN=modules/02-json-jq/broken/scenario-01/payload.json
+          find . -type f -name '*.json' ! -path "./$BROKEN" -print0 \
+            | while IFS= read -r -d '' f; do
+                python3 -m json.tool "$f" >/dev/null \
+                  || { echo "INVALID JSON: $f"; exit 1; }
+              done
+          if python3 -m json.tool "$BROKEN" >/dev/null 2>&1; then
+            echo "$BROKEN внезапно стал валидным — сценарий модуля 02 сломан"
+            exit 1
+          fi
+
+      - name: OpenAPI парсится + сервер компилируется
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('docs/openapi.yaml'))"
+          python3 -m py_compile common/server/helpdesk_api.py \
+                                common/server/webhook_sink.py
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Поднять стенд (API + webhook sink)
+        run: |
+          scripts/api.sh up
+          scripts/api.sh sink-up
+
+      - name: Коллекция курса — newman (7 запросов, 16 проверок)
+        run: |
+          npx -y newman@6 run common/postman/helpdesk.postman_collection.json \
+            -e common/postman/local.postman_environment.json
+
+      - name: Решение broken-коллекции модуля 04 проходит
+        run: |
+          npx -y newman@6 run \
+            modules/04-postman/solutions/01-fixed-collection/fixed.postman_collection.json \
+            -e common/postman/local.postman_environment.json
+
+      - name: Вебхук доезжает до sink
+        run: |
+          curl -sf -X POST http://127.0.0.1:9100/_reset >/dev/null
+          # стенд из шага 1 поднят без WEBHOOK_URL — перезапускаем с ним
+          WEBHOOK_URL=http://127.0.0.1:9100/hook scripts/api.sh up
+          curl -sf -X POST http://127.0.0.1:8080/api/v1/tickets \
+            -H 'Content-Type: application/json' \
+            -d '{"title":"ci smoke"}' >/dev/null
+          sleep 1
+          COUNT=$(curl -sf http://127.0.0.1:9100/received \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["count"])')
+          [ "$COUNT" -ge 1 ] || { echo "sink не получил событие"; exit 1; }
