@@ -1,101 +1,57 @@
 # Лабораторная работа 02: Пользователи, роли и права доступа
 
-## Оглавление
-- [Часть 1: Концепция ролей в PostgreSQL](#часть-1-концепция-ролей-в-postgresql)
-- [Часть 2: Создание ролей и выдача базовых прав](#часть-2-создание-ролей-и-выдача-базовых-прав)
-- [Часть 3: Наследование ролей и групповые политики](#часть-3-наследование-ролей-и-групповые-политики)
-- [Часть 4: Изоляция на уровне строк (Row Level Security)](#часть-4-изоляция-на-уровне-строк-row-level-security)
-- [Часть 5: Troubleshooting - проблема с доступом к новым таблицам](#часть-5-troubleshooting)
-- [Вопросы для самопроверки](#вопросы-для-самопроверки)
+## Целеполагание (Таксономия Блума)
+После прохождения этого модуля вы сможете:
+1. Понимать архитектуру ролей (Role = User + Group).
+2. Настраивать права доступа к схемам и таблицам.
+3. Диагностировать ошибки доступа (Schema Permissions).
+4. Автоматизировать выдачу прав на будущие объекты (ALTER DEFAULT PRIVILEGES).
 
 Время: ~40 мин | Сложность: 3/5
 
-Цель: глубоко изучить модель управления доступом Role-Based Access Control (RBAC), понять нюансы прав на схемы и научиться автоматизировать выдачу прав на будущие объекты.
+## Оглавление
+- [Часть 1: Роль как группа и как пользователь](#часть-1-роль-как-группа-и-как-пользователь)
+- [Часть 2: Проблема прав на схему (Troubleshooting)](#часть-2-проблема-прав-на-схему-troubleshooting)
+- [Часть 3: Настройка дефолтных привилегий](#часть-3-настройка-дефолтных-привилегий)
 
 ---
 
-## Часть 1: Концепция ролей в PostgreSQL
+## Часть 1: Роль как группа и как пользователь
 
-В PostgreSQL нет жесткого разделения на "группы" и "пользователей". Всё является "ролью" (Role).
-Если роль имеет атрибут `LOGIN`, мы называем ее пользователем. Если не имеет, она используется как группа. Системный каталог `pg_roles` содержит информацию обо всех ролях.
+В PostgreSQL нет сущностей "пользователь" и "группа". Есть только роль. Роль с правом `LOGIN` — это пользователь. Роль без `LOGIN` — это группа.
 
----
-
-## Часть 2: Создание ролей и выдача базовых прав
-
-Подключитесь к СУБД:
-```bash
-sudo -u postgres psql
-```
-
-Создайте базу данных и новую роль:
+Создадим "группу" `readonly_devs` и пользователя `john`:
 ```sql
-CREATE DATABASE app_db;
-CREATE ROLE app_user WITH LOGIN PASSWORD 'secure_pass_123';
-```
-
-Попробуйте подключиться под новым пользователем и создать таблицу. Вы получите ошибку, так как начиная с PostgreSQL 15 права на создание в схеме `public` по умолчанию отобраны. Выдайте их от имени суперпользователя:
-```sql
-GRANT ALL ON SCHEMA public TO app_user;
+CREATE ROLE readonly_devs;
+CREATE ROLE john WITH LOGIN PASSWORD 'pass123';
+GRANT readonly_devs TO john;
 ```
 
 ---
 
-## Часть 3: Наследование ролей и групповые политики
+## Часть 2: Проблема прав на схему (Troubleshooting)
 
-Создадим "группу" для аналитиков:
-```sql
-CREATE ROLE readonly_users;
-CREATE ROLE analyst WITH LOGIN PASSWORD 'analyst_pass';
-GRANT readonly_users TO analyst;
-```
+Запустите `prepare.sh`. Он создаст базу `dev_db`, юзера `alice` и таблицу. Юзеру `alice` выданы права: `GRANT SELECT ON ALL TABLES IN SCHEMA public TO alice`.
+**Задача:** Подключитесь как `alice` (`psql -U alice -d dev_db`) и сделайте `SELECT * FROM secret_data;`.
+Вы получите `ERROR: permission denied for schema public`.
 
-Выдадим права на чтение всех существующих таблиц группе:
-```sql
-GRANT USAGE ON SCHEMA public TO readonly_users;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_users;
-```
+Почему? Юзеру выдали права на столы, но он даже не может "войти" в схему!
+**Решение:** Вернитесь под суперпользователя и выдайте `GRANT USAGE ON SCHEMA public TO alice`.
 
 ---
 
-## Часть 4: Изоляция на уровне строк (Row Level Security)
+## Часть 3: Настройка дефолтных привилегий
 
-PostgreSQL позволяет ограничивать доступ не только к таблицам, но и к конкретным строкам.
+Пользователю `alice` дали доступ на чтение всех таблиц. Завтра администратор создает новую таблицу `new_data`. `alice` снова получает `permission denied`. 
 
+Команда `GRANT ... ON ALL TABLES` работает только для УЖЕ существующих таблиц.
+**Задача:** Решите проблему с помощью `ALTER DEFAULT PRIVILEGES`.
 ```sql
-CREATE TABLE tenant_data (
-    id SERIAL PRIMARY KEY,
-    tenant_name VARCHAR(50),
-    secret_data TEXT
-);
-
-INSERT INTO tenant_data (tenant_name, secret_data) VALUES ('analyst', 'data 1'), ('admin', 'data 2');
-
-ALTER TABLE tenant_data ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY tenant_isolation_policy ON tenant_data
-    USING (tenant_name = current_user);
-    
-GRANT SELECT ON tenant_data TO analyst;
-```
-Пользователь `analyst` увидит только свои строки.
-
----
-
-## Часть 5: Troubleshooting
-
-**Сценарий:** Вы выполнили `GRANT SELECT ON ALL TABLES`. Разработчик создал новую таблицу `new_sales`. Пользователь `analyst` получает ошибку при попытке чтения `new_sales`.
-**Причина:** Команда `GRANT ON ALL TABLES` применяется только к УЖЕ СУЩЕСТВУЮЩИМ таблицам.
-**Решение:** Измените дефолтные привилегии.
-```sql
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT SELECT ON TABLES TO readonly_users;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO alice;
 ```
 
 ---
 
 ## Вопросы для самопроверки
-1. Что дает атрибут `CREATEROLE`? Почему его опасно выдавать недоверенным пользователям?
-2. В чем отличие между `GRANT` и `ALTER DEFAULT PRIVILEGES`?
-3. Пользователь имеет атрибут `BYPASSRLS`. Что это означает?
-4. Как отозвать все права пользователя перед его удалением (команда `DROP OWNED`)?
+1. Чем отличается `GRANT SELECT ON ALL TABLES` от `ALTER DEFAULT PRIVILEGES`?
+2. Почему начиная с PostgreSQL 15 права на создание объектов в схеме `public` отозваны по умолчанию?
