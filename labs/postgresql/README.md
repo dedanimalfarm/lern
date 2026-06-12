@@ -8,14 +8,23 @@
 
 ## 🗺️ Карта обучения (Learning Path)
 
-Лабораторные работы разбиты на модули. Начните с первого модуля и продвигайтесь по порядку.
+Лабораторные работы разбиты на логические треки. Начните с базового уровня и продвигайтесь к конфигурациям уровня Production (HA, пулинг соединений, продвинутый мониторинг).
 
 ## 📦 Модули
 
+### Трек 1: Основы (Standalone)
 1. [01-install-and-config](modules/01-install-and-config) — Установка PostgreSQL, базовая настройка (`postgresql.conf`, `pg_hba.conf`), запуск службы.
 2. [02-users-roles](modules/02-users-roles) — Управление пользователями, ролями и правами доступа (GRANT/REVOKE).
 3. [03-backup-restore](modules/03-backup-restore) — Резервное копирование и восстановление (pg_dump, pg_restore).
 4. [04-maintenance](modules/04-maintenance) — Обслуживание базы данных (VACUUM, ANALYZE, мониторинг активности).
+
+### Трек 2: Production Readiness & HA (В разработке)
+Этот трек закладывает архитектуру для отказоустойчивых и высоконагруженных инсталляций.
+5. [05-advanced-tuning](modules/05-advanced-tuning) *(в планах)* — Тюнинг `postgresql.conf` под железо, нагрузочное тестирование с `pgbench`.
+6. [06-connection-pooling](modules/06-connection-pooling) *(в планах)* — Настройка пулеров соединений (PgBouncer, Odyssey).
+7. [07-streaming-replication](modules/07-streaming-replication) *(в планах)* — Потоковая репликация (Primary - Replica) и управление WAL.
+8. [08-high-availability](modules/08-high-availability) *(в планах)* — Кластеризация и автоматический failover (Patroni + etcd / Consul).
+9. [09-monitoring-alerting](modules/09-monitoring-alerting) *(в планах)* — Экспорт метрик (postgres_exporter) и интеграция с Prometheus/Grafana.
 
 ## 📂 Структура каждого модуля
 
