@@ -22,11 +22,11 @@ echo "🔍 Проверка решений модуля 02: JOINs"
 echo "============================================="
 
 # Проверка синтаксиса через stdin (cd /tmp решает проблему прав на чтение /root для пользователя postgres)
-if eval "(cd /tmp && $PSQL_CMD) < $SOLUTION_FILE" > /dev/null 2>&1; then
+if eval "(cd /tmp && $PSQL_CMD -v ON_ERROR_STOP=1) < $SOLUTION_FILE" > /dev/null 2>&1; then
     echo "✅ Все запросы выполнились без ошибок!"
 else
     echo "❌ В запросах обнаружена синтаксическая ошибка."
     echo "Подробности:"
-    eval "(cd /tmp && $PSQL_CMD) < $SOLUTION_FILE" 2>&1 | grep -i error
+    eval "(cd /tmp && $PSQL_CMD -v ON_ERROR_STOP=1) < $SOLUTION_FILE" 2>&1 | grep -i error
     exit 1
 fi
