@@ -14,6 +14,46 @@ sudo -u postgres psql -f init.sql
 
 В результате будет создана база данных `shop_db` с таблицами: `users`, `products`, `orders` и `order_items`.
 
+## Схема базы данных (ER Diagram)
+
+Вся практика модулей строится вокруг этой схемы. Она моделирует работу простого интернет-магазина.
+
+```mermaid
+erDiagram
+    users ||--o{ orders : places
+    users {
+        int id PK
+        varchar name
+        varchar email
+        date registration_date
+    }
+    
+    products ||--o{ order_items : contains
+    products {
+        int id PK
+        varchar name
+        varchar category
+        decimal price
+        int stock_quantity
+    }
+    
+    orders ||--o{ order_items : includes
+    orders {
+        int id PK
+        int user_id FK
+        timestamp order_date
+        varchar status
+    }
+    
+    order_items {
+        int id PK
+        int order_id FK
+        int product_id FK
+        int quantity
+        decimal price_per_unit
+    }
+```
+
 ## Модули
 
 1. [01-basic-select](modules/01-basic-select) — Основы выборки данных (SELECT, WHERE, ORDER BY, LIMIT).
