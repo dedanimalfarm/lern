@@ -1,54 +1,101 @@
 # Лабораторная работа 02: Пользователи, роли и права доступа
 
 ## Оглавление
-- [Предварительные требования](#предварительные-требования)
-- [Часть 1: Создание ролей](#часть-1-создание-ролей)
-- [Часть 2: Выдача прав (GRANT)](#часть-2-выдача-прав)
-- [Часть 3: Troubleshooting](#часть-3-troubleshooting)
+- [Часть 1: Концепция ролей в PostgreSQL](#часть-1-концепция-ролей-в-postgresql)
+- [Часть 2: Создание ролей и выдача базовых прав](#часть-2-создание-ролей-и-выдача-базовых-прав)
+- [Часть 3: Наследование ролей и групповые политики](#часть-3-наследование-ролей-и-групповые-политики)
+- [Часть 4: Изоляция на уровне строк (Row Level Security)](#часть-4-изоляция-на-уровне-строк-row-level-security)
+- [Часть 5: Troubleshooting - проблема с доступом к новым таблицам](#часть-5-troubleshooting)
 - [Вопросы для самопроверки](#вопросы-для-самопроверки)
 
-> ⏱ время ~20 мин · сложность 2/5
+Время: ~40 мин | Сложность: 3/5
 
-Цель: научиться управлять RBAC (Role-Based Access Control) в PostgreSQL.
+Цель: глубоко изучить модель управления доступом Role-Based Access Control (RBAC), понять нюансы прав на схемы и научиться автоматизировать выдачу прав на будущие объекты.
 
 ---
 
-## Часть 1: Создание ролей
+## Часть 1: Концепция ролей в PostgreSQL
 
-### Теория
-В PostgreSQL нет понятия "пользователь" и "группа", есть только "Роль" (Role). Если роль имеет атрибут `LOGIN`, она выступает как пользователь.
+В PostgreSQL нет жесткого разделения на "группы" и "пользователей". Всё является "ролью" (Role).
+Если роль имеет атрибут `LOGIN`, мы называем ее пользователем. Если не имеет, она используется как группа. Системный каталог `pg_roles` содержит информацию обо всех ролях.
 
-### Практика
+---
+
+## Часть 2: Создание ролей и выдача базовых прав
+
+Подключитесь к СУБД:
+```bash
+sudo -u postgres psql
+```
+
+Создайте базу данных и новую роль:
 ```sql
-CREATE ROLE app_user WITH LOGIN PASSWORD 'secret';
--- или
-CREATE USER app_user WITH PASSWORD 'secret';
+CREATE DATABASE app_db;
+CREATE ROLE app_user WITH LOGIN PASSWORD 'secure_pass_123';
+```
+
+Попробуйте подключиться под новым пользователем и создать таблицу. Вы получите ошибку, так как начиная с PostgreSQL 15 права на создание в схеме `public` по умолчанию отобраны. Выдайте их от имени суперпользователя:
+```sql
+GRANT ALL ON SCHEMA public TO app_user;
 ```
 
 ---
 
-## Часть 2: Выдача прав (GRANT)
+## Часть 3: Наследование ролей и групповые политики
 
-### Теория
-Права выдаются на конкретные объекты (таблицы, схемы) с помощью команды `GRANT`.
-
-### Практика
+Создадим "группу" для аналитиков:
 ```sql
-GRANT USAGE ON SCHEMA public TO app_user;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_user;
+CREATE ROLE readonly_users;
+CREATE ROLE analyst WITH LOGIN PASSWORD 'analyst_pass';
+GRANT readonly_users TO analyst;
+```
+
+Выдадим права на чтение всех существующих таблиц группе:
+```sql
+GRANT USAGE ON SCHEMA public TO readonly_users;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_users;
 ```
 
 ---
 
-## Часть 3: Troubleshooting
+## Часть 4: Изоляция на уровне строк (Row Level Security)
 
-Сценарий: Пользователь `app_user` жалуется, что при создании новых таблиц другим администратором, он не может их читать, хотя ему выдали `GRANT SELECT ON ALL TABLES`.
-**Решение:** Изучите команду `ALTER DEFAULT PRIVILEGES`.
+PostgreSQL позволяет ограничивать доступ не только к таблицам, но и к конкретным строкам.
+
+```sql
+CREATE TABLE tenant_data (
+    id SERIAL PRIMARY KEY,
+    tenant_name VARCHAR(50),
+    secret_data TEXT
+);
+
+INSERT INTO tenant_data (tenant_name, secret_data) VALUES ('analyst', 'data 1'), ('admin', 'data 2');
+
+ALTER TABLE tenant_data ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_policy ON tenant_data
+    USING (tenant_name = current_user);
+    
+GRANT SELECT ON tenant_data TO analyst;
+```
+Пользователь `analyst` увидит только свои строки.
+
+---
+
+## Часть 5: Troubleshooting
+
+**Сценарий:** Вы выполнили `GRANT SELECT ON ALL TABLES`. Разработчик создал новую таблицу `new_sales`. Пользователь `analyst` получает ошибку при попытке чтения `new_sales`.
+**Причина:** Команда `GRANT ON ALL TABLES` применяется только к УЖЕ СУЩЕСТВУЮЩИМ таблицам.
+**Решение:** Измените дефолтные привилегии.
+```sql
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT ON TABLES TO readonly_users;
+```
 
 ---
 
 ## Вопросы для самопроверки
-1. Что такое `SUPERUSER` и почему его нельзя давать приложениям?
-2. Почему после создания новой таблицы пользователь с `GRANT SELECT ON ALL TABLES` не имеет к ней доступа?
-
-👉 **Практика:** Перейдите в папку `tasks/`.
+1. Что дает атрибут `CREATEROLE`? Почему его опасно выдавать недоверенным пользователям?
+2. В чем отличие между `GRANT` и `ALTER DEFAULT PRIVILEGES`?
+3. Пользователь имеет атрибут `BYPASSRLS`. Что это означает?
+4. Как отозвать все права пользователя перед его удалением (команда `DROP OWNED`)?
