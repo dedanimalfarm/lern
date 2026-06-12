@@ -67,6 +67,8 @@ erDiagram
 2. [02-joins](modules/02-joins) — Соединение таблиц (INNER JOIN, LEFT JOIN).
 3. [03-aggregations](modules/03-aggregations) — Агрегация данных и группировка (COUNT, SUM, AVG, GROUP BY, HAVING).
 4. [04-dml](modules/04-dml) — Управление данными (INSERT, UPDATE, DELETE).
+5. [05-indexes](modules/05-indexes) — Индексы и оптимизация запросов (EXPLAIN, EXPLAIN ANALYZE, CREATE INDEX).
+
 
 ## Структура модуля
 
