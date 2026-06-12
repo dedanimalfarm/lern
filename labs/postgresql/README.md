@@ -18,13 +18,13 @@
 3. [03-backup-restore](modules/03-backup-restore) — Резервное копирование и восстановление (pg_dump, pg_restore).
 4. [04-maintenance](modules/04-maintenance) — Обслуживание базы данных (VACUUM, ANALYZE, мониторинг активности).
 
-### Трек 2: Production Readiness & HA (В разработке)
+### Трек 2: Production Readiness & HA
 Этот трек закладывает архитектуру для отказоустойчивых и высоконагруженных инсталляций.
-5. [05-advanced-tuning](modules/05-advanced-tuning) *(в планах)* — Тюнинг `postgresql.conf` под железо, нагрузочное тестирование с `pgbench`.
-6. [06-connection-pooling](modules/06-connection-pooling) *(в планах)* — Настройка пулеров соединений (PgBouncer, Odyssey).
-7. [07-streaming-replication](modules/07-streaming-replication) *(в планах)* — Потоковая репликация (Primary - Replica) и управление WAL.
-8. [08-high-availability](modules/08-high-availability) *(в планах)* — Кластеризация и автоматический failover (Patroni + etcd / Consul).
-9. [09-monitoring-alerting](modules/09-monitoring-alerting) *(в планах)* — Экспорт метрик (postgres_exporter) и интеграция с Prometheus/Grafana.
+5. [05-advanced-tuning](modules/05-advanced-tuning) — Тюнинг `postgresql.conf` под железо, нагрузочное тестирование с `pgbench`.
+6. [06-connection-pooling](modules/06-connection-pooling) — Настройка пулеров соединений (PgBouncer, Odyssey).
+7. [07-streaming-replication](modules/07-streaming-replication) — Потоковая репликация (Primary - Replica) и управление WAL.
+8. [08-high-availability](modules/08-high-availability) — Кластеризация и автоматический failover (Patroni + etcd / Consul).
+9. [09-monitoring-alerting](modules/09-monitoring-alerting) — Экспорт метрик (postgres_exporter) и интеграция с Prometheus/Grafana.
 
 ## Структура каждого модуля
 
