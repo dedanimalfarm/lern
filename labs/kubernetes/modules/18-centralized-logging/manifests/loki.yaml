@@ -8,6 +8,14 @@ data:
     auth_enabled: false
     server:
       http_listen_port: 3100
+    # Дефолтный ingestion-лимит (4MB/s) мал для холодного старта стенда:
+    # promtail хранит positions в emptyDir, после рестарта ноды/пода он
+    # перечитывает ВСЕ /var/log/pods с нуля и шлёт залп со всего кластера ->
+    # Loki отвечает 429 (rate limit), доставка свежих строк задерживается
+    # на минуты (ловили в QA). Поднимаем лимиты, чтобы backfill проглатывался.
+    limits_config:
+      ingestion_rate_mb: 16
+      ingestion_burst_size_mb: 32
     common:
       path_prefix: /loki
       storage:
