@@ -44,6 +44,8 @@ tags:
     description: Получение токена доступа
   - name: tickets
     description: Тикеты службы поддержки
+  - name: exports
+    description: Асинхронные выгрузки (паттерн 202 Accepted + опрос статуса)
 
 paths:
   /health:
@@ -213,13 +215,31 @@ paths:
     get:
       tags: [tickets]
       summary: Получить тикет по id
+      description: >
+        Ответ содержит заголовок `ETag` — версию тикета. Передайте её в
+        `If-None-Match` при следующем чтении: если тикет не менялся, сервер
+        ответит `304 Not Modified` без тела (экономия трафика).
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: ETag из прошлого ответа; при совпадении вернётся 304.
       responses:
         "200":
           description: Тикет
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Версия тикета для условных запросов.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Ticket"
+        "304":
+          description: Не изменён с версии из If-None-Match (тела нет)
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -229,6 +249,16 @@ paths:
         Меняет ТОЛЬКО присланные поля. Допустимы: title, description,
         priority, status, assignee. Это безопасный способ, например,
         перевести тикет в работу: `{"status": "in_progress"}`.
+        Для защиты от потери чужих правок (lost update) можно прислать
+        `If-Match` с ETag, который вы читали: если тикет с тех пор изменён,
+        сервер ответит `412 Precondition Failed`.
+      parameters:
+        - name: If-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: ETag, от которого вы отталкиваетесь (optimistic locking).
       requestBody:
         required: true
         content:
@@ -243,6 +273,14 @@ paths:
                 $ref: "#/components/schemas/Ticket"
         "404":
           $ref: "#/components/responses/NotFound"
+        "412":
+          description: >
+            Тикет изменён с момента вашего чтения (If-Match не совпал) —
+            перечитайте и повторите.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "422":
           $ref: "#/components/responses/ValidationFailed"
     put:
@@ -282,6 +320,62 @@ paths:
           description: Удалено, тело ответа пустое
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/exports:
+    post:
+      tags: [exports]
+      summary: Запросить выгрузку (длинная операция)
+      description: >
+        Выгрузка не делается синхронно: сервер сразу отвечает
+        `202 Accepted` и кладёт в `Location` адрес ресурса статуса.
+        Клиент опрашивает этот адрес (с учётом `Retry-After`), пока
+        `status` не станет `done`. Так устроены отчёты/экспорты в реальных
+        API — соединение не висит в ожидании тяжёлой работы.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            example: {"format": "csv"}
+      responses:
+        "202":
+          description: Принято в обработку
+          headers:
+            Location:
+              schema:
+                type: string
+              description: Адрес ресурса статуса выгрузки.
+            Retry-After:
+              schema:
+                type: integer
+              description: Через сколько секунд опрашивать статус.
+          content:
+            application/json:
+              example: {"id": 1, "status": "processing", "status_url": "/api/v1/exports/1"}
+
+  /api/v1/exports/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [exports]
+      summary: Статус выгрузки
+      responses:
+        "200":
+          description: >
+            Текущий статус. Пока `processing` — приходит с `Retry-After`;
+            когда `done` — появляется `download_url`.
+          content:
+            application/json:
+              examples:
+                processing:
+                  value: {"id": 1, "status": "processing"}
+                done:
+                  value: {"id": 1, "status": "done", "format": "csv", "download_url": "/api/v1/exports/1/download", "rows": 8}
         "404":
           $ref: "#/components/responses/NotFound"
 

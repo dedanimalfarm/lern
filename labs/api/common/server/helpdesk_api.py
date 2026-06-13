@@ -15,8 +15,11 @@ rate limiting, вебхуки и управляемые «поломки» (faul
   TOKEN_SECRET секрет подписи HMAC для JWT           (default: lab-hmac-secret)
   TOKEN_TTL   срок жизни токена, секунд              (default: 3600)
   RATE_LIMIT  макс. запросов на IP за 10 секунд, 0=off (default: 0)
-  FAULT       none | slow | error500 | badjson | wrongct (default: none)
+  FAULT       none | slow | error500 | badjson | wrongct
+              | error502 | error503 | error504 | flaky   (default: none)
   WEBHOOK_URL если задан — POST событий ticket.* на этот URL
+  CORS_ORIGIN если задан — Origin, которому разрешён CORS (default: выкл)
+  TLS_CERT / TLS_KEY  пути к cert/key PEM — поднять HTTPS вместо HTTP
 
 Запуск:  python3 helpdesk_api.py
 """
@@ -27,6 +30,7 @@ import hmac
 import json
 import os
 import re
+import ssl
 import threading
 import time
 import urllib.request
@@ -44,6 +48,7 @@ TOKEN_SECRET = os.environ.get("TOKEN_SECRET", "lab-hmac-secret").encode()
 TOKEN_TTL = int(os.environ.get("TOKEN_TTL", "3600"))
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT", "0"))     # запросов / 10 c, 0 = выкл
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
+CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "")          # "" = CORS выключен
 
 # Учебные пользователи для режима token (Basic -> Bearer).
 # role решает, что можно делать: agent — читать/создавать/менять,
@@ -100,10 +105,27 @@ NEXT_ID = len(TICKETS) + 1
 FAULT = os.environ.get("FAULT", "none")
 IDEMPOTENCY = {}                  # Idempotency-Key -> (status, body_dict)
 RATE_BUCKETS = defaultdict(deque)  # ip -> deque[timestamp]
+FLAKY_N = 0                       # счётчик запросов для fault=flaky
+
+# Асинхронные экспорты (паттерн 202 Accepted + polling). Реальной работы
+# нет — «готовность» наступает по таймеру: до EXPORT_DELAY_S секунд с
+# момента POST статус processing, после — done. Этого достаточно, чтобы
+# отработать клиентский цикл «принято -> опрашивай Location до готовности».
+EXPORTS = {}                      # id -> {"id", "format", "requested_at"}
+NEXT_EXPORT_ID = 1
+EXPORT_DELAY_S = 3
 
 
 def now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def ticket_etag(ticket: dict) -> str:
+    """Strong ETag тикета: меняется при каждом updated_at. Кавычки — ЧАСТЬ
+    значения (RFC 9110): клиент обязан вернуть их в If-None-Match/If-Match
+    как есть — классические грабли, на которых ловят на собеседовании."""
+    raw = f"{ticket['id']}-{ticket['updated_at']}".encode()
+    return '"' + hashlib.md5(raw).hexdigest()[:16] + '"'
 
 
 # ---------------------------------------------------------------- JWT (HS256)
@@ -229,10 +251,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self._maybe_cors_header()
         for k, v in (extra_headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
+
+    def _maybe_cors_header(self):
+        """CORS — разрешение для БРАУЗЕРА читать ответ чужого origin.
+        Сервер отвечает в любом случае; без этого заголовка ответ блокирует
+        сам браузер — поэтому «curl работает, а из веба нет»."""
+        origin = self.headers.get("Origin")
+        if CORS_ORIGIN and origin == CORS_ORIGIN:
+            self.send_header("Access-Control-Allow-Origin", origin)
 
     def send_error_json(self, status: int, code: str, message: str,
                         details=None, extra_headers=None):
@@ -240,6 +271,14 @@ class Handler(BaseHTTPRequestHandler):
         if details is not None:
             err["error"]["details"] = details
         self.send_json(status, err, extra_headers)
+
+    def _drain_body(self):
+        """Прочитать и выбросить тело запроса. Нужно для POST-эндпоинтов,
+        которым тело не требуется (например, _lab/reset): иначе при
+        keep-alive непрочитанные байты испортят следующий запрос."""
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        if length:
+            self.rfile.read(length)
 
     def read_json_body(self):
         """Читает тело запроса. Возвращает (data, None) или (None, 'sent') —
@@ -358,12 +397,48 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return True
+        # 502/504 имитируют ответ БАЛАНСИРОВЩИКА (nginx и т.п.), а не
+        # приложения: тело — text/html, не наш JSON-конверт ошибок.
+        # Это и есть главный диагностический признак «ответил не бэкенд».
+        if FAULT in ("error502", "error504"):
+            code = 502 if FAULT == "error502" else 504
+            reason = "Bad Gateway" if code == 502 else "Gateway Time-out"
+            body = (f"<html>\r\n<head><title>{code} {reason}</title></head>\r\n"
+                    f"<body>\r\n<center><h1>{code} {reason}</h1></center>\r\n"
+                    f"<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+                    ).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+        if FAULT == "error503":
+            # 503 — «перегружен/обслуживание», единственный 5xx, при котором
+            # сервер сам говорит, когда вернуться (Retry-After)
+            self.send_error_json(
+                503, "service_unavailable",
+                "сервис временно недоступен (техобслуживание)",
+                extra_headers={"Retry-After": "30"})
+            return True
+        if FAULT == "flaky":
+            # Каждый 3-й запрос падает: интермиттентная ошибка, которую не
+            # видно по одиночному curl — только по серии запросов
+            global FLAKY_N
+            with LOCK:
+                FLAKY_N += 1
+                fail = FLAKY_N % 3 == 0
+            if fail:
+                self.send_error_json(500, "internal_error",
+                                     "unexpected error, see server logs")
+                return True
+            return False
         return False
 
     # ---------- маршрутизация
 
     def route(self, method: str):
-        global FAULT, NEXT_ID
+        global FAULT, NEXT_ID, FLAKY_N, NEXT_EXPORT_ID
         # http.server декодирует request line как latin-1; если клиент прислал
         # сырую кириллицу в URL (curl так делает), пересобираем UTF-8 обратно.
         # Percent-encoded ASCII этот roundtrip не трогает.
@@ -377,6 +452,25 @@ class Handler(BaseHTTPRequestHandler):
         # где /health для балансировщика выведен из-под rate limit.
         if path.startswith("/api/v1/") and "/_lab/" not in path \
                 and self.check_rate_limit():
+            return
+
+        # CORS preflight: браузер сам шлёт OPTIONS перед «не-простым»
+        # запросом (JSON-тело, Authorization...). Если origin не разрешён,
+        # отвечаем 204 БЕЗ Access-Control-* — запрос блокирует браузер,
+        # сервер при этом «работает» (поэтому curl проблему не видит).
+        if method == "OPTIONS" and path.startswith("/api/"):
+            self.send_response(204)
+            origin = self.headers.get("Origin")
+            if CORS_ORIGIN and origin == CORS_ORIGIN:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Access-Control-Allow-Methods",
+                                 "GET, POST, PATCH, PUT, DELETE")
+                self.send_header("Access-Control-Allow-Headers",
+                                 "Content-Type, Authorization, X-API-Key, "
+                                 "Idempotency-Key, If-Match, If-None-Match")
+                self.send_header("Access-Control-Max-Age", "600")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
             return
 
         # --- служебные эндпоинты (без auth и без fault) -----------------
@@ -417,6 +511,7 @@ class Handler(BaseHTTPRequestHandler):
                 "fault": FAULT, "auth_mode": AUTH_MODE,
                 "rate_limit": RATE_LIMIT,
                 "webhook_url": WEBHOOK_URL or None,
+                "cors_origin": CORS_ORIGIN or None,
                 "tickets": len(TICKETS)})
 
         if path == "/api/v1/_lab/fault" and method == "POST":
@@ -424,18 +519,29 @@ class Handler(BaseHTTPRequestHandler):
             if sent:
                 return
             mode = (data or {}).get("mode")
-            if mode not in ("none", "slow", "error500", "badjson", "wrongct"):
+            modes = ("none", "slow", "error500", "badjson", "wrongct",
+                     "error502", "error503", "error504", "flaky")
+            if mode not in modes:
                 return self.send_error_json(422, "validation_failed",
-                                            "mode: none|slow|error500|badjson|wrongct")
-            FAULT = mode
+                                            "mode: " + "|".join(modes))
+            with LOCK:
+                FAULT = mode
+                FLAKY_N = 0   # каждый включения flaky — с чистого счётчика
             return self.send_json(200, {"fault": FAULT})
 
         if path == "/api/v1/_lab/reset" and method == "POST":
+            # Вычитываем тело, даже если оно нам не нужно: при HTTP/1.1
+            # keep-alive непрочитанные байты тела «утекают» в следующий
+            # запрос на том же соединении и ломают его (Bad request syntax).
+            self._drain_body()
             with LOCK:
                 TICKETS.clear()
                 TICKETS.update(_seed())
                 NEXT_ID = len(TICKETS) + 1
                 IDEMPOTENCY.clear()
+                EXPORTS.clear()
+                NEXT_EXPORT_ID = 1
+                FLAKY_N = 0
             return self.send_json(200, {"reset": True, "tickets": len(TICKETS)})
 
         # --- выдача токена (Basic -> Bearer), только в режиме token ------
@@ -467,13 +573,20 @@ class Handler(BaseHTTPRequestHandler):
                 "expires_in": TOKEN_TTL})
 
         # Старая версия API: учим работать с 3xx — клиент должен уметь
-        # ходить за Location (curl -L) и замечать редиректы в логах
+        # ходить за Location (curl -L) и замечать редиректы в логах.
+        # Deprecation (RFC 9745) и Sunset (RFC 8594) — стандартный способ
+        # «вежливо» объявить вывод версии: интеграции мониторят эти
+        # заголовки и узнают о выключении ДО того, как оно случится.
         if path.startswith("/api/v0/"):
             target = path.replace("/api/v0/", "/api/v1/", 1)
             return self.send_error_json(
                 301, "moved_permanently",
                 f"API v0 выведен из эксплуатации, используйте {target}",
-                extra_headers={"Location": target})
+                extra_headers={
+                    "Location": target,
+                    "Deprecation": "@1767225600",   # 2026-01-01T00:00:00Z
+                    "Sunset": "Wed, 01 Jul 2026 00:00:00 GMT",
+                    "Link": f'<{target}>; rel="successor-version"'})
 
         # --- всё остальное под /api/v1 требует аутентификации ------------
         if not path.startswith("/api/v1/"):
@@ -488,6 +601,23 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"sub": identity["sub"],
                                         "role": identity["role"],
                                         "auth_mode": AUTH_MODE})
+
+        # --- /api/v1/exports[...]: длинные операции (202 + polling) -------
+        if path == "/api/v1/exports":
+            if method == "POST":
+                return self.create_export()
+            return self.send_error_json(
+                405, "method_not_allowed",
+                f"{method} не поддерживается для /api/v1/exports",
+                extra_headers={"Allow": "POST"})
+        m_export = re.fullmatch(r"/api/v1/exports/(\d+)", path)
+        if m_export:
+            if method == "GET":
+                return self.get_export(int(m_export.group(1)))
+            return self.send_error_json(
+                405, "method_not_allowed",
+                f"{method} не поддерживается для /api/v1/exports/{{id}}",
+                extra_headers={"Allow": "GET"})
 
         # --- /api/v1/tickets[...] ----------------------------------------
         m_list = path == "/api/v1/tickets"
@@ -599,13 +729,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def get_ticket(self, ticket_id):
         ticket = self._get_or_404(ticket_id)
-        if ticket is not None:
-            self.send_json(200, ticket)
+        if ticket is None:
+            return
+        etag = ticket_etag(ticket)
+        # Условный GET: версия клиента совпала -> 304 БЕЗ тела. Это не
+        # ошибка, а экономия трафика: «у тебя уже свежая копия».
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self._maybe_cors_header()
+            self.end_headers()
+            return
+        self.send_json(200, ticket, extra_headers={"ETag": etag})
 
     def patch_ticket(self, ticket_id):
         ticket = self._get_or_404(ticket_id)
         if ticket is None:
             return
+        # Optimistic locking: клиент прислал версию (ETag), от которой
+        # отталкивался. Не совпала -> 412: тикет уже изменён кем-то другим,
+        # слепая запись затёрла бы его правки (lost update).
+        if_match = self.headers.get("If-Match")
+        if if_match is not None and if_match != ticket_etag(ticket):
+            return self.send_error_json(
+                412, "precondition_failed",
+                "тикет изменён с момента вашего чтения — перечитайте "
+                "(GET вернёт свежий ETag) и повторите изменение")
         data, sent = self.read_json_body()
         if sent:
             return
@@ -657,6 +806,44 @@ class Handler(BaseHTTPRequestHandler):
             fire_webhook("ticket.status_changed", replaced)
         return self.send_json(200, replaced)
 
+    def create_export(self):
+        """Длинная операция: сразу 202 Accepted + Location на ресурс
+        статуса. Клиент НЕ ждёт на сокете, а опрашивает Location, пока
+        статус не станет done — так делают выгрузки/отчёты в реальных API."""
+        global NEXT_EXPORT_ID
+        data, sent = self.read_json_body()
+        if sent:
+            return
+        fmt = (data or {}).get("format", "csv")
+        if fmt not in ("csv", "json"):
+            return self.send_error_json(422, "validation_failed",
+                                        "format: csv|json")
+        with LOCK:
+            export_id = NEXT_EXPORT_ID
+            NEXT_EXPORT_ID += 1
+            EXPORTS[export_id] = {"id": export_id, "format": fmt,
+                                  "requested_at": time.time()}
+        loc = f"/api/v1/exports/{export_id}"
+        return self.send_json(
+            202, {"id": export_id, "status": "processing", "status_url": loc},
+            extra_headers={"Location": loc, "Retry-After": "1"})
+
+    def get_export(self, export_id):
+        export = EXPORTS.get(export_id)
+        if export is None:
+            return self.send_error_json(404, "not_found",
+                                        f"экспорт {export_id} не существует")
+        elapsed = time.time() - export["requested_at"]
+        if elapsed < EXPORT_DELAY_S:
+            return self.send_json(
+                200, {"id": export_id, "status": "processing"},
+                extra_headers={"Retry-After": "1"})
+        return self.send_json(200, {
+            "id": export_id, "status": "done",
+            "format": export["format"],
+            "download_url": f"/api/v1/exports/{export_id}/download",
+            "rows": len(TICKETS)})
+
     def delete_ticket(self, ticket_id, identity):
         # 403 ≠ 401: пользователь ОПОЗНАН, но прав не хватает
         if identity["role"] != "admin":
@@ -691,6 +878,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):  # noqa: N802
         self.route("DELETE")
 
+    def do_OPTIONS(self):  # noqa: N802
+        self.route("OPTIONS")
+
     def do_HEAD(self):    # noqa: N802
         # HEAD = GET без тела; отвечаем только на /health
         if urlparse(self.path).path == "/health":
@@ -705,9 +895,21 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"[helpdesk-api] listening on :{PORT} "
+    tls_cert = os.environ.get("TLS_CERT", "")
+    tls_key = os.environ.get("TLS_KEY", "")
+    scheme = "http"
+    if tls_cert and tls_key:
+        # HTTPS-режим для модуля про TLS: оборачиваем сокет в SSL.
+        # Сертификат учебный (самоподписанный) — клиент увидит ту же
+        # ошибку доверия, что и с протухшим/левым сертом в проде.
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(certfile=tls_cert, keyfile=tls_key)
+        server.socket = ctx.wrap_socket(server.socket, server_side=True)
+        scheme = "https"
+    print(f"[helpdesk-api] listening on {scheme}://0.0.0.0:{PORT} "
           f"auth={AUTH_MODE} rate_limit={RATE_LIMIT} fault={FAULT} "
-          f"webhook={'on' if WEBHOOK_URL else 'off'}", flush=True)
+          f"webhook={'on' if WEBHOOK_URL else 'off'} "
+          f"cors={CORS_ORIGIN or 'off'}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
