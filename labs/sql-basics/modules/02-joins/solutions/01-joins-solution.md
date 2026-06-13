@@ -13,7 +13,7 @@ LEFT JOIN inventory ON film.film_id = inventory.film_id;
 
 -- 3. Детализация аренды №1 (5 таблиц)
 SELECT 
-    customer.first_name AS user_name,
+    customer.first_name AS customer_name,
     rental.rental_date,
     film.title AS film_title,
     payment.amount

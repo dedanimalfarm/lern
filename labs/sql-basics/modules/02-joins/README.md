@@ -67,7 +67,7 @@ WHERE inventory.inventory_id IS NULL;
 
 ## Часть 5: Детализация множества таблиц
 
-Построим сложный запрос для Аренды №1, связав 4 таблицы:
+Построим сложный запрос для Аренды №1, связав 5 таблиц (`rental`, `customer`, `inventory`, `film`, `payment`):
 
 ```sql
 SELECT 
