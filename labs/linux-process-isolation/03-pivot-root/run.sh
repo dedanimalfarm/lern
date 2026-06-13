@@ -25,7 +25,7 @@ mount -t tmpfs none "$NEW"
 # минимальный rootfs (busybox + симлинки)
 install -d "$NEW"/{bin,etc,proc,sys,dev,old_root}
 cp /bin/busybox "$NEW/bin/" 2>/dev/null || cp /usr/bin/busybox "$NEW/bin/"
-for app in sh ls cat echo ps mount umount hostname; do
+for app in sh ls cat echo ps mount umount hostname head; do
   ln -sf busybox "$NEW/bin/$app"
 done
 echo "pivoted-container" > "$NEW/etc/hostname"
