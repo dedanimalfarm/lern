@@ -59,7 +59,7 @@ sudo ./01-chroot/run.sh
 | 03 | [03-pivot-root](./03-pivot-root) | pivot_root: безопасная смена корня | ✅ |
 | 04 | [04-cgroups-v2](./04-cgroups-v2) | Лимиты CPU/RAM/IO/PIDs (cgroup v2) | ✅ |
 | 05 | [05-capabilities](./05-capabilities) | Дробление root-прав (capabilities) | ✅ |
-| 06 | [06-seccomp](./06-seccomp) | Фильтрация системных вызовов | 🔸 |
+| 06 | [06-seccomp](./06-seccomp) | Фильтрация системных вызовов | ✅ |
 | 07 | [07-apparmor](./07-apparmor) | Мандатный контроль доступа (MAC) | 🔸 |
 | 08 | [08-overlayfs](./08-overlayfs) | Слоистая ФС, CoW, whiteout | 🔸 |
 | 09 | [09-networking](./09-networking) | veth, bridge, NAT | 🔸 |
