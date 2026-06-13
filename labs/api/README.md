@@ -24,6 +24,7 @@
 | Postman | [04](./modules/04-postman/) — коллекции, environment, тесты, runner |
 | Инструменты тестирования API | [01](./modules/01-http-basics/) (curl), [04](./modules/04-postman/) (Postman/Newman) |
 | Принципы интеграции систем | [05](./modules/05-auth/) (аутентификация между системами), [06](./modules/06-integrations-troubleshooting/) (вебхуки, ретраи, идемпотентность) |
+| Сеть, TLS, 5xx, кэш, CORS — разбор инцидентов | [08](./modules/08-network-tls-5xx/) — вопросы собеседования L2 с практикой |
 | Реальный опыт для резюме | [07](./modules/07-jira-capstone/) — Jira Service Management Cloud: настоящий SaaS, настоящая дока, настоящий API |
 
 ## Модули
@@ -37,13 +38,15 @@
 | 05 | [Аутентификация](./modules/05-auth/) | API key, Basic, Bearer/JWT, 401 vs 403, rate limit | ~90 мин | 3/5 |
 | 06 | [Интеграции и troubleshooting](./modules/06-integrations-troubleshooting/) | вебхуки, идемпотентность, 4 боевых инцидента, эскалация в L3 | ~120 мин | 3/5 |
 | 07 | [Capstone: Jira Service Management](./modules/07-jira-capstone/) | реальный SaaS API: токены, JQL, transitions, Postman | ~120 мин | 3/5 |
+| 08 | [Сеть, TLS, 5xx и продвинутый HTTP](./modules/08-network-tls-5xx/) | curl exit-коды, TLS-сертификаты, 502/503/504, CORS, ETag/304, 412, 202+polling, Deprecation/Sunset, HAR | ~150 мин | 4/5 |
 
-Итого ~10–11 часов. Проходить по порядку: каждый модуль опирается на предыдущие.
+Итого ~12–13 часов. Модули 01–07 — по порядку (опираются друг на друга);
+08 — после 06 (продвинутый разбор инцидентов и вопросы собеседования).
 
 ## Учебный стенд
 
-Модули 01–06 работают на **локальном Helpdesk API** — учебной тикет-системе
-на чистой стандартной библиотеке Python (без pip, без Docker):
+Модули 01–06 и 08 работают на **локальном Helpdesk API** — учебной
+тикет-системе на чистой стандартной библиотеке Python (без pip, без Docker):
 
 ```bash
 # Поднять стенд (порт 8080)
@@ -62,7 +65,11 @@ scripts/api.sh down
 Стенд умеет то, что нужно для отработки реальных навыков L2: три режима
 аутентификации, rate limit, вебхуки, идемпотентность и **управляемые
 поломки** (таймауты, 500-ки, битый JSON, неверный Content-Type) — на них
-построен модуль 06. Сервер: `common/server/helpdesk_api.py`.
+построен модуль 06. Для модуля 08 он также отдаёт `502/503/504/flaky`,
+`ETag`/`304`, optimistic locking (`If-Match`/`412`), асинхронные экспорты
+(`202`+polling), CORS (`CORS_ORIGIN`), заголовки `Deprecation`/`Sunset` и
+поднимается по HTTPS (`scripts/api.sh tls-up`). Сервер:
+`common/server/helpdesk_api.py`.
 
 Модуль 07 — единственный, которому нужны интернет и бесплатный аккаунт
 Atlassian: разворачивается настоящий Jira Service Management (cloud free).
@@ -131,7 +138,8 @@ labs/api/
     ├── 04-postman/
     ├── 05-auth/
     ├── 06-integrations-troubleshooting/
-    └── 07-jira-capstone/
+    ├── 07-jira-capstone/
+    └── 08-network-tls-5xx/  ← + assets/ (HAR, GraphQL-ответ)
 ```
 
 ## Что дальше (после курса)
@@ -139,5 +147,6 @@ labs/api/
 - `labs/kubernetes/modules/01-kubectl-basics` — увидеть, что kubectl это
   тоже REST-клиент к API (всё, что вы выучили здесь, работает и там);
 - `labs/devops-junior-screening` — смежные навыки эксплуатации;
-- идеи развития курса: GraphQL-модуль, gRPC-обзор, нагрузочное тестирование
-  API (k6), мониторинг API (blackbox exporter).
+- идеи развития курса: отдельный GraphQL-модуль (в 08 — только обзор и
+  ловушка «200 + errors»), gRPC-обзор, нагрузочное тестирование API (k6),
+  мониторинг API (blackbox exporter).

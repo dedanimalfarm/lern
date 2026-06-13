@@ -9,9 +9,11 @@
   библиотека Python, никаких pip-зависимостей. Управление —
   `scripts/api.sh up|down|status|logs|sink-up|sink-down`.
 - Конфигурация сервера — через env (`AUTH_MODE`, `RATE_LIMIT`, `FAULT`,
-  `WEBHOOK_URL`, `TOKEN_TTL`…); поломки переключаются на лету через
-  `POST /api/v1/_lab/fault`, состояние — `GET /api/v1/_lab/state`,
-  пересев данных — `POST /api/v1/_lab/reset`.
+  `WEBHOOK_URL`, `TOKEN_TTL`, `CORS_ORIGIN`, `TLS_CERT`/`TLS_KEY`…); поломки
+  (`slow`/`error500`/`badjson`/`wrongct`/`error502`/`error503`/`error504`/
+  `flaky`) переключаются на лету через `POST /api/v1/_lab/fault`, состояние —
+  `GET /api/v1/_lab/state`, пересев данных — `POST /api/v1/_lab/reset`.
+  HTTPS-стенд (самоподпись, :8443) — `scripts/api.sh tls-up|tls-down`.
 - Сид-данные детерминированы (8 тикетов, id 1–8) — «ожидаемые выводы»
   в README модулей рассчитаны на состояние после `_lab/reset`.
 - Модуль 07 — внешний SaaS (Jira Cloud free). Его «ожидаемые выводы» —
@@ -25,7 +27,7 @@
   контрольные вопросы после части, `tasks/*.md`, `broken/scenario-XX/` +
   `solutions/`, `verify/{prepare.sh,verify.sh,cleanup.sh}`, шпаргалка,
   итоговые вопросы, «Чему вы научились».
-- «Ожидаемые выводы» модулей 01–06 ОБЯЗАТЕЛЬНО снимаются с живого стенда.
+- «Ожидаемые выводы» модулей 01–06 и 08 ОБЯЗАТЕЛЬНО снимаются с живого стенда.
 - Каждый модуль самодостаточен: prepare.sh сам поднимает стенд в нужном
   режиме, cleanup.sh возвращает дефолт (`scripts/api.sh up` без env).
 - Ориентация на трудоустройство: в каждом модуле есть блок «Как это звучит

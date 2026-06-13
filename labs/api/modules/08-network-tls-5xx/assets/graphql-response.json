@@ -1,0 +1,15 @@
+{
+  "errors": [
+    {
+      "message": "Ticket with id 999 not found",
+      "path": ["ticket"],
+      "extensions": {
+        "code": "NOT_FOUND",
+        "classification": "DataFetchingException"
+      }
+    }
+  ],
+  "data": {
+    "ticket": null
+  }
+}

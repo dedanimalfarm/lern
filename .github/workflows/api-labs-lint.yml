@@ -84,3 +84,37 @@ jobs:
           COUNT=$(curl -sf http://127.0.0.1:9100/received \
             | python3 -c 'import json,sys; print(json.load(sys.stdin)["count"])')
           [ "$COUNT" -ge 1 ] || { echo "sink не получил событие"; exit 1; }
+
+      - name: Фичи модуля 08 (5xx, ETag/304, 412, 202, Sunset, HTTPS)
+        run: |
+          set -e
+          B=http://127.0.0.1:8080
+          curl -s -X POST "$B/api/v1/_lab/reset" \
+            -H 'Content-Type: application/json' -d '{}' >/dev/null
+          chk() { [ "$1" = "$2" ] || { echo "FAIL: $3 ждали $2, получили $1"; exit 1; }; }
+          # 5xx-семейство
+          for pair in error502:502 error503:503 error504:504; do
+            m=${pair%%:*}; want=${pair##*:}
+            curl -s -X POST "$B/api/v1/_lab/fault" \
+              -H 'Content-Type: application/json' -d "{\"mode\":\"$m\"}" >/dev/null
+            chk "$(curl -s -o /dev/null -w '%{http_code}' "$B/api/v1/tickets")" "$want" "$m"
+          done
+          curl -s -X POST "$B/api/v1/_lab/fault" \
+            -H 'Content-Type: application/json' -d '{"mode":"none"}' >/dev/null
+          # ETag -> 304 и If-Match -> 412
+          ETAG=$(curl -s -D - -o /dev/null "$B/api/v1/tickets/1" \
+            | awk -F': ' 'tolower($1)=="etag"{print $2}' | tr -d '\r')
+          chk "$(curl -s -o /dev/null -w '%{http_code}' -H "If-None-Match: $ETAG" "$B/api/v1/tickets/1")" 304 "ETag/304"
+          chk "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH -H 'If-Match: "stale"' \
+            -H 'Content-Type: application/json' -d '{"priority":"low"}' "$B/api/v1/tickets/1")" 412 "If-Match/412"
+          # 202 + статус-ресурс
+          chk "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/api/v1/exports" \
+            -H 'Content-Type: application/json' -d '{"format":"csv"}')" 202 "exports/202"
+          # Deprecation/Sunset на v0
+          curl -s -D - -o /dev/null "$B/api/v0/tickets/1" \
+            | grep -qi '^Sunset:' || { echo "FAIL: нет Sunset на /api/v0"; exit 1; }
+          # HTTPS-стенд
+          scripts/api.sh tls-up
+          chk "$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1:8443/health)" 200 "https"
+          scripts/api.sh tls-down
+          echo "module 08 smoke OK"
