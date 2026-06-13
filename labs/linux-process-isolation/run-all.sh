@@ -2,7 +2,7 @@
 # Прогоняет check.sh всех этапов по очереди. Считает PASS/FAIL.
 # Если какой-то check упал, продолжаем (чтобы увидеть полную картину).
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo "запусти как root: sudo ./run-all.sh" >&2
@@ -38,15 +38,17 @@ for s in "${STAGES[@]}"; do
   echo "############################################################"
   echo "##  STAGE $s"
   echo "############################################################"
-  if [[ ! -x "./$s/check.sh" ]]; then
-    echo "  $s: нет check.sh — пропускаем"
-    SKIP+=("$s")
-    continue
-  fi
-  if ./"$s"/check.sh; then
-    OK+=("$s")
+  # Единый вход — scripts/qa/run-module.sh: для модулей нового стандарта он
+  # сделает prepare→verify→cleanup, для старого формата — фолбэк на check.sh.
+  if [[ -f "./$s/verify/verify.sh" || -x "./$s/check.sh" ]]; then
+    if ./scripts/qa/run-module.sh "$s"; then
+      OK+=("$s")
+    else
+      FAIL+=("$s")
+    fi
   else
-    FAIL+=("$s")
+    echo "  $s: нет verify/ и нет check.sh — пропускаем"
+    SKIP+=("$s")
   fi
 done
 

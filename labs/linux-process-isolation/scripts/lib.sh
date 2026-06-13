@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Общие функции для run.sh / check.sh всех этапов.
 # source-ить так: . "$(dirname "$0")/../scripts/lib.sh"
 
