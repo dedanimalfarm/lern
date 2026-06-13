@@ -22,7 +22,7 @@
 Команда `EXPLAIN` показывает план выполнения запроса, выбранный планировщиком, **без фактического запуска самого запроса**. Это безопасно запускать на продакшене для анализа тяжелых запросов.
 
 ```sql
-EXPLAIN SELECT * FROM users WHERE email = 'user_5@example.com';
+EXPLAIN SELECT * FROM customer WHERE email = 'jared.ely@sakilacustomer.org';
 ```
 
 Вывод команды `EXPLAIN` содержит:
@@ -41,14 +41,14 @@ EXPLAIN SELECT * FROM users WHERE email = 'user_5@example.com';
 
 Для DevOps-инженера критически важна метрика **дискового I/O**. Чтобы увидеть её, используют опцию `BUFFERS`:
 ```sql
-EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM users WHERE email = 'user_5@example.com';
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM customer WHERE email = 'jared.ely@sakilacustomer.org';
 ```
 
 Пример вывода:
 ```text
-Seq Scan on users  (cost=0.00..2.50 rows=1 width=34) (actual time=0.015..0.038 rows=1 loops=1)
-  Filter: (email = 'user_5@example.com'::text)
-  Rows Removed by Filter: 99
+Seq Scan on customer  (cost=0.00..2.50 rows=1 width=34) (actual time=0.015..0.038 rows=1 loops=1)
+  Filter: (email = 'jared.ely@sakilacustomer.org'::text)
+  Rows Removed by Filter: 598
   Buffers: shared hit=2
 Planning Time: 0.082 ms
 Execution Time: 0.055 ms
@@ -65,18 +65,18 @@ Execution Time: 0.055 ms
 Чтобы не сканировать таблицу целиком, создают **индексы**. Индекс — это вспомогательная структура данных (по умолчанию сбалансированное дерево — B-Tree), которая хранит отсортированные значения колонки и ссылки на строки в основной таблице.
 
 1. **Автоматические индексы:**
-   Первичные ключи (`PRIMARY KEY`) и ограничения уникальности (`UNIQUE`) автоматически создают индексы в PostgreSQL. Нам не нужно вручную создавать индекс для колонок `id` или `users.email` (так как на них висит unique constraint).
+   Первичные ключи (`PRIMARY KEY`) и ограничения уникальности (`UNIQUE`) автоматически создают индексы в PostgreSQL. Нам не нужно вручную создавать индекс для колонок `customer_id` или уникального `email` (если на нем висит unique constraint).
 
 2. **Ручное создание индексов:**
    Для колонок, по которым часто идет фильтрация (`WHERE`) или соединение (`JOIN`), создают индексы вручную:
    ```sql
-   CREATE INDEX idx_users_registration_date ON users(registration_date);
+   CREATE INDEX idx_customer_create_date ON customer(create_date);
    ```
 
 3. **Составные индексы (Composite Indexes):**
    Если в `WHERE` часто фильтруются две колонки одновременно через логический оператор `AND`, эффективнее создать один составной индекс:
    ```sql
-   CREATE INDEX idx_products_cat_price ON products(category, price);
+   CREATE INDEX idx_film_rating_rate ON film(rating, rental_rate);
    ```
 
 ---
@@ -86,11 +86,11 @@ Execution Time: 0.055 ms
 Существуют специализированные типы индексов, которые позволяют экономить оперативную память сервера и дисковое пространство.
 
 ### 1. Частичные индексы (Partial Indexes)
-Если вы часто делаете запросы только по определенному подмножеству данных (например, ищете только отмененные заказы или активных пользователей), нет смысла индексировать всю таблицу. Можно создать индекс с условием `WHERE`:
+Если вы часто делаете запросы только по определенному подмножеству данных (например, ищете только невозвращенные аренды или активных клиентов), нет смысла индексировать всю таблицу. Можно создать индекс с условием `WHERE`:
 
 ```sql
-CREATE INDEX idx_orders_cancelled ON orders(user_id) 
-WHERE status = 'CANCELLED';
+CREATE INDEX idx_rental_not_returned ON rental(customer_id) 
+WHERE return_date IS NULL;
 ```
 * **Плюсы:** Такой индекс занимает в разы меньше места на диске и быстрее обновляется при вставках/обновлениях.
 
@@ -99,12 +99,12 @@ WHERE status = 'CANCELLED';
 Если мы добавим дополнительные колонки в индекс с помощью секции `INCLUDE`, база данных сможет прочитать все данные прямо из индекса, не обращаясь к таблице на диске. Это называется **`Index Only Scan`**.
 
 ```sql
-CREATE INDEX idx_products_covering ON products(category) 
-INCLUDE (name, price);
+CREATE INDEX idx_film_covering ON film(rating) 
+INCLUDE (title, rental_rate);
 ```
 При выполнении запроса:
 ```sql
-SELECT name, price FROM products WHERE category = 'Книги';
+SELECT title, rental_rate FROM film WHERE rating = 'G';
 ```
 СУБД выполнит `Index Only Scan` и прочитает 0 блоков основной таблицы (все данные будут взяты из индекса).
 
@@ -132,31 +132,31 @@ WHERE idx_scan = 0 AND indexrelname NOT LIKE '%_pkey';
 ## Часть 6: Troubleshooting — почему индекс не используется?
 
 ### Сценарий 1: Индекс создан, но СУБД всё равно делает Seq Scan
-Вы создали индекс на колонку `registration_date` в таблице `users`. Но при запуске `EXPLAIN ANALYZE` видите `Seq Scan`.
+Вы создали индекс на колонку `create_date` в таблице `customer`. Но при запуске `EXPLAIN ANALYZE` видите `Seq Scan`.
 
 **Причина и решение:**
-1. **Маленький размер таблицы.** Если в таблице всего 100 строк (как на нашем тестовом стенде), планировщик решает, что прочитать один блок данных целиком быстрее, чем сначала читать индексный файл, а потом переходить к таблице. Чтение индекса добавляет накладные расходы. В таких случаях `Seq Scan` — это абсолютно нормальный выбор планировщика.
+1. **Маленький размер таблицы.** Если в таблице всего 600 строк (как в нашей БД pagila), планировщик решает, что прочитать несколько блоков данных целиком быстрее, чем сначала читать индексный файл, а потом переходить к таблице. Чтение индекса добавляет накладные расходы. В таких случаях `Seq Scan` — это абсолютно нормальный выбор планировщика.
 2. **Как проверить?** Для принудительного тестирования индекса на маленьких таблицах в рамках сессии можно отключить последовательные сканирования:
    ```sql
    SET enable_seqscan = off;
-   EXPLAIN ANALYZE SELECT * FROM users WHERE registration_date = '2026-05-15';
+   EXPLAIN ANALYZE SELECT * FROM customer WHERE create_date = '2006-02-14';
    ```
 
 ### Сценарий 2: Использование функций «убивает» индекс
 Разработчик написал запрос:
 ```sql
-SELECT * FROM users WHERE EXTRACT(YEAR FROM registration_date) = 2026;
+SELECT * FROM customer WHERE EXTRACT(YEAR FROM create_date) = 2006;
 ```
-Этот запрос делает `Seq Scan`, хотя индекс на `registration_date` существует.
+Этот запрос делает `Seq Scan`, хотя индекс на `create_date` существует.
 
 **Причина и решение:**
-Индекс построен по значениям колонки `registration_date`, а не по результатам функции `EXTRACT`. Чтобы индекс заработал, нужно переписать запрос на поиск по диапазону дат:
+Индекс построен по значениям колонки `create_date`, а не по результатам функции `EXTRACT`. Чтобы индекс заработал, нужно переписать запрос на поиск по диапазону дат:
 ```sql
-SELECT * FROM users WHERE registration_date BETWEEN '2026-01-01' AND '2026-12-31';
+SELECT * FROM customer WHERE create_date BETWEEN '2006-01-01' AND '2006-12-31';
 ```
 Либо создать специальный функциональный индекс:
 ```sql
-CREATE INDEX idx_users_reg_year ON users ((EXTRACT(YEAR FROM registration_date)));
+CREATE INDEX idx_customer_create_year ON customer ((EXTRACT(YEAR FROM create_date)));
 ```
 
 ---
