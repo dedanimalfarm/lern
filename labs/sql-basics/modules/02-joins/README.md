@@ -18,7 +18,7 @@
 
 ## Часть 1: Нормализация и внешние ключи
 
-В реляционных базах данных информация не дублируется. Данные о клиенте хранятся в одной таблице, а данные о его заказах — в другой. Связь осуществляется через Внешний Ключ (Foreign Key). Для объединения этих данных в единый результат используются операторы `JOIN`.
+В реляционных базах данных информация не дублируется. Данные о клиенте хранятся в одной таблице, а данные о его арендах (прокате фильмов) — в другой. Связь осуществляется через Внешний Ключ (Foreign Key). Для объединения этих данных в единый результат используются операторы `JOIN`.
 
 ---
 
@@ -27,11 +27,11 @@
 `INNER JOIN` (или просто `JOIN`) оставляет только те строки, для которых нашлось совпадение в обеих связываемых таблицах по условию `ON`.
 
 ```sql
-SELECT orders.id AS order_id, users.name, orders.order_date
-FROM orders
-INNER JOIN users ON orders.user_id = users.id;
+SELECT rental.rental_id, customer.first_name, rental.rental_date
+FROM rental
+INNER JOIN customer ON rental.customer_id = customer.customer_id;
 ```
-Если в таблице `users` есть клиент, который не совершил ни одного заказа, он НЕ попадет в итоговую выборку.
+Если в таблице `customer` есть клиент, который не совершил ни одной аренды, он НЕ попадет в итоговую выборку.
 
 ---
 
@@ -40,11 +40,11 @@ INNER JOIN users ON orders.user_id = users.id;
 `LEFT JOIN` гарантирует, что ВСЕ строки из "левой" (первой указанной) таблицы попадут в результат. Если для строки из левой таблицы не нашлось совпадения в правой, соответствующие колонки правой таблицы будут заполнены значением `NULL`.
 
 ```sql
-SELECT users.name, orders.id AS order_id
-FROM users
-LEFT JOIN orders ON users.id = orders.user_id;
+SELECT film.title, inventory.inventory_id
+FROM film
+LEFT JOIN inventory ON film.film_id = inventory.film_id;
 ```
-Этот запрос выведет абсолютно всех клиентов. Те, кто ничего не покупал, будут иметь `NULL` в колонке `order_id`.
+Этот запрос выведет абсолютно все фильмы. Те, которых нет в наличии в магазине (в инвентаре), будут иметь `NULL` в колонке `inventory_id`.
 
 ---
 
@@ -55,31 +55,32 @@ LEFT JOIN orders ON users.id = orders.user_id;
 Для его реализации выполняется `LEFT JOIN` с последующей фильтрацией по ключевому полю правой таблицы на равенство `IS NULL`:
 
 ```sql
--- Найти пользователей, которые ни разу не делали заказов
-SELECT users.name
-FROM users
-LEFT JOIN orders ON users.id = orders.user_id
-WHERE orders.id IS NULL;
+-- Найти фильмы, которых нет в инвентаре (ни разу не закупались)
+SELECT film.title
+FROM film
+LEFT JOIN inventory ON film.film_id = inventory.film_id
+WHERE inventory.inventory_id IS NULL;
 ```
-*Как это работает:* Запрос соединяет всех пользователей с их заказами. Если у пользователя нет заказов, поле `orders.id` заполняется как `NULL`. Секция `WHERE orders.id IS NULL` оставляет только таких пользователей.
+*Как это работает:* Запрос соединяет все фильмы с их копиями в инвентаре. Если фильма нет в инвентаре, поле `inventory.inventory_id` заполняется как `NULL`. Секция `WHERE inventory.inventory_id IS NULL` оставляет только такие фильмы.
 
 ---
 
 ## Часть 5: Детализация множества таблиц
 
-Построим сложный чек для Заказа №1, связав 4 таблицы:
+Построим сложный запрос для Аренды №1, связав 4 таблицы:
 
 ```sql
 SELECT 
-    users.name AS customer_name,
-    products.name AS product_name,
-    order_items.quantity,
-    order_items.price_per_unit
-FROM orders
-JOIN users ON orders.user_id = users.id
-JOIN order_items ON orders.id = order_items.order_id
-JOIN products ON order_items.product_id = products.id
-WHERE orders.id = 1;
+    customer.first_name AS customer_name,
+    film.title AS film_title,
+    rental.rental_date,
+    payment.amount
+FROM rental
+JOIN customer ON rental.customer_id = customer.customer_id
+JOIN inventory ON rental.inventory_id = inventory.inventory_id
+JOIN film ON inventory.film_id = film.film_id
+JOIN payment ON rental.rental_id = payment.rental_id
+WHERE rental.rental_id = 1;
 ```
 
 ---
@@ -89,29 +90,29 @@ WHERE orders.id = 1;
 > [!IMPORTANT]
 > **Важнейший факт для DevOps-инженера:** Ограничение внешнего ключа (`FOREIGN KEY`) гарантирует целостность связей, но в PostgreSQL оно **автоматически НЕ создает индекс** на ссылающейся колонке. 
 
-Если у вас есть связь:
+Если у вас есть связь (которая уже есть в базе):
 ```sql
-ALTER TABLE orders ADD CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users(id);
+ALTER TABLE rental ADD CONSTRAINT rental_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES customer(customer_id);
 ```
-Индекс автоматически создается только для `users.id` (так как это Primary Key). Для колонки `orders.user_id` индекса **нет**.
+Индекс автоматически создается только для `customer.customer_id` (так как это Primary Key). Для колонки `rental.customer_id` индекса по умолчанию **нет** (в pagila они могли быть созданы отдельно, но в общем случае это не так).
 
 **В чем проблема?**
-1. При каждом `JOIN` таблиц `users` и `orders` СУБД будет вынуждена делать `Seq Scan` (последовательное сканирование) таблицы `orders`, что убьет производительность на больших объемах данных.
-2. При удалении пользователя из `users` СУБД должна будет проверить таблицу `orders` на наличие зависимых записей. Без индекса это вызовет сканирование всей таблицы `orders` и блокировку строк.
+1. При каждом `JOIN` таблиц `customer` и `rental` СУБД будет вынуждена делать `Seq Scan` (последовательное сканирование) таблицы `rental`, что убьет производительность на больших объемах данных.
+2. При удалении клиента из `customer` СУБД должна будет проверить таблицу `rental` на наличие зависимых записей. Без индекса это вызовет сканирование всей таблицы `rental` и блокировку строк.
 
 **Решение:**
 Всегда вручную создавайте индексы для колонок внешних ключей:
 ```sql
-CREATE INDEX idx_orders_user_id ON orders(user_id);
+CREATE INDEX idx_rental_customer_id ON rental(customer_id);
 ```
 
 ---
 
 ## Часть 7: Troubleshooting
 
-**Сценарий:** Вы написали запрос для соединения таблицы `products` и `users`:
+**Сценарий:** Вы написали запрос для соединения таблицы `film` и `customer`:
 ```sql
-SELECT * FROM products, users;
+SELECT * FROM film, customer;
 ```
 Запрос выполняется бесконечно долго, а результат содержит миллионы строк, хотя в таблицах их всего несколько тысяч.
 

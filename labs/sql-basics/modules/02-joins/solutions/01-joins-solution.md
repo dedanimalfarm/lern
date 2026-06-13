@@ -1,26 +1,26 @@
 # Решение: Задание 1
 
 ```sql
--- 1. Список заказов и имена покупателей (INNER JOIN)
-SELECT orders.id AS order_id, orders.order_date, users.name 
-FROM orders
-JOIN users ON orders.user_id = users.id;
+-- 1. Список аренд и имена клиентов (INNER JOIN)
+SELECT rental.rental_id, rental.rental_date, customer.first_name 
+FROM rental
+JOIN customer ON rental.customer_id = customer.customer_id;
 
--- 2. Все пользователи и их заказы (LEFT JOIN)
-SELECT users.name, orders.order_date 
-FROM users
-LEFT JOIN orders ON users.id = orders.user_id;
+-- 2. Все фильмы и их копии в инвентаре (LEFT JOIN)
+SELECT film.title, inventory.inventory_id 
+FROM film
+LEFT JOIN inventory ON film.film_id = inventory.film_id;
 
--- 3. Детализация заказа №1 (4 таблицы)
+-- 3. Детализация аренды №1 (5 таблиц)
 SELECT 
-    users.name AS user_name,
-    orders.order_date,
-    products.name AS product_name,
-    order_items.quantity,
-    order_items.price_per_unit
-FROM orders
-JOIN users ON orders.user_id = users.id
-JOIN order_items ON orders.id = order_items.order_id
-JOIN products ON order_items.product_id = products.id
-WHERE orders.id = 1;
+    customer.first_name AS user_name,
+    rental.rental_date,
+    film.title AS film_title,
+    payment.amount
+FROM rental
+JOIN customer ON rental.customer_id = customer.customer_id
+JOIN inventory ON rental.inventory_id = inventory.inventory_id
+JOIN film ON inventory.film_id = film.film_id
+JOIN payment ON rental.rental_id = payment.rental_id
+WHERE rental.rental_id = 1;
 ```
