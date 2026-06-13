@@ -62,7 +62,7 @@ GROUP BY rating;
 
 ```sql
 -- Округление до часа (отбросит минуты и секунды):
--- '2005-05-24 22:54:33' -> '2005-05-24 22:00:00'
+-- '2022-05-24 22:54:33' -> '2022-05-24 22:00:00'
 SELECT date_trunc('hour', rental_date) AS rental_hour, COUNT(*) AS count
 FROM rental
 GROUP BY rental_hour
