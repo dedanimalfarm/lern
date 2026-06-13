@@ -62,7 +62,7 @@ DELETE FROM orders WHERE status = 'CANCELLED';
 ## Часть 4: Опасность массовых удалений (Batch Deletes)
 
 > [!WARNING]
-> **Критическая ошибка DevOps:** Запуск команды вроде `DELETE FROM logs WHERE created_at < '2025-01-01';` на таблице из 100 000 000 строк может «уронить» базу данных.
+> **Критическая ошибка DevOps:** Запуск команды вроде `DELETE FROM orders WHERE order_date < '2025-01-01';` на таблице из 100 000 000 строк может «уронить» базу данных.
 
 **Почему это происходит?**
 1. **Блокировки (Row Locks):** База данных заблокирует все удаляемые строки. Приложения не смогут обновить или записать данные в эту таблицу (возникнут таймауты).
@@ -73,8 +73,8 @@ DELETE FROM orders WHERE status = 'CANCELLED';
 Удаляйте большие объемы данных частями (батчами) в цикле, делая небольшую паузу (`sleep`) между итерациями, чтобы СУБД успевала обрабатывать запросы пользователей:
 ```sql
 -- Пример концепта батч-удаления:
-DELETE FROM logs 
-WHERE id IN (SELECT id FROM logs WHERE created_at < '2025-01-01' LIMIT 5000);
+DELETE FROM orders 
+WHERE id IN (SELECT id FROM orders WHERE order_date < '2025-01-01' LIMIT 5000);
 ```
 
 ---
@@ -84,7 +84,7 @@ WHERE id IN (SELECT id FROM logs WHERE created_at < '2025-01-01' LIMIT 5000);
 Если вам нужно полностью очистить таблицу (например, сбросить кэш или очистить временную лог-таблицу), использование `DELETE FROM table;` неэффективно. Вместо этого применяется `TRUNCATE TABLE`:
 
 ```sql
-TRUNCATE TABLE logs;
+TRUNCATE TABLE orders CASCADE;
 ```
 
 ### Сравнительная таблица: DELETE vs TRUNCATE

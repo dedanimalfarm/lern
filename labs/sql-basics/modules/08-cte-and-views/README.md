@@ -27,22 +27,22 @@
 ```sql
 SELECT avg_amount 
 FROM (
-    SELECT user_id, AVG(total_amount) as avg_amount
-    FROM orders 
-    GROUP BY user_id
-) AS user_stats 
+    SELECT order_id, AVG(quantity * price_per_unit) as avg_amount
+    FROM order_items 
+    GROUP BY order_id
+) AS order_stats 
 WHERE avg_amount > 1000;
 ```
 
 **С использованием CTE (гораздо читаемее):**
 ```sql
-WITH user_stats AS (
-    SELECT user_id, AVG(total_amount) as avg_amount
-    FROM orders 
-    GROUP BY user_id
+WITH order_stats AS (
+    SELECT order_id, AVG(quantity * price_per_unit) as avg_amount
+    FROM order_items 
+    GROUP BY order_id
 )
 SELECT avg_amount 
-FROM user_stats 
+FROM order_stats 
 WHERE avg_amount > 1000;
 ```
 *Подсказка: CTE могут быть цепочечными! Можно написать `WITH cte1 AS (...), cte2 AS (...) SELECT ...`*
@@ -58,8 +58,7 @@ CREATE VIEW user_order_summary AS
 SELECT 
     u.id, 
     u.name, 
-    COUNT(o.id) as total_orders, 
-    SUM(o.total_amount) as total_spent
+    COUNT(o.id) as total_orders
 FROM users u
 LEFT JOIN orders o ON u.id = o.user_id
 GROUP BY u.id, u.name;
@@ -67,7 +66,7 @@ GROUP BY u.id, u.name;
 
 Теперь мы можем делать запросы к этому представлению так же, как к обычной таблице:
 ```sql
-SELECT * FROM user_order_summary WHERE total_spent > 5000;
+SELECT * FROM user_order_summary WHERE total_orders > 5;
 ```
 
 **Важно:** Обычный `VIEW` не хранит данные физически! Каждый раз, когда вы делаете `SELECT * FROM view`, база данных "под капотом" выполняет исходный сложный запрос. Это не ускоряет работу, а лишь упрощает синтаксис.
@@ -81,23 +80,23 @@ SELECT * FROM user_order_summary WHERE total_spent > 5000;
 Материализованное представление физически кэширует (сохраняет) результаты выполнения запроса на диск.
 
 ```sql
-CREATE MATERIALIZED VIEW monthly_sales_report AS
+CREATE MATERIALIZED VIEW monthly_orders_report AS
 SELECT 
     date_trunc('month', order_date) as report_month,
-    SUM(total_amount) as total_revenue
+    COUNT(id) as total_orders
 FROM orders
 GROUP BY date_trunc('month', order_date);
 ```
 
-Скорость `SELECT * FROM monthly_sales_report` будет мгновенной, так как данные уже посчитаны! 
+Скорость `SELECT * FROM monthly_orders_report` будет мгновенной, так как данные уже посчитаны! 
 **DevOps-инсайт:** Но есть нюанс — данные в материализованном представлении могут "протухать". При добавлении новых заказов отчет не обновится автоматически. Его нужно обновлять явно (например, по cron-расписанию или через триггер):
 
 ```sql
 -- Полное перестроение кэша (блокирует чтение)
-REFRESH MATERIALIZED VIEW monthly_sales_report;
+REFRESH MATERIALIZED VIEW monthly_orders_report;
 
 -- Обновление без блокировки чтения (требует уникального индекса на VIEW!)
-REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_sales_report;
+REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_orders_report;
 ```
 
 ---
