@@ -2,6 +2,7 @@
 # Ставит все пакеты, которые потребуются курсу.
 # Только Ubuntu/Debian. На других дистрибутивах — поставь руками.
 set -euo pipefail
+# shellcheck source=scripts/lib.sh
 . "$(dirname "$0")/../scripts/lib.sh"
 
 if ! command -v apt-get >/dev/null 2>&1; then
@@ -28,6 +29,7 @@ apt-get install -y \
   stress-ng fio \
   strace ltrace \
   iputils-ping \
+  uidmap bpftrace jq \
   ca-certificates
 
 log "готово. Перепроверь:  sudo ./check.sh"
