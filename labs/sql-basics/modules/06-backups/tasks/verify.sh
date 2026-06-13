@@ -1,9 +1,9 @@
 #!/bin/bash
 # Проверка решений модуля 06: Резервное копирование
 SOLUTION_FILE="solution.sh"
-DB_NAME="shop_db"
+DB_NAME="pagila"
 DATE=$(date +%Y-%m-%d)
-BACKUP_FILE="/tmp/shop_db_${DATE}.dump"
+BACKUP_FILE="/tmp/pagila_${DATE}.dump"
 
 if [ ! -f "$SOLUTION_FILE" ]; then
     echo "❌ Файл $SOLUTION_FILE не найден!"
@@ -58,9 +58,9 @@ else
 fi
 
 # Проверка наличия данных в восстановленной таблице
-COUNT=$(eval "(cd /tmp && $PSQL_CMD -t -A -c \"SELECT COUNT(*) FROM order_items;\")" 2>/dev/null)
+COUNT=$(eval "(cd /tmp && $PSQL_CMD -t -A -c \"SELECT COUNT(*) FROM film_category;\")" 2>/dev/null)
 if [ -z "$COUNT" ] || [ "$COUNT" -eq 0 ]; then
-    echo "❌ Восстановленная таблица order_items пуста или не существует!"
+    echo "❌ Восстановленная таблица film_category пуста или не существует!"
     exit 1
 fi
 

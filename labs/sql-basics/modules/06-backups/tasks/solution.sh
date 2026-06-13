@@ -3,8 +3,8 @@ set -e
 
 # Определение даты и имени файла
 DATE=$(date +%Y-%m-%d)
-BACKUP_FILE="/tmp/shop_db_${DATE}.dump"
-DB_NAME="shop_db"
+BACKUP_FILE="/tmp/pagila_${DATE}.dump"
+DB_NAME="pagila"
 
 # Автоопределение метода подключения
 if sudo -u postgres psql -d "$DB_NAME" -c "SELECT 1" > /dev/null 2>&1; then
@@ -23,10 +23,10 @@ fi
 # 1. Резервное копирование в формате Custom
 $PGDUMP_CMD -F c -f "$BACKUP_FILE"
 
-# 2. Имитация сбоя (удаление таблицы order_items)
-$PSQL_CMD -c "DROP TABLE IF EXISTS order_items CASCADE;"
+# 2. Имитация сбоя (удаление таблицы film_category)
+$PSQL_CMD -c "DROP TABLE IF EXISTS film_category CASCADE;"
 
 # 3. Выборочное восстановление таблицы
-$PGRESTORE_CMD -t order_items "$BACKUP_FILE"
+$PGRESTORE_CMD -t film_category "$BACKUP_FILE"
 
 echo "✅ Резервное копирование и выборочное восстановление успешно завершено!"
