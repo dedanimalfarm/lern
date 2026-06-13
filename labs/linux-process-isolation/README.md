@@ -57,7 +57,7 @@ sudo ./01-chroot/run.sh
 | 01 | [01-chroot](./01-chroot) | chroot: изоляция ФС и её дырявость (эталон) | ✅ |
 | 02 | [02-namespaces](./02-namespaces) | UTS/PID/MNT/NET/USER/IPC namespaces | ✅ |
 | 03 | [03-pivot-root](./03-pivot-root) | pivot_root: безопасная смена корня | ✅ |
-| 04 | [04-cgroups-v2](./04-cgroups-v2) | Лимиты CPU/RAM/IO/PIDs (cgroup v2) | 🔸 |
+| 04 | [04-cgroups-v2](./04-cgroups-v2) | Лимиты CPU/RAM/IO/PIDs (cgroup v2) | ✅ |
 | 05 | [05-capabilities](./05-capabilities) | Дробление root-прав (capabilities) | 🔸 |
 | 06 | [06-seccomp](./06-seccomp) | Фильтрация системных вызовов | 🔸 |
 | 07 | [07-apparmor](./07-apparmor) | Мандатный контроль доступа (MAC) | 🔸 |
