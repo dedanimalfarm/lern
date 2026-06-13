@@ -63,7 +63,7 @@ sudo ./01-chroot/run.sh
 | 07 | [07-apparmor](./07-apparmor) | Мандатный контроль доступа (MAC) | ✅ |
 | 08 | [08-overlayfs](./08-overlayfs) | Слоистая ФС, CoW, whiteout | ✅ |
 | 09 | [09-networking](./09-networking) | veth, bridge, NAT | ✅ |
-| 10 | [10-rootfs-and-nspawn](./10-rootfs-and-nspawn) | Сборка rootfs, systemd-nspawn | 🔸 |
+| 10 | [10-rootfs-and-nspawn](./10-rootfs-and-nspawn) | Сборка rootfs, systemd-nspawn | ✅ |
 | 11 | [11-capstone](./11-capstone) | «Свой Docker» из ~150 строк bash | 🔸 |
 | 12 | [12-rootless](./12-rootless) | Контейнер без root (user-ns) | 🔸 |
 | 13 | [13-oci-runc](./13-oci-runc) | Запуск через эталонный `runc` | 🔸 |

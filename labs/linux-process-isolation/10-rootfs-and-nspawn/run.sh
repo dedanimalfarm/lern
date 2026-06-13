@@ -22,7 +22,7 @@ systemd-nspawn -q -D "$ALPINE_DIR" --pipe -- /bin/sh -c '
   echo "  PID 1:    $(cat /proc/1/comm)"
   echo "  os:       $(grep PRETTY_NAME /etc/os-release)"
   echo "  uname:    $(uname -r)"
-  echo "  ifaces:   $(ip a 2>/dev/null | grep -E "^[0-9]+:" | wc -l) (loopback only ⇒ изоляция сети)"
+  echo "  ifaces:   $(ip a 2>/dev/null | grep -E "^[0-9]+:" | wc -l) (это интерфейсы ХОСТА: net-ns общий; --private-network для изоляции)"
 '
 
 # ─── debootstrap (опционально) ───────────────────────────────────────────
