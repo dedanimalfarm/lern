@@ -1,19 +1,25 @@
-# Решение: Задание 1
+# Решение: Задание 1 (базовое)
+
+Эталонные ответы к шагам из `tasks/01-basic-select.md` (база данных `pagila`).
 
 ```sql
--- 1. Вывести имена и цены всех товаров
-SELECT name, price FROM products;
+-- 1. Названия и арендные ставки всех фильмов
+SELECT title, rental_rate FROM film;
 
--- 2. Электроника дешевле 100 000
-SELECT * FROM products 
-WHERE category = 'Электроника' AND price < 100000;
+-- 2. Фильмы с рейтингом 'G' и арендной ставкой меньше 3.00 (все колонки)
+SELECT * FROM film
+WHERE rating = 'G' AND rental_rate < 3.00;
 
--- 3. Топ-3 самых дорогих товара
-SELECT * FROM products 
-ORDER BY price DESC 
+-- 3. Топ-3 самых длинных фильмов
+SELECT title, length FROM film
+ORDER BY length DESC
 LIMIT 3;
 
--- 4. Пользователи с заполненной датой регистрации (не NULL)
-SELECT name FROM users 
-WHERE registration_date IS NOT NULL;
+-- 4. Аренды с незаполненной датой возврата (фильм ещё не вернули)
+SELECT rental_id FROM rental
+WHERE return_date IS NULL;
 ```
+
+> Примечание к шагу 3: поле `length` содержит много одинаковых значений, поэтому при равной длине набор из трёх строк не детерминирован. Для воспроизводимого результата добавьте вторичный ключ сортировки: `ORDER BY length DESC, film_id`.
+
+Задания из блока «🏆 Для самостоятельной работы» намеренно оставлены без решений — проверьте себя в консоли `psql`.

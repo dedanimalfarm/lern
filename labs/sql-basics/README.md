@@ -4,60 +4,78 @@
 
 ## Подготовка стенда (Инициализация БД)
 
-Для выполнения заданий вам потребуется тестовая база данных "Интернет-магазин" (E-commerce).
-В корне этого курса находится файл `init.sql`. Запустите его, чтобы создать таблицы и наполнить их тестовыми данными.
+Для выполнения заданий используется учебная база данных **Pagila** — стандартный демонстрационный набор PostgreSQL. Она моделирует прокат видео: фильмы, их экземпляры на складе, аренда клиентами и платежи.
+В корне курса лежит дамп `init.sql`. Он содержит только объекты схемы `public` (без `CREATE DATABASE`), поэтому базу `pagila` нужно создать заранее.
 
-**Вариант 1 — Локальный PostgreSQL:**
-```bash
-sudo -u postgres psql -f init.sql
-```
-
-**Вариант 2 — Docker Compose:**
+**Вариант 1 — Docker Compose (рекомендуется):**
 ```bash
 docker compose up -d
 ```
+Контейнер сам создаёт базу `pagila` (пользователь `postgres`, пароль `secretpassword`, порт `5432`) и при первом запуске прогоняет `init.sql`. Подключение:
+```bash
+PGPASSWORD=secretpassword psql -h 127.0.0.1 -U postgres -d pagila
+```
 
-Скрипт идемпотентен — его можно запускать повторно для пересоздания данных.
+**Вариант 2 — Локальный PostgreSQL:**
+```bash
+sudo -u postgres createdb pagila
+sudo -u postgres psql -d pagila -f init.sql
+```
 
-В результате будет создана база данных `shop_db` с таблицами: `users`, `products`, `orders` и `order_items`.
+> ⚠️ Дамп **не идемпотентен**: он не содержит `DROP`/`IF NOT EXISTS`, поэтому повторный прогон в уже наполненную базу завершится ошибками `relation ... already exists`. Чтобы пересоздать данные с нуля, сначала удалите базу (`dropdb pagila` или `docker compose down -v`), затем инициализируйте заново.
+
+В результате будет создана база данных `pagila` с таблицами `film`, `rental`, `customer`, `inventory`, `payment`, `actor`, `category` и др.
 
 ## Схема базы данных (ER Diagram)
 
-Вся практика модулей строится вокруг этой схемы. Она моделирует работу простого интернет-магазина.
+Практика модулей строится вокруг ядра схемы Pagila. Клиент (`customer`) берёт фильмы в аренду (`rental`); конкретный экземпляр фильма на складе — это `inventory`, который ссылается на сам фильм (`film`); за аренду проходит платёж (`payment`).
 
 ```mermaid
 erDiagram
-    users ||--o{ orders : places
-    users {
-        int id PK
-        varchar name
-        varchar email
-        date registration_date
+    customer ||--o{ rental : places
+    customer ||--o{ payment : makes
+    film ||--o{ inventory : "stocked as"
+    inventory ||--o{ rental : "rented as"
+    rental ||--o{ payment : "paid by"
+
+    customer {
+        int customer_id PK
+        text first_name
+        text last_name
+        text email
+        int address_id FK
     }
-    
-    products ||--o{ order_items : contains
-    products {
-        int id PK
-        varchar name
-        varchar category
-        decimal price
-        int stock_quantity
+
+    film {
+        int film_id PK
+        text title
+        text description
+        numeric rental_rate
+        smallint length
+        numeric replacement_cost
+        mpaa_rating rating
     }
-    
-    orders ||--o{ order_items : includes
-    orders {
-        int id PK
-        int user_id FK
-        timestamp order_date
-        varchar status
+
+    inventory {
+        int inventory_id PK
+        int film_id FK
+        int store_id
     }
-    
-    order_items {
-        int id PK
-        int order_id FK
-        int product_id FK
-        int quantity
-        decimal price_per_unit
+
+    rental {
+        int rental_id PK
+        timestamptz rental_date
+        int inventory_id FK
+        int customer_id FK
+        timestamptz return_date
+    }
+
+    payment {
+        int payment_id PK
+        int customer_id FK
+        int rental_id FK
+        numeric amount
+        timestamptz payment_date
     }
 ```
 

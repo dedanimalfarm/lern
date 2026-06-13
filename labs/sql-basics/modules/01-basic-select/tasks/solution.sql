@@ -1,6 +1,6 @@
 -- 1. Пагинация: вторая десятка фильмов с самой высокой стоимостью возмещения
-SELECT title, replacement_cost FROM film 
-ORDER BY replacement_cost DESC 
+SELECT title, replacement_cost FROM film
+ORDER BY replacement_cost DESC, film_id
 LIMIT 10 OFFSET 10;
 
 -- 2. Поиск по тексту: описания фильмов (регистронезависимый)

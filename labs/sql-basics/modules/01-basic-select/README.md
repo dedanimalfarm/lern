@@ -15,7 +15,10 @@
 ---
 
 ## Предварительные требования
-Убедитесь, что вы успешно выполнили команду импорта тестовых данных из файла `init.sql` в базу данных `shop_db`.
+Убедитесь, что вы успешно инициализировали тестовую базу данных `pagila` из файла `init.sql` (см. README курса). Подключитесь к ней, например:
+```bash
+PGPASSWORD=secretpassword psql -h 127.0.0.1 -U postgres -d pagila
+```
 
 ---
 
@@ -25,15 +28,15 @@
 
 ```sql
 -- Плохо (но допустимо для отладки)
-SELECT * FROM products;
+SELECT * FROM film;
 
 -- Хорошо (явно, прозрачно)
-SELECT name, price FROM products;
+SELECT title, rental_rate FROM film;
 ```
 
 Для устранения дубликатов в результатах используется модификатор `DISTINCT`:
 ```sql
-SELECT DISTINCT category FROM products;
+SELECT DISTINCT rating FROM film;
 ```
 
 ---
@@ -44,10 +47,10 @@ SELECT DISTINCT category FROM products;
 Вы можете использовать логические операторы `AND`, `OR`, `NOT`, а также диапазоны `BETWEEN` и списки `IN`.
 
 ```sql
-SELECT name, price 
-FROM products 
-WHERE category = 'Электроника' 
-  AND price BETWEEN 50000 AND 150000;
+SELECT title, rental_rate
+FROM film
+WHERE rating = 'PG'
+  AND rental_rate BETWEEN 2.00 AND 4.00;
 ```
 
 ### 1. Текстовый поиск с LIKE и ILIKE
@@ -55,23 +58,24 @@ WHERE category = 'Электроника'
 По умолчанию `LIKE` в PostgreSQL **чувствителен к регистру**. Чтобы искать без учета регистра, используйте оператор `ILIKE`:
 
 ```sql
--- Найдет 'Product_1', но пропустит 'product_1'
-SELECT name FROM products WHERE name LIKE 'Product%';
+-- Названия в Pagila хранятся в верхнем регистре, поэтому LIKE найдёт 'ACADEMY DINOSAUR',
+-- но пропустит 'academy dinosaur'
+SELECT title FROM film WHERE title LIKE 'ACADEMY%';
 
--- Найдет 'Product_1', 'product_1', 'PRODUCT_1' и т.д.
-SELECT name FROM products WHERE name ILIKE 'product%';
+-- Найдет независимо от регистра: 'ACADEMY...', 'academy...', 'Academy...'
+SELECT title FROM film WHERE title ILIKE 'academy%';
 ```
 
 ### 2. Фильтрация пустых значений (IS NULL)
 Значение `NULL` обозначает отсутствие данных. Сравнить его через `=` нельзя (выражение `column = NULL` всегда вернет ложь/unknown).
-Для поиска пустых или непустых значений используются специальные операторы `IS NULL` и `IS NOT NULL`:
+Для поиска пустых или непустых значений используются специальные операторы `IS NULL` и `IS NOT NULL`. Хороший пример — поле `return_date` в таблице `rental`: оно пустое, пока фильм не вернули.
 
 ```sql
--- Найти пользователей, у которых не указана дата регистрации (если такое поле допускает NULL)
-SELECT name FROM users WHERE registration_date IS NULL;
+-- Найти аренды, по которым фильм ещё не вернули (дата возврата не заполнена)
+SELECT rental_id FROM rental WHERE return_date IS NULL;
 
--- Найти всех пользователей с заполненной датой регистрации
-SELECT name FROM users WHERE registration_date IS NOT NULL;
+-- Найти все аренды с уже заполненной датой возврата
+SELECT rental_id FROM rental WHERE return_date IS NOT NULL;
 ```
 
 
@@ -82,12 +86,14 @@ SELECT name FROM users WHERE registration_date IS NOT NULL;
 База данных не гарантирует порядок выдачи строк. Если порядок критически важен, необходимо использовать явную сортировку `ORDER BY`.
 
 ```sql
-SELECT name, price 
-FROM products 
-ORDER BY price DESC 
+SELECT title, length
+FROM film
+ORDER BY length DESC
 LIMIT 3;
 ```
-Данный запрос выведет Топ-3 самых дорогих товаров в магазине.
+Данный запрос выведет Топ-3 самых длинных фильмов в прокате.
+
+> Замечание: поле `length` содержит много повторяющихся значений, поэтому при равной длине `LIMIT 3` вернёт произвольные строки из числа одинаковых. Если нужна детерминированная выборка, добавьте вторичный ключ сортировки, например `ORDER BY length DESC, film_id`.
 
 ---
 
@@ -95,15 +101,15 @@ LIMIT 3;
 
 **Сценарий:** Начинающий аналитик написал запрос:
 ```sql
-SELECT * FROM users WHERE name = "Иван Иванов";
+SELECT * FROM customer WHERE last_name = "SMITH";
 ```
-База данных вернула ошибку: `ERROR: column "Иван Иванов" does not exist`.
+База данных вернула ошибку: `ERROR: column "SMITH" does not exist`.
 
-**Причина и решение:** Стандарт SQL строго различает типы кавычек. Двойные кавычки `""` используются исключительно для экранирования идентификаторов (имен таблиц или колонок), содержащих пробелы или ключевые слова. Одинарные кавычки `''` используются для строковых литералов (текстовых значений). Аналитик должен был написать `'Иван Иванов'`.
+**Причина и решение:** Стандарт SQL строго различает типы кавычек. Двойные кавычки `""` используются исключительно для экранирования идентификаторов (имен таблиц или колонок), содержащих пробелы или ключевые слова. Одинарные кавычки `''` используются для строковых литералов (текстовых значений). Аналитик должен был написать `'SMITH'`.
 
 ---
 
 ## Вопросы для самопроверки
-1. Можно ли в секции `WHERE` ссылаться на псевдоним колонки (alias), заданный в секции `SELECT` (например, `SELECT price * 0.8 AS discount_price FROM products WHERE discount_price > 100`)? Почему?
+1. Можно ли в секции `WHERE` ссылаться на псевдоним колонки (alias), заданный в секции `SELECT` (например, `SELECT rental_rate * 0.8 AS discount_rate FROM film WHERE discount_rate > 2`)? Почему?
 2. В каком порядке база данных обрабатывает следующие инструкции: `SELECT`, `FROM`, `WHERE`, `ORDER BY`?
-3. Что вернет выражение `SELECT * FROM table WHERE column = NULL;` и почему? Как правильно проверять на пустоту?
+3. Что вернет выражение `SELECT * FROM film WHERE rental_rate = NULL;` и почему? Как правильно проверять на пустоту?
