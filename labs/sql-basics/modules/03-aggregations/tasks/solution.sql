@@ -1,25 +1,26 @@
--- 1. Сумма заказа
-SELECT order_id, SUM(quantity * price_per_unit) AS total_sum 
-FROM order_items 
-GROUP BY order_id;
+-- 1. Сумма платежей клиента
+SELECT customer_id, SUM(amount) AS total_sum 
+FROM payment 
+GROUP BY customer_id;
 
--- 2. Сумма заказа > 200 000
-SELECT order_id, SUM(quantity * price_per_unit) AS total_sum 
-FROM order_items 
-GROUP BY order_id 
-HAVING SUM(quantity * price_per_unit) > 200000;
+-- 2. Сумма платежей > 180.00
+SELECT customer_id, SUM(amount) AS total_sum 
+FROM payment 
+GROUP BY customer_id 
+HAVING SUM(amount) > 180.00;
 
 -- 3. MIN / MAX даты
-SELECT MIN(order_date), MAX(order_date) FROM orders;
+SELECT MIN(rental_date), MAX(rental_date) FROM rental;
 
 -- 4. Сборка строк
-SELECT string_agg(p.name, ', ') 
-FROM order_items oi
-JOIN products p ON oi.product_id = p.id
-WHERE oi.order_id = 1;
+SELECT string_agg(f.title, ', ') 
+FROM rental r
+JOIN inventory i ON r.inventory_id = i.inventory_id
+JOIN film f ON i.film_id = f.film_id
+WHERE r.customer_id = 1;
 
 -- 5. Временные ряды (группировка по дням)
-SELECT date_trunc('day', order_date) AS order_day, COUNT(*) AS orders_count 
-FROM orders 
-GROUP BY order_day 
-ORDER BY order_day;
+SELECT date_trunc('day', rental_date) AS rental_day, COUNT(*) AS rental_count 
+FROM rental 
+GROUP BY rental_day 
+ORDER BY rental_day;

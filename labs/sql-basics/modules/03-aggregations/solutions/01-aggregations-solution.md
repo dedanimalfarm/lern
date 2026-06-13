@@ -1,24 +1,24 @@
 # Решение: Задание 1
 
 ```sql
--- 1. Общее количество заказов
-SELECT COUNT(*) AS total_orders FROM orders;
+-- 1. Общее количество аренд
+SELECT COUNT(*) AS total_rentals FROM rental;
 
--- 2. Средняя цена товаров по категориям
-SELECT category, AVG(price) AS average_price 
-FROM products 
-GROUP BY category;
+-- 2. Средняя арендная ставка по рейтингам
+SELECT rating, AVG(rental_rate) AS average_rate 
+FROM film 
+GROUP BY rating;
 
--- 3. Количество заказов по каждому пользователю
-SELECT users.name, COUNT(orders.id) AS orders_count
-FROM users
-LEFT JOIN orders ON users.id = orders.user_id
-GROUP BY users.name;
+-- 3. Количество аренд по каждому клиенту
+SELECT customer.customer_id, customer.first_name, customer.last_name, COUNT(rental.rental_id) AS rental_count
+FROM customer
+LEFT JOIN rental ON customer.customer_id = rental.customer_id
+GROUP BY customer.customer_id, customer.first_name, customer.last_name;
 
--- 4. Пользователи с более чем 1 заказом
-SELECT users.name, COUNT(orders.id) AS orders_count
-FROM users
-JOIN orders ON users.id = orders.user_id
-GROUP BY users.name
-HAVING COUNT(orders.id) > 1;
+-- 4. Клиенты с более чем 30 арендами
+SELECT customer.customer_id, customer.first_name, customer.last_name, COUNT(rental.rental_id) AS rental_count
+FROM customer
+JOIN rental ON customer.customer_id = rental.customer_id
+GROUP BY customer.customer_id, customer.first_name, customer.last_name
+HAVING COUNT(rental.rental_id) > 30;
 ```

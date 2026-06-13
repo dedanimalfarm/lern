@@ -1,7 +1,7 @@
 #!/bin/bash
 # Проверка решений модуля 03: Агрегации
 SOLUTION_FILE="solution.sql"
-DB_NAME="shop_db"
+DB_NAME="pagila"
 
 if [ ! -f "$SOLUTION_FILE" ]; then
     echo "❌ Файл $SOLUTION_FILE не найден!"
