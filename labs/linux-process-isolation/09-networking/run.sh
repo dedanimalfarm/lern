@@ -42,6 +42,10 @@ ip netns del beta
 ip link add lab-br type bridge
 ip link set lab-br up
 ip addr add 10.55.0.254/24 dev lab-br
+# на br_netfilter-хостах (Docker/WSL2) bridged-трафик идёт через iptables FORWARD
+# (policy DROP) — без этих правил ping контейнер↔контейнер молча не пройдёт
+iptables -A FORWARD -i lab-br -j ACCEPT
+iptables -A FORWARD -o lab-br -j ACCEPT
 
 for ns in alpha beta gamma; do
   ip netns add "$ns"
@@ -69,8 +73,7 @@ EXT_IF=$(ip -o route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++)if($i=="dev"){print $
 note "внешний интерфейс хоста: $EXT_IF"
 
 iptables -t nat -A POSTROUTING -s 10.55.0.0/24 -j MASQUERADE
-iptables -A FORWARD -i lab-br -j ACCEPT
-iptables -A FORWARD -o lab-br -j ACCEPT
+# FORWARD ACCEPT для моста уже добавлен в части 2
 
 note "ping alpha → 1.1.1.1 (через NAT):"
 ip netns exec alpha ping -c 2 -W 2 1.1.1.1 | tail -3 | sed 's/^/   /' || \
