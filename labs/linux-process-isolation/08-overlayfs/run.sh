@@ -50,7 +50,8 @@ log "5) multi-layer: добавляем второй lower (как ADD-слой)
 umount "$BASE/merged"
 mkdir -p "$BASE/lower2"
 echo "from layer2" > "$BASE/lower2/layer2.txt"
-echo "host=layer2" > "$BASE/lower2/etc/config" 2>/dev/null || { mkdir -p "$BASE/lower2/etc"; echo "host=layer2" > "$BASE/lower2/etc/config"; }
+mkdir -p "$BASE/lower2/etc"
+echo "host=layer2" > "$BASE/lower2/etc/config"
 mount -t overlay overlay \
   -o "lowerdir=$BASE/lower2:$BASE/lower,upperdir=$BASE/upper,workdir=$BASE/work" \
   "$BASE/merged"
