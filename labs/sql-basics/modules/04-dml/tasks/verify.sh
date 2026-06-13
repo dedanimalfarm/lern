@@ -1,7 +1,7 @@
 #!/bin/bash
 # Проверка решений модуля 04: DML
 SOLUTION_FILE="solution.sql"
-DB_NAME="shop_db"
+DB_NAME="pagila"
 
 if [ ! -f "$SOLUTION_FILE" ]; then
     echo "❌ Файл $SOLUTION_FILE не найден!"
@@ -22,7 +22,7 @@ echo "🔍 Проверка решений модуля 04: DML"
 echo "============================================="
 
 # Предварительная очистка данных для обеспечения идемпотентности проверки
-eval "(cd /tmp && $PSQL_CMD -c \"DELETE FROM users WHERE email IN ('new@example.com', 'test@mail.com'); DELETE FROM products WHERE name = 'Флешка';\")" > /dev/null 2>&1
+eval "(cd /tmp && $PSQL_CMD -c \"DELETE FROM actor WHERE first_name = 'TEST' AND last_name = 'ACTOR';\")" > /dev/null 2>&1
 
 # Проверка синтаксиса через stdin (cd /tmp решает проблему прав на чтение /root для пользователя postgres)
 if eval "(cd /tmp && $PSQL_CMD -v ON_ERROR_STOP=1) < $SOLUTION_FILE" > /dev/null 2>&1; then

@@ -27,20 +27,21 @@
 Команда `INSERT` добавляет новые строки. Вы можете вставлять несколько строк одним запросом (Bulk Insert), что работает в десятки раз быстрее, чем множество одиночных команд.
 
 ```sql
-INSERT INTO users (name, email) 
+INSERT INTO actor (first_name, last_name) 
 VALUES 
-    ('Алексей', 'alex@example.com'),
-    ('Елена', 'elena@example.com');
+    ('ALEX', 'SMITH'),
+    ('ELENA', 'JOHNSON');
 ```
 
 Для идемпотентности скриптов автоматизации (например, CI/CD-пайплайнов) крайне полезен механизм **UPSERT** (вставка или обновление при конфликте). Он предотвращает падение скрипта при повторной вставке уникальных значений:
 
 ```sql
-INSERT INTO products (name, category, price, stock_quantity)
-VALUES ('Флешка', 'Аксессуары', 1000, 10)
+INSERT INTO language (name)
+VALUES ('Klingon')
 ON CONFLICT (name) DO UPDATE 
-SET stock_quantity = products.stock_quantity + EXCLUDED.stock_quantity;
+SET last_update = NOW();
 ```
+*(Примечание: для этого примера нужно уникальное ограничение или индекс по name, в pagila в language такого может не быть, но логика UPSERT именно такова)*.
 
 ---
 
@@ -50,11 +51,11 @@ SET stock_quantity = products.stock_quantity + EXCLUDED.stock_quantity;
 **Обе команды требуют предельной осторожности и обязательного указания фильтрации `WHERE`.**
 
 ```sql
-UPDATE products 
-SET price = price * 0.9, stock_quantity = stock_quantity - 1 
-WHERE id = 1;
+UPDATE film 
+SET rental_rate = rental_rate * 0.9, rental_duration = rental_duration + 1 
+WHERE film_id = 1;
 
-DELETE FROM orders WHERE status = 'CANCELLED';
+DELETE FROM payment WHERE payment_id = 100000;
 ```
 
 ---
@@ -62,7 +63,7 @@ DELETE FROM orders WHERE status = 'CANCELLED';
 ## Часть 4: Опасность массовых удалений (Batch Deletes)
 
 > [!WARNING]
-> **Критическая ошибка DevOps:** Запуск команды вроде `DELETE FROM orders WHERE order_date < '2025-01-01';` на таблице из 100 000 000 строк может «уронить» базу данных.
+> **Критическая ошибка DevOps:** Запуск команды вроде `DELETE FROM rental WHERE rental_date < '2005-01-01';` на таблице из 100 000 000 строк может «уронить» базу данных.
 
 **Почему это происходит?**
 1. **Блокировки (Row Locks):** База данных заблокирует все удаляемые строки. Приложения не смогут обновить или записать данные в эту таблицу (возникнут таймауты).
@@ -73,8 +74,8 @@ DELETE FROM orders WHERE status = 'CANCELLED';
 Удаляйте большие объемы данных частями (батчами) в цикле, делая небольшую паузу (`sleep`) между итерациями, чтобы СУБД успевала обрабатывать запросы пользователей:
 ```sql
 -- Пример концепта батч-удаления:
-DELETE FROM orders 
-WHERE id IN (SELECT id FROM orders WHERE order_date < '2025-01-01' LIMIT 5000);
+DELETE FROM rental 
+WHERE rental_id IN (SELECT rental_id FROM rental WHERE rental_date < '2005-01-01' LIMIT 5000);
 ```
 
 ---
@@ -84,7 +85,7 @@ WHERE id IN (SELECT id FROM orders WHERE order_date < '2025-01-01' LIMIT 5000);
 Если вам нужно полностью очистить таблицу (например, сбросить кэш или очистить временную лог-таблицу), использование `DELETE FROM table;` неэффективно. Вместо этого применяется `TRUNCATE TABLE`:
 
 ```sql
-TRUNCATE TABLE orders CASCADE;
+TRUNCATE TABLE rental CASCADE;
 ```
 
 ### Сравнительная таблица: DELETE vs TRUNCATE
@@ -102,7 +103,7 @@ TRUNCATE TABLE orders CASCADE;
 
 ## Часть 6: Каскадное удаление данных
 
-Если вы попытаетесь удалить пользователя, у которого есть заказы в таблице `orders`, СУБД заблокирует операцию и выдаст ошибку `Foreign key constraint violation`. Это защита целостности данных, предотвращающая появление "осиротевших" записей.
+Если вы попытаетесь удалить клиента, у которого есть аренды в таблице `rental`, СУБД заблокирует операцию и выдаст ошибку `Foreign key constraint violation`. Это защита целостности данных, предотвращающая появление "осиротевших" записей.
 Чтобы дочерние записи удалялись автоматически вместе с родительскими, при создании внешнего ключа в структуре таблицы указывается правило `ON DELETE CASCADE`.
 
 ---
@@ -111,14 +112,14 @@ TRUNCATE TABLE orders CASCADE;
 
 **Сценарий:** На сервере production вы выполняете ручную корректировку цен. Вы пишете:
 ```sql
-UPDATE products SET price = 5000;
+UPDATE film SET rental_rate = 5.99;
 ```
-Нажимаете Enter и понимаете, что забыли `WHERE id = 123`. Все товары в магазине стали стоить 5000. Бизнес остановлен.
+Нажимаете Enter и понимаете, что забыли `WHERE film_id = 123`. Все фильмы в прокате стали стоить 5.99. Бизнес остановлен.
 
 **Решение и лучшие практики:** Никогда не выполняйте `UPDATE` или `DELETE` в консоли production напрямую. Всегда оборачивайте их в транзакцию.
 ```sql
 BEGIN;
-UPDATE products SET price = 5000 WHERE id = 123;
+UPDATE film SET rental_rate = 5.99 WHERE film_id = 123;
 -- Проверьте, сколько строк было обновлено (UPDATE 1). Если UPDATE 1000 - срочно делайте ROLLBACK.
 COMMIT;
 ```

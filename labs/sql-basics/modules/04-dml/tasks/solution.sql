@@ -1,15 +1,15 @@
 -- 1. Транзакция с откатом
 BEGIN;
-UPDATE products SET price = price * 0.5;
+UPDATE film SET rental_rate = rental_rate * 0.5;
 ROLLBACK;
 
 -- 2. Возврат ID при вставке
-INSERT INTO users (name, email) 
-VALUES ('Тестовый Клиент', 'test@mail.com') 
-RETURNING id;
+INSERT INTO actor (first_name, last_name) 
+VALUES ('TEST', 'ACTOR') 
+RETURNING actor_id;
 
 -- 3. UPSERT
-INSERT INTO products (name, category, price, stock_quantity)
-VALUES ('Флешка', 'Аксессуары', 1000, 10)
-ON CONFLICT (name) DO UPDATE 
-SET stock_quantity = products.stock_quantity + EXCLUDED.stock_quantity;
+INSERT INTO actor (actor_id, first_name, last_name)
+VALUES (9999, 'TEST', 'ACTOR')
+ON CONFLICT (actor_id) DO UPDATE 
+SET last_update = NOW();
