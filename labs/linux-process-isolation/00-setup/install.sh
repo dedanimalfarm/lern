@@ -29,7 +29,7 @@ apt-get install -y \
   stress-ng fio \
   strace ltrace \
   iputils-ping \
-  uidmap bpftrace jq \
+  uidmap bpftrace jq runc \
   ca-certificates
 
 log "готово. Перепроверь:  sudo ./check.sh"
