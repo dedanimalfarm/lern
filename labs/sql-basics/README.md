@@ -87,6 +87,8 @@ erDiagram
 4. [04-dml](modules/04-dml) — Управление данными (INSERT, UPDATE, DELETE).
 5. [05-indexes](modules/05-indexes) — Индексы и оптимизация запросов (EXPLAIN, EXPLAIN ANALYZE, CREATE INDEX).
 6. [06-backups](modules/06-backups) — Резервное копирование и восстановление (pg_dump, pg_restore).
+7. [07-roles-and-permissions](modules/07-roles-and-permissions) — Управление доступом и безопасность (Roles & Permissions).
+8. [08-cte-and-views](modules/08-cte-and-views) — Продвинутые выборки (CTE, Представления, Материализованные представления).
 
 
 
