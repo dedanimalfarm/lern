@@ -11,8 +11,8 @@ else
     echo "Dependencies (iperf3, tc, ping) are already installed."
 fi
 
-ip netns del client 2>/dev/null
-ip netns del server 2>/dev/null
+ip netns del client 2>/dev/null || true
+ip netns del server 2>/dev/null || true
 
 echo "Создание Network Namespaces (client, server)..."
 ip netns add client

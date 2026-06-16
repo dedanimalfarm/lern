@@ -9,9 +9,9 @@ done
 
 # Clean up previous setup
 for NS in web app db; do
-    ip netns del $NS 2>/dev/null
+    ip netns del $NS 2>/dev/null || true
 done
-ip link del br0 2>/dev/null
+ip link del br0 2>/dev/null || true
 iptables -F
 iptables -t nat -F
 iptables -F FORWARD

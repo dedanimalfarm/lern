@@ -13,8 +13,8 @@ fi
 
 # Cleanup
 for i in r1 r2 r3; do
-    ip netns del $i 2>/dev/null
-    kill $(cat /tmp/bird-$i.pid 2>/dev/null) 2>/dev/null
+    ip netns del $i 2>/dev/null || true
+    kill $(cat /tmp/bird-$i.pid 2>/dev/null) 2>/dev/null || true
 done
 
 echo "Создание неймспейсов (r1, r2, r3)..."

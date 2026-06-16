@@ -9,9 +9,9 @@ done
 
 # Clean up previous setup
 for NS in red blue green; do
-    ip netns del $NS 2>/dev/null
+    ip netns del $NS 2>/dev/null || true
 done
-ip link del br0 2>/dev/null
+ip link del br0 2>/dev/null || true
 
 echo "Создание Network Namespaces..."
 ip netns add red
