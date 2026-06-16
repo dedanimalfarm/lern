@@ -18,6 +18,13 @@ else
     exit 1
 fi
 
+# Предварительная очистка связанных объектов ролей в других базах данных (например, pagila)
+if sudo -u postgres psql -d pagila -c "SELECT 1" >/dev/null 2>&1; then
+    sudo -u postgres psql -d pagila -c "DROP OWNED BY bi_user CASCADE; DROP OWNED BY analytics_group CASCADE;" >/dev/null 2>&1 || true
+elif PGPASSWORD=secretpassword psql -h 127.0.0.1 -U postgres -d pagila -c "SELECT 1" >/dev/null 2>&1; then
+    PGPASSWORD=secretpassword psql -h 127.0.0.1 -U postgres -d pagila -c "DROP OWNED BY bi_user CASCADE; DROP OWNED BY analytics_group CASCADE;" >/dev/null 2>&1 || true
+fi
+
 echo "🔍 Проверка решений модуля 07: Roles & Permissions"
 echo "============================================="
 

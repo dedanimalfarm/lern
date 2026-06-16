@@ -6,6 +6,7 @@ BEGIN
         DROP ROLE bi_user; 
     END IF; 
     IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'analytics_group') THEN 
+        DROP OWNED BY analytics_group CASCADE;
         DROP ROLE analytics_group; 
     END IF; 
 END $$;
