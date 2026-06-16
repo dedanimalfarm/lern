@@ -5,7 +5,7 @@
 ## Запуск лабы
 Для автоматического развертывания стенда выполните:
 ```bash
-cd /root/linux_network_labs/lab3_wireguard
+cd /root/lern/labs/linux-basics/networking/lab03_wireguard
 bash setup.sh
 ```
 

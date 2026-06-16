@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Запусти через sudo/root (нужны netns/iptables)"; exit 1; }
 
 echo "Setting up Network Namespaces..."
 

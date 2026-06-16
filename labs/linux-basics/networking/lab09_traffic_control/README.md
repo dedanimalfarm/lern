@@ -5,7 +5,7 @@
 ## Запуск лабы
 Сначала запустим скрипт, который создаст базовую топологию (два неймспейса, соединенных напрямую).
 ```bash
-cd /root/lern/labs/linux-basics/networking/lab9_traffic_control
+cd /root/lern/labs/linux-basics/networking/lab09_traffic_control
 bash setup.sh
 ```
 
@@ -79,3 +79,10 @@ ip netns exec client iperf3 -c 10.9.0.2
 
 > **Не забудьте удалить правила после тестов:**
 > `ip netns exec server tc qdisc del dev veth-srv root`
+
+## Уборка
+После завершения лабораторной работы очистите ресурсы:
+```bash
+bash cleanup.sh
+```
+

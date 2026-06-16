@@ -5,7 +5,7 @@
 ## Запуск лабы
 Для автоматического развертывания стенда выполните:
 ```bash
-cd /root/linux_network_labs/lab4_vlan
+cd /root/lern/labs/linux-basics/networking/lab04_vlan
 bash setup.sh
 ```
 

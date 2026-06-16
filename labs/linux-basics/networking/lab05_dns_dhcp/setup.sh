@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Запусти через sudo/root (нужны netns/iptables)"; exit 1; }
 
 # Clean up previous setup
 echo "Cleaning up previous setup..."

@@ -1,4 +1,11 @@
 #!/bin/bash
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Запусти через sudo/root (нужны netns/iptables)"; exit 1; }
+
+# Check dependencies
+for cmd in ip sysctl iptables; do
+    command -v "$cmd" &>/dev/null || { echo "❌ Missing dependency: $cmd" >&2; exit 1; }
+done
 
 # Clean up previous setup
 for NS in red blue green; do

@@ -5,7 +5,7 @@
 ## Запуск лабы
 Для автоматического развертывания стенда выполните:
 ```bash
-cd /root/linux_network_labs/lab2_loadbalancer
+cd /root/lern/labs/linux-basics/networking/lab02_loadbalancer
 bash setup.sh
 ```
 
@@ -34,3 +34,9 @@ pkill -f "http.server 8081"
 curl http://localhost:8080
 ```
 Теперь HAProxy поймет, что первый сервер недоступен (благодаря параметру `option httpchk GET /` в конфигурации), и будет перенаправлять трафик только на Server 2 и Server 3.
+
+## Уборка
+После завершения лабораторной работы очистите ресурсы:
+```bash
+bash cleanup.sh
+```

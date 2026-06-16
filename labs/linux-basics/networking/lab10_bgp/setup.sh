@@ -1,8 +1,15 @@
 #!/bin/bash
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Запусти через sudo/root (нужны netns/iptables)"; exit 1; }
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update >/dev/null 2>&1
-apt-get install -y bird2 iproute2 >/dev/null 2>&1
+# Check and install dependencies
+if ! command -v bird &>/dev/null || ! command -v ip &>/dev/null; then
+    echo "Installing dependencies..."
+    apt-get update >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get install -y bird2 iproute2 >/dev/null 2>&1
+else
+    echo "Dependencies (bird, iproute2) are already installed."
+fi
 
 # Cleanup
 for i in r1 r2 r3; do
