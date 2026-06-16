@@ -51,7 +51,8 @@ fi
 if sudo -u postgres psql -d "$DB_NAME" -c "SELECT 1" > /dev/null 2>&1; then
     PSQL_CMD="sudo -u postgres psql -d $DB_NAME"
 elif PGPASSWORD=secretpassword psql -h 127.0.0.1 -U postgres -d "$DB_NAME" -c "SELECT 1" > /dev/null 2>&1; then
-    PSQL_CMD="PGPASSWORD=secretpassword psql -h 127.0.0.1 -U postgres -d $DB_NAME"
+    export PGPASSWORD=secretpassword
+    PSQL_CMD="psql -h 127.0.0.1 -U postgres -d $DB_NAME"
 else
     echo "❌ Не удалось подключиться к БД $DB_NAME для проверки результатов"
     exit 1
@@ -64,7 +65,14 @@ if [ -z "$COUNT" ] || [ "$COUNT" -eq 0 ]; then
     exit 1
 fi
 
+# Проверка целостности зависимых VIEW после восстановления
+VIEWS_COUNT=$(eval "(cd /tmp && $PSQL_CMD -t -A -c \"SELECT COUNT(*) FROM pg_views WHERE viewname IN ('actor_info', 'film_list', 'nicer_but_slower_film_list', 'sales_by_film_category');\")" 2>/dev/null)
+if [ -z "$VIEWS_COUNT" ] || [ "$VIEWS_COUNT" -lt 4 ]; then
+    echo "❌ Ошибка: зависимые представления (VIEW) были удалены каскадно и не восстановлены!"
+    exit 1
+fi
+
 # Удаление тестового файла бэкапа
 rm -f "$BACKUP_FILE"
 
-echo "✅ Проверка пройдена! Бэкап создан, таблица успешно восстановлена."
+echo "✅ Проверка пройдена! Бэкап создан, таблица и зависимые представления успешно восстановлены."

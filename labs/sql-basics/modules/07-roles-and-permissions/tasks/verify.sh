@@ -33,15 +33,21 @@ if eval "(cd /tmp && $PSQL_CMD -v ON_ERROR_STOP=1) < $SOLUTION_FILE" > /dev/null
     echo "✅ Все запросы выполнились без ошибок!"
     
     echo "⏳ Проверка корректности выданных прав..."
+    DB_CONN_PRIV=$(eval "$PSQL_CMD -tAc \"SELECT has_database_privilege('bi_user', 'shop_db', 'CONNECT');\"" 2>/dev/null)
+    SCHEMA_USAGE_PRIV=$(eval "$PSQL_CMD -tAc \"SELECT has_schema_privilege('bi_user', 'public', 'USAGE');\"" 2>/dev/null)
     ORDERS_PRIV=$(eval "$PSQL_CMD -tAc \"SELECT has_table_privilege('bi_user', 'orders', 'SELECT');\"" 2>/dev/null)
+    PRODUCTS_PRIV=$(eval "$PSQL_CMD -tAc \"SELECT has_table_privilege('bi_user', 'products', 'SELECT');\"" 2>/dev/null)
     USERS_PRIV=$(eval "$PSQL_CMD -tAc \"SELECT has_table_privilege('bi_user', 'users', 'SELECT');\"" 2>/dev/null)
     
-    if [ "$ORDERS_PRIV" = "t" ] && [ "$USERS_PRIV" = "f" ]; then
+    if [ "$DB_CONN_PRIV" = "t" ] && [ "$SCHEMA_USAGE_PRIV" = "t" ] && [ "$ORDERS_PRIV" = "t" ] && [ "$PRODUCTS_PRIV" = "t" ] && [ "$USERS_PRIV" = "f" ]; then
         echo "✅ Права пользователя bi_user настроены корректно (Least Privilege соблюден)!"
         exit 0
     else
         echo "❌ Права пользователя bi_user настроены неверно!"
+        echo "Подключение к shop_db: $DB_CONN_PRIV (ожидается t)"
+        echo "Использование public: $SCHEMA_USAGE_PRIV (ожидается t)"
         echo "Доступ к orders: $ORDERS_PRIV (ожидается t)"
+        echo "Доступ к products: $PRODUCTS_PRIV (ожидается t)"
         echo "Доступ к users: $USERS_PRIV (ожидается f)"
         exit 1
     fi

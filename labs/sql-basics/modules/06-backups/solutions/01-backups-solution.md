@@ -14,11 +14,18 @@ sudo -u postgres psql -d pagila -c "DROP TABLE film_category CASCADE;"
 
 # 4. Выборочное восстановление только таблицы film_category
 sudo -u postgres pg_restore -d pagila -t film_category /tmp/pagila.dump
+
+# 5. Восстановление каскадно удаленных представлений (VIEW)
+sudo -u postgres pg_restore -d pagila --schema-only /tmp/pagila.dump 2>/dev/null || true
 ```
 
 **Проверка результатов:**
-После шага 4 вы можете проверить, что таблица восстановилась и данные на месте, выполнив запрос:
+После шага 5 вы можете проверить, что таблица восстановилась и данные на месте, выполнив запрос:
 ```bash
 sudo -u postgres psql -d pagila -c "SELECT COUNT(*) FROM film_category;"
 ```
 Вывод должен показать количество строк (около 1000 в базе данных pagila).
+Также убедитесь, что зависимые представления (например, `actor_info`) снова доступны:
+```bash
+sudo -u postgres psql -d pagila -c "SELECT * FROM actor_info LIMIT 5;"
+```

@@ -22,7 +22,7 @@ echo "🔍 Проверка решений модуля 04: DML"
 echo "============================================="
 
 # Предварительная очистка данных для обеспечения идемпотентности проверки
-eval "(cd /tmp && $PSQL_CMD -c \"DELETE FROM actor WHERE first_name = 'TEST' AND last_name = 'ACTOR';\")" > /dev/null 2>&1
+eval "(cd /tmp && $PSQL_CMD -c \"DELETE FROM actor WHERE actor_id = 9999 OR (first_name = 'TEST' AND last_name = 'ACTOR');\")" > /dev/null 2>&1
 
 # Проверка синтаксиса через stdin (cd /tmp решает проблему прав на чтение /root для пользователя postgres)
 if eval "(cd /tmp && $PSQL_CMD -v ON_ERROR_STOP=1) < $SOLUTION_FILE" > /dev/null 2>&1; then
