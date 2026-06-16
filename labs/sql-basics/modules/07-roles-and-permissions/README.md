@@ -14,7 +14,7 @@
 ---
 
 ## Предварительные требования
-База данных `shop_db` и все необходимые таблицы (`users`, `orders`, `products`, `order_items`) уже созданы и наполнены данными при запуске окружения. Никаких дополнительных действий для инициализации БД выполнять не требуется.
+База данных `pagila` и все необходимые таблицы уже созданы и наполнены данными при запуске окружения. Никаких дополнительных действий для инициализации БД выполнять не требуется.
 
 ---
 
@@ -46,13 +46,13 @@ SELECT rolname, rolsuper, rolcanlogin FROM pg_roles;
 
 ```sql
 -- Дать права на подключение к базе
-GRANT CONNECT ON DATABASE shop_db TO analytics_team;
+GRANT CONNECT ON DATABASE pagila TO analytics_team;
 
 -- Дать права на использование схемы public
 GRANT USAGE ON SCHEMA public TO analytics_team;
 
 -- Выдать права только на чтение (SELECT) для конкретной таблицы
-GRANT SELECT ON TABLE orders TO analytics_team;
+GRANT SELECT ON TABLE payment TO analytics_team;
 
 -- Выдать права на чтение всех существующих таблиц в схеме public
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO analytics_team;
@@ -60,8 +60,8 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO analytics_team;
 
 Для отзыва прав используется команда `REVOKE`:
 ```sql
--- Запретить группе удалять данные из таблицы users
-REVOKE DELETE ON TABLE users FROM analytics_team;
+-- Запретить группе удалять данные из таблицы actor
+REVOKE DELETE ON TABLE actor FROM analytics_team;
 ```
 
 ---
@@ -70,15 +70,15 @@ REVOKE DELETE ON TABLE users FROM analytics_team;
 
 В DevOps и администрировании баз данных критически важен принцип наименьших привилегий (Least Privilege). Приложению или пользователю выдаются только те права, которые абсолютно необходимы для его работы.
 
-Например, микросервису "Каталог" нужны права на чтение и изменение товаров, но не должно быть доступа к таблице `users` или `orders`.
+Например, микросервису "Каталог" нужны права на чтение и изменение фильмов, но не должно быть доступа к таблице `actor` или `payment`.
 ```sql
 -- Пользователь сервиса каталога
 CREATE USER catalog_service WITH PASSWORD 'secret';
-GRANT CONNECT ON DATABASE shop_db TO catalog_service;
+GRANT CONNECT ON DATABASE pagila TO catalog_service;
 GRANT USAGE ON SCHEMA public TO catalog_service;
 
 -- Разрешаем все базовые операции (CRUD) только на одну таблицу
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE products TO catalog_service;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE film TO catalog_service;
 ```
 
 **DevOps-инсайт:** Чтобы новые таблицы, создаваемые в будущем, автоматически получали правильные доступы, используется команда `ALTER DEFAULT PRIVILEGES`.

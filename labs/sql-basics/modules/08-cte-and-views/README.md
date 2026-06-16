@@ -14,7 +14,7 @@
 ---
 
 ## Предварительные требования
-База данных `shop_db` и все необходимые таблицы (`users`, `orders`, `products`, `order_items`) уже созданы и наполнены данными при запуске окружения. Никаких дополнительных действий для инициализации БД выполнять не требуется.
+База данных `pagila` и все необходимые таблицы уже созданы и наполнены данными при запуске окружения. Никаких дополнительных действий для инициализации БД выполнять не требуется.
 
 ---
 
@@ -27,23 +27,23 @@
 ```sql
 SELECT avg_amount 
 FROM (
-    SELECT order_id, AVG(quantity * price_per_unit) as avg_amount
-    FROM order_items 
-    GROUP BY order_id
+    SELECT customer_id, AVG(amount) as avg_amount
+    FROM payment 
+    GROUP BY customer_id
 ) AS order_stats 
-WHERE avg_amount > 1000;
+WHERE avg_amount > 5;
 ```
 
 **С использованием CTE (гораздо читаемее):**
 ```sql
 WITH order_stats AS (
-    SELECT order_id, AVG(quantity * price_per_unit) as avg_amount
-    FROM order_items 
-    GROUP BY order_id
+    SELECT customer_id, AVG(amount) as avg_amount
+    FROM payment 
+    GROUP BY customer_id
 )
 SELECT avg_amount 
 FROM order_stats 
-WHERE avg_amount > 1000;
+WHERE avg_amount > 5;
 ```
 *Подсказка: CTE могут быть цепочечными! Можно написать `WITH cte1 AS (...), cte2 AS (...) SELECT ...`*
 
@@ -56,17 +56,17 @@ WHERE avg_amount > 1000;
 ```sql
 CREATE VIEW user_order_summary AS
 SELECT 
-    u.id, 
-    u.name, 
-    COUNT(o.id) as total_orders
-FROM users u
-LEFT JOIN orders o ON u.id = o.user_id
-GROUP BY u.id, u.name;
+    c.customer_id, 
+    c.first_name, 
+    COUNT(p.payment_id) as total_payments
+FROM customer c
+LEFT JOIN payment p ON c.customer_id = p.customer_id
+GROUP BY c.customer_id, c.first_name;
 ```
 
 Теперь мы можем делать запросы к этому представлению так же, как к обычной таблице:
 ```sql
-SELECT * FROM user_order_summary WHERE total_orders > 5;
+SELECT * FROM user_order_summary WHERE total_payments > 5;
 ```
 
 **Важно:** Обычный `VIEW` не хранит данные физически! Каждый раз, когда вы делаете `SELECT * FROM view`, база данных "под капотом" выполняет исходный сложный запрос. Это не ускоряет работу, а лишь упрощает синтаксис.
@@ -82,14 +82,14 @@ SELECT * FROM user_order_summary WHERE total_orders > 5;
 ```sql
 CREATE MATERIALIZED VIEW monthly_orders_report AS
 SELECT 
-    date_trunc('month', order_date) as report_month,
-    COUNT(id) as total_orders
-FROM orders
-GROUP BY date_trunc('month', order_date);
+    date_trunc('month', payment_date) as report_month,
+    COUNT(payment_id) as total_payments
+FROM payment
+GROUP BY date_trunc('month', payment_date);
 ```
 
 Скорость `SELECT * FROM monthly_orders_report` будет мгновенной, так как данные уже посчитаны! 
-**DevOps-инсайт:** Но есть нюанс — данные в материализованном представлении могут "протухать". При добавлении новых заказов отчет не обновится автоматически. Его нужно обновлять явно (например, по cron-расписанию или через триггер):
+**DevOps-инсайт:** Но есть нюанс — данные в материализованном представлении могут "протухать". При добавлении новых платежей отчет не обновится автоматически. Его нужно обновлять явно (например, по cron-расписанию или через триггер):
 
 ```sql
 -- Полное перестроение кэша (блокирует чтение)

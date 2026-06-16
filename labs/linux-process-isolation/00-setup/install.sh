@@ -33,3 +33,4 @@ apt-get install -y \
   ca-certificates
 
 log "готово. Перепроверь:  sudo ./check.sh"
+

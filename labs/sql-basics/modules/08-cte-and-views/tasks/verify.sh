@@ -1,7 +1,7 @@
 #!/bin/bash
 # Проверка решений модуля 08: CTE & Views
 SOLUTION_FILE="solution.sql"
-DB_NAME="shop_db"
+DB_NAME="pagila"
 
 if [ ! -f "$SOLUTION_FILE" ]; then
     echo "❌ Файл $SOLUTION_FILE не найден!"
@@ -27,21 +27,21 @@ if eval "(cd /tmp && $PSQL_CMD -v ON_ERROR_STOP=1) < $SOLUTION_FILE" > /dev/null
     
     echo "⏳ Проверка материализованного представления..."
     HAS_MATVIEW=$(eval "$PSQL_CMD -tAc \"SELECT count(*) FROM pg_matviews WHERE matviewname = 'customer_stats';\"" 2>/dev/null)
-    HAS_INDEX=$(eval "$PSQL_CMD -tAc \"SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_customer_stats_user_id';\"" 2>/dev/null)
-    COLS_CHECK=$(eval "$PSQL_CMD -tAc \"SELECT COUNT(*) FROM pg_attribute WHERE attrelid = 'customer_stats'::regclass AND attname IN ('user_id', 'total_orders', 'last_order_date') AND attnum > 0 AND NOT attisdropped;\"" 2>/dev/null)
+    HAS_INDEX=$(eval "$PSQL_CMD -tAc \"SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_customer_stats_customer_id';\"" 2>/dev/null)
+    COLS_CHECK=$(eval "$PSQL_CMD -tAc \"SELECT COUNT(*) FROM pg_attribute WHERE attrelid = 'customer_stats'::regclass AND attname IN ('customer_id', 'total_payments', 'last_payment_date') AND attnum > 0 AND NOT attisdropped;\"" 2>/dev/null)
     
     if [ "$HAS_MATVIEW" -eq 1 ]; then
         echo "✅ Материализованное представление customer_stats успешно создано!"
         if [ "$COLS_CHECK" -eq 3 ]; then
-            echo "✅ Структура представления customer_stats корректна (поля user_id, total_orders, last_order_date присутствуют)!"
+            echo "✅ Структура представления customer_stats корректна (поля customer_id, total_payments, last_payment_date присутствуют)!"
         else
-            echo "❌ Ошибка: Структура представления customer_stats некорректна! Ожидаются поля user_id, total_orders, last_order_date."
+            echo "❌ Ошибка: Структура представления customer_stats некорректна! Ожидаются поля customer_id, total_payments, last_payment_date."
             exit 1
         fi
         if [ "$HAS_INDEX" -eq 1 ]; then
-            echo "✅ Индекс idx_customer_stats_user_id успешно создан!"
+            echo "✅ Индекс idx_customer_stats_customer_id успешно создан!"
         else
-            echo "⚠️ Индекс idx_customer_stats_user_id не найден (опционально)."
+            echo "⚠️ Индекс idx_customer_stats_customer_id не найден (опционально)."
         fi
         exit 0
     else

@@ -1,26 +1,26 @@
 # Решение: Задание 1
 
-Выполните следующие SQL-запросы в базе данных `shop_db`:
+Выполните следующие SQL-запросы в базе данных `pagila`:
 
 ```sql
--- 1. Использование CTE для расчета среднего чека
-WITH order_sums AS (
-    SELECT order_id, SUM(quantity * price_per_unit) AS total_amount
-    FROM order_items
-    GROUP BY order_id
+-- 1. Использование CTE для расчета среднего платежа по клиентам
+WITH customer_payments AS (
+    SELECT customer_id, SUM(amount) AS total_amount
+    FROM payment
+    GROUP BY customer_id
 )
-SELECT AVG(total_amount) AS average_order_value
-FROM order_sums;
+SELECT AVG(total_amount) AS average_customer_payments
+FROM customer_payments;
 
 -- 2. Создание стандартного представления (VIEW)
-CREATE OR REPLACE VIEW active_products AS
-SELECT id, name, price
-FROM products
-WHERE price > 1000;
+CREATE OR REPLACE VIEW premium_films AS
+SELECT film_id, title, rental_rate
+FROM film
+WHERE rental_rate > 4.00;
 
 -- 3. Проверка работы представления
-SELECT * FROM active_products;
+SELECT * FROM premium_films;
 
 -- 4. Очистка стенда
-DROP VIEW IF EXISTS active_products;
+DROP VIEW IF EXISTS premium_films;
 ```
