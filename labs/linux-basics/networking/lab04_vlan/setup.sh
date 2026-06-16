@@ -1,10 +1,12 @@
 #!/bin/bash
+set -euo pipefail
 
 # Clean up previous setup
-ip netns del host1 2>/dev/null
-ip netns del host2 2>/dev/null
-ip netns del router 2>/dev/null
-ip link del br0 2>/dev/null
+echo "Cleaning up previous network namespaces and bridge..."
+ip netns del host1 2>/dev/null || true
+ip netns del host2 2>/dev/null || true
+ip netns del router 2>/dev/null || true
+ip link del br0 2>/dev/null || true
 
 echo "Setting up Network Namespaces (host1, host2, router)..."
 ip netns add host1
@@ -53,8 +55,14 @@ echo "✅ Lab 4 Phase 1 Complete!"
 echo "host1 is on VLAN 10 (IP: 10.0.10.10)"
 echo "host2 is on VLAN 20 (IP: 10.0.20.20)"
 echo ""
-echo "Try to ping host2 from host1 (this will fail as they are in different VLANs!):"
-echo "  ip netns exec host1 ping -c 2 10.0.20.20"
+echo "Verifying VLAN isolation (ping should fail)..."
+sleep 1
+if ! ip netns exec host1 ping -c 2 -W 1 10.0.20.20 >/dev/null 2>&1; then
+    echo "  [OK] Hosts are isolated. Ping failed as expected."
+else
+    echo "  [FAIL] Unexpected connectivity between host1 and host2!" >&2
+    exit 1
+fi
 echo "=========================================================="
 
 echo "Configuring Router-on-a-stick for Inter-VLAN Routing..."
@@ -74,6 +82,15 @@ echo "=========================================================="
 echo "✅ Lab 4 Phase 2 Complete!"
 echo "Router configured with gateways 10.0.10.1 and 10.0.20.1"
 echo ""
-echo "Try to ping host2 from host1 again (now it should work!):"
-echo "  ip netns exec host1 ping -c 4 10.0.20.20"
-echo "=========================================================="
+echo "Verifying Inter-VLAN Routing (ping should succeed now)..."
+sleep 1
+if ip netns exec host1 ping -c 3 -W 2 10.0.20.20 >/dev/null 2>&1; then
+    echo "  [OK] Routing works. Ping succeeded!"
+    echo "=========================================================="
+    echo "Test connection manually:"
+    echo "  ip netns exec host1 ping -c 4 10.0.20.20"
+    echo "=========================================================="
+else
+    echo "  [FAIL] Inter-VLAN Routing verification failed!" >&2
+    exit 1
+fi
