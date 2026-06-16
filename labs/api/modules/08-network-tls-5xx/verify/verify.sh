@@ -71,6 +71,32 @@ jq -e '.download_url' "$EXP" >/dev/null 2>&1 \
   || fail "$EXP: нет download_url — это не финальный (done) ответ статуса"
 ok "асинхронный экспорт доведён до done (202 Accepted -> polling -> done)"
 
+# Задание 05a: CORS — воспроизведён и починен
+CORSF=/tmp/api-lab/m08-cors.txt
+[[ -s "$CORSF" ]] || fail "нет файла $CORSF — tasks/05-cors-har.md (часть CORS)"
+grep -qi 'access-control-allow-origin' "$CORSF" \
+  || fail "$CORSF: нет появившегося Access-Control-Allow-Origin (стенд с CORS_ORIGIN не поднимали?)"
+# Живая проверка: дефолтный стенд CORS-ЗАКРЫТ (ACAO не приходит на чужой Origin).
+# Это pure-GET, состояние стенда не меняет.
+ACAO=$(curl -s -i -H 'Origin: https://x.example' "$API/api/v1/tickets" \
+  | grep -ic 'access-control-allow-origin' || true)
+[[ "$ACAO" == "0" ]] \
+  || fail "дефолтный стенд отдал Access-Control-Allow-Origin — ожидался CORS-закрытый дефолт"
+ok "CORS разобран (дефолт закрыт, фикс через CORS_ORIGIN даёт ACAO)"
+
+# Задание 05b: HAR + ловушка GraphQL прочитаны, диагноз записан
+HARF=/tmp/api-lab/m08-har.txt
+[[ -s "$HARF" ]] || fail "нет файла $HARF — tasks/05-cors-har.md (часть HAR)"
+grep -qiE 'cors|preflight|ERR_FAILED|status 0' "$HARF" \
+  || fail "$HARF: нет диагноза про CORS/preflight/ERR_FAILED (что показал HAR?)"
+# Сами assets на месте и валидны (студент по ним и ставил диагноз)
+require_valid_json_file "$ROOT_DIR/modules/08-network-tls-5xx/assets/incident.har"
+GQL="$ROOT_DIR/modules/08-network-tls-5xx/assets/graphql-response.json"
+require_valid_json_file "$GQL"
+jq -e '.data.ticket == null and (.errors | length > 0)' "$GQL" >/dev/null 2>&1 \
+  || fail "$GQL: ожидалась ловушка GraphQL (data.ticket=null при непустом errors[])"
+ok "HAR/GraphQL разобраны (CORS-сбой в HAR, ошибка в 200 OK у GraphQL)"
+
 # Broken-сценарий: слепой диагноз 5xx совпал с фактом
 ACTUAL_FILE=/tmp/api-lab/.m08-actual
 DIAG_FILE=/tmp/api-lab/m08-5xx-diagnosis.txt
