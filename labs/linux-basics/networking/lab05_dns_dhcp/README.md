@@ -5,7 +5,7 @@
 ## Запуск лабы
 Для автоматического развертывания стенда выполните:
 ```bash
-cd /root/lern/labs/linux-basics/lab5_dns_dhcp
+cd /root/lern/labs/linux-basics/networking/lab05_dns_dhcp
 bash setup.sh
 ```
 

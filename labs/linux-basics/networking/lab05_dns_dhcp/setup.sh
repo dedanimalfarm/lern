@@ -1,13 +1,21 @@
 #!/bin/bash
+set -euo pipefail
 
 # Clean up previous setup
-ip netns del server 2>/dev/null
-ip netns del client 2>/dev/null
-killall dnsmasq 2>/dev/null
+echo "Cleaning up previous setup..."
+ip netns del server 2>/dev/null || true
+ip netns del client 2>/dev/null || true
+killall dnsmasq 2>/dev/null || true
+rm -f /tmp/udhcpc.script
 
-echo "Installing Dnsmasq and dependencies..."
-apt-get update >/dev/null 2>&1
-DEBIAN_FRONTEND=noninteractive apt-get install -y dnsmasq busybox dnsutils >/dev/null 2>&1
+# Check and install dependencies
+if ! command -v dnsmasq &>/dev/null || ! command -v busybox &>/dev/null || ! command -v dig &>/dev/null; then
+    echo "Installing Dnsmasq and dependencies..."
+    apt-get update >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get install -y dnsmasq busybox dnsutils >/dev/null 2>&1
+else
+    echo "Dependencies (dnsmasq, busybox, dnsutils) are already installed."
+fi
 
 echo "Setting up Network Namespaces (server, client)..."
 ip netns add server
@@ -59,14 +67,41 @@ fi
 EOF
 chmod +x /tmp/udhcpc.script
 
-echo "=========================================================="
-echo "✅ Lab 5 Setup Complete!"
-echo "Dnsmasq (DHCP + DNS) running on 'server' namespace (10.0.0.1)"
-echo ""
-echo "Test DHCP:"
-echo "  ip netns exec client busybox udhcpc -i veth-cli -s /tmp/udhcpc.script -n -q"
-echo "  ip netns exec client ip addr show veth-cli"
-echo ""
-echo "Test DNS:"
-echo "  ip netns exec client dig +short @10.0.0.1 db.internal.company"
-echo "=========================================================="
+echo "Verifying DHCP & DNS Services..."
+# 1. Verify client starts with no IP
+client_ip_before=$(ip netns exec client ip -4 addr show veth-cli | grep -oP '(?<=inet\s)\d+(\.\d+){3}') || true
+if [ -n "$client_ip_before" ]; then
+    echo "❌ Lab 5 Setup Failed: client already has an IP address: $client_ip_before" >&2
+    exit 1
+fi
+
+# 2. Trigger DHCP request
+echo "Requesting IP address via DHCP..."
+ip netns exec client busybox udhcpc -i veth-cli -s /tmp/udhcpc.script -n -q >/dev/null 2>&1 || true
+
+# 3. Check if IP got assigned and is in range
+client_ip_after=$(ip netns exec client ip -4 addr show veth-cli | grep -oP '(?<=inet\s)\d+(\.\d+){3}' || true)
+if [ -z "$client_ip_after" ]; then
+    echo "❌ Lab 5 Setup Failed: client failed to obtain DHCP lease!" >&2
+    exit 1
+fi
+echo "  [OK] Client successfully leased IP: $client_ip_after"
+
+# 4. Verify DNS resolution
+echo "Testing DNS resolution..."
+resolved_db=$(ip netns exec client dig +short @10.0.0.1 db.internal.company | tail -n1)
+resolved_api=$(ip netns exec client dig +short @10.0.0.1 api.internal.company | tail -n1)
+
+if [ "$resolved_db" = "10.0.0.100" ] && [ "$resolved_api" = "10.0.0.101" ]; then
+    echo "  [OK] DNS resolution db.internal.company -> $resolved_db"
+    echo "  [OK] DNS resolution api.internal.company -> $resolved_api"
+    echo "=========================================================="
+    echo "✅ Lab 5 Setup Complete & Verified!"
+    echo "Dnsmasq (DHCP + DNS) running on 'server' namespace (10.0.0.1)"
+    echo "Client IP obtained via DHCP: $client_ip_after"
+    echo "=========================================================="
+else
+    echo "❌ Lab 5 Setup Failed: DNS resolution test failed (DB: $resolved_db, API: $resolved_api)" >&2
+    exit 1
+fi
+
