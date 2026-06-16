@@ -17,9 +17,11 @@ ready=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.containerStatuses[
 wreason=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
 lreason=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.containerStatuses[0].lastState.terminated.reason}' 2>/dev/null)
 lexit=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.containerStatuses[0].lastState.terminated.exitCode}' 2>/dev/null)
+t_reason=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.containerStatuses[0].state.terminated.reason}' 2>/dev/null)
+t_exit=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}' 2>/dev/null)
 
 echo "== Триаж: ns/$NS pod/$POD =="
-echo "   phase=$phase ready=${ready:-?} waiting=${wreason:-none} lastState=${lreason:-none}(exit ${lexit:-?})"
+echo "   phase=$phase ready=${ready:-?} waiting=${wreason:-none} lastState=${lreason:-none}(exit ${lexit:-?}) terminated=${t_reason:-none}(exit ${t_exit:-?})"
 echo
 
 diag(){ printf 'ДИАГНОЗ:   %s\n' "$1"; }
@@ -63,6 +65,19 @@ case "$wreason" in
     cause "нет ConfigMap/Secret или невалидный securityContext. Модуль 07."
     first "kubectl -n $NS describe pod $POD | grep -A3 Events"; exit 0 ;;
 esac
+
+# 2.5) Если контейнер сейчас в состоянии terminated (но фаза еще Running)
+if [[ "$phase" == "Running" && -n "$t_reason" ]]; then
+  if [[ "$t_reason" == "OOMKilled" ]]; then
+    diag "Crash/Terminated из-за OOMKilled (exit ${t_exit:-137})"
+    cause "контейнер превышает limits.memory. Модуль 02/12."
+    first "kubectl -n $NS get pod $POD -o jsonpath='{.status.containerStatuses[0].state.terminated}'"; exit 0
+  else
+    diag "Контейнер упал/завершился (exit ${t_exit:-?}, reason: ${t_reason:-?})"
+    cause "приложение падает на старте (баг/конфиг) или неверная команда запуска. Модуль 02/08."
+    first "kubectl -n $NS logs $POD --tail=20"; exit 0
+  fi
+fi
 
 # 3) Running, но не Ready — readiness.
 if [[ "$phase" == "Running" && "$ready" != "true" ]]; then

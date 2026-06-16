@@ -21,6 +21,7 @@ fi
 # `timeout` в sweep.sh. Раньше cleanup стоял в конце линейно — при зависании и
 # kill'е модуля он НЕ срабатывал, оставляя residue (ns окружений, Argo, VAP). ---
 CLEANED=0
+# shellcheck disable=SC2317
 do_cleanup() {
   [[ "$CLEANED" == 1 ]] && return 0
   CLEANED=1
