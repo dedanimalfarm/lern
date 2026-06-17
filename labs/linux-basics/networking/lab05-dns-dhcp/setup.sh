@@ -45,6 +45,7 @@ bind-interfaces
 dhcp-range=10.0.0.10,10.0.0.50,12h
 # Announce ourselves as the DNS server
 dhcp-option=option:dns-server,10.0.0.1
+dhcp-leasefile=/tmp/dnsmasq/dnsmasq.leases
 
 # DNS configuration: local domain
 domain=internal.company

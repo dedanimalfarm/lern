@@ -11,17 +11,17 @@
 | № | Директория | Тема лабораторной работы | Сложность | Время | Ключевые технологии |
 |:-:|---|---|:-:|:-:|---|
 | **01** | [`lab01-routing-dnat/`](./lab01-routing-dnat/) | Статическая маршрутизация и DNAT | Легко | 40 мин | `netns`, `veth`, `ip route`, `iptables` |
-| **02** | [`lab02_loadbalancer/`](./lab02_loadbalancer/) | Балансировка трафика и отказ | Средне | 45 мин | `HAProxy`, `http.server`, `roundrobin` |
-| **03** | [`lab03_wireguard/`](./lab03_wireguard/) | Защищенные VPN-туннели WireGuard | Средне | 50 мин | `WireGuard`, `wg-tools`, `cryptokey` |
-| **04** | [`lab04_vlan/`](./lab04_vlan/) | Тегирование трафика (802.1q) | Средне | 60 мин | `VLAN`, `802.1q`, Router-on-a-stick |
-| **05** | [`lab05_dns_dhcp/`](./lab05_dns_dhcp/) | Внутренний DNS и DHCP сервер | Легко | 45 мин | `dnsmasq`, `udhcpc`, DHCP DORA |
-| **06** | [`lab06_linux_bridge/`](./lab06_linux_bridge/) | Сетевые мосты и изоляция L2 | Средне | 50 мин | `bridge (br0)`, `sysctl`, `MASQUERADE` |
-| **07** | [`lab07_ip_nftables/`](./lab07_ip_nftables/) | Фильтрация трафика и Firewalls | Сложно | 90 мин | `iptables`, `nftables`, `conntrack`, `rate limiting` |
-| **08** | [`lab08_gcp_cloud_nat/`](./lab08_gcp_cloud_nat/) | Облачный NAT в Google Cloud (GCP) | Средне | 40 мин | GCP VPC, Cloud Router, Cloud NAT |
-| **09** | [`lab09_traffic_control/`](./lab09_traffic_control/) | Эмуляция плохой сети (Traffic Control) | Средне | 45 мин | `tc`, `netem` (delay, loss, corruption), `tbf` |
-| **10** | [`lab10_bgp/`](./lab10_bgp/) | Динамическая BGP-маршрутизация | Сложно | 75 мин | `BIRD`, `BGP`, `dummy interfaces`, AS |
-| **11** | [`lab11_mini_docker/`](./lab11_mini_docker/) | Контейнерная сеть своими руками | Сложно | 80 мин | `namespaces`, `bridge`, `veth`, DNAT |
-| **12** | [`lab12_cni_intro/`](./lab12_cni_intro/) | CNI-плагины изнутри (ADD/DEL) | Сложно | 70 мин | `CNI bridge`, `host-local IPAM`, JSON spec |
+| **02** | [`lab02-loadbalancer/`](./lab02-loadbalancer/) | Балансировка трафика и отказ | Средне | 45 мин | `HAProxy`, `http.server`, `roundrobin` |
+| **03** | [`lab03-wireguard/`](./lab03-wireguard/) | Защищенные VPN-туннели WireGuard | Средне | 50 мин | `WireGuard`, `wg-tools`, `cryptokey` |
+| **04** | [`lab04-vlan/`](./lab04-vlan/) | Тегирование трафика (802.1q) | Средне | 60 мин | `VLAN`, `802.1q`, Router-on-a-stick |
+| **05** | [`lab05-dns-dhcp/`](./lab05-dns-dhcp/) | Внутренний DNS и DHCP сервер | Легко | 45 мин | `dnsmasq`, `udhcpc`, DHCP DORA |
+| **06** | [`lab06-linux-bridge/`](./lab06-linux-bridge/) | Сетевые мосты и изоляция L2 | Средне | 50 мин | `bridge (br0)`, `sysctl`, `MASQUERADE` |
+| **07** | [`lab07-ip-nftables/`](./lab07-ip-nftables/) | Фильтрация трафика и Firewalls | Сложно | 90 мин | `iptables`, `nftables`, `conntrack`, `rate limiting` |
+| **08** | [`lab08-gcp-cloud-nat/`](./lab08-gcp-cloud-nat/) | Облачный NAT в Google Cloud (GCP) | Средне | 40 мин | GCP VPC, Cloud Router, Cloud NAT |
+| **09** | [`lab09-traffic-control/`](./lab09-traffic-control/) | Эмуляция плохой сети (Traffic Control) | Средне | 45 мин | `tc`, `netem` (delay, loss, corruption), `tbf` |
+| **10** | [`lab10-bgp/`](./lab10-bgp/) | Динамическая BGP-маршрутизация | Сложно | 75 мин | `BIRD`, `BGP`, `dummy interfaces`, AS |
+| **11** | [`lab11-mini-docker/`](./lab11-mini-docker/) | Контейнерная сеть своими руками | Сложно | 80 мин | `namespaces`, `bridge`, `veth`, DNAT |
+| **12** | [`lab12-cni-intro/`](./lab12-cni-intro/) | CNI-плагины изнутри (ADD/DEL) | Сложно | 70 мин | `CNI bridge`, `host-local IPAM`, JSON spec |
 
 ---
 

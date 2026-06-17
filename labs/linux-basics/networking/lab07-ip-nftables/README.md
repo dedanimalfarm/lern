@@ -4,11 +4,43 @@
 
 ---
 
+## Оглавление
+<!-- TOC -->
+- [Обзор лабораторной](#обзор-лабораторной)
+- [Что вы построите](#что-вы-построите)
+- [Что нужно](#что-нужно)
+- [Ключевые концепции](#ключевые-концепции)
+- [Часть 0: Подготовка сети](#часть-0-подготовка-сети)
+  - [Задание 0: Создание инфраструктуры](#задание-0-создание-инфраструктуры)
+- [Часть 1: Базовая фильтрация (iptables filter)](#часть-1-базовая-фильтрация-iptables-filter)
+  - [Задание 1: Защита хоста (INPUT)](#задание-1-защита-хоста-input)
+  - [Задание 2: Безопасность сети (FORWARD)](#задание-2-безопасность-сети-forward)
+- [Часть 2: Отслеживание состояний (Stateful Inspection)](#часть-2-отслеживание-состояний-stateful-inspection)
+  - [Задание 3: Оптимизация правил через Conntrack](#задание-3-оптимизация-правил-через-conntrack)
+- [Часть 3: Продвинутые возможности iptables](#часть-3-продвинутые-возможности-iptables)
+  - [Задание 4: Логирование (LOG)](#задание-4-логирование-log)
+  - [Задание 5: Ограничение трафика (Rate Limiting)](#задание-5-ограничение-трафика-rate-limiting)
+  - [Задание 6: Защита от Port Scanning и Syn Flood](#задание-6-защита-от-port-scanning-и-syn-flood)
+- [Часть 4: NAT (Network Address Translation)](#часть-4-nat-network-address-translation)
+  - [Задание 7: Проброс портов (DNAT)](#задание-7-проброс-портов-dnat)
+  - [Задание 8: Маскировка (SNAT/Masquerade)](#задание-8-маскировка-snatmasquerade)
+- [Часть 5: Переход на nftables](#часть-5-переход-на-nftables)
+  - [Задание 10: Основы nftables - замена iptables](#задание-10-основы-nftables---замена-iptables)
+  - [Задание 11: NAT и Stateful в nftables](#задание-11-nat-и-stateful-в-nftables)
+- [Проверка модуля](#проверка-модуля)
+- [Уборка](#уборка)
+<!-- /TOC -->
+
+> ⏱ время ~90 мин · сложность 4/5 · пререквизиты: базовый CLI, пройденная [lab06-linux-bridge](../lab06-linux-bridge/)
+
 ## Обзор лабораторной
 
-В этой лабораторной ты построишь виртуальную сеть из namespace'ов (как в предыдущей работе по Linux Bridge) и на ней отработаешь все ключевые возможности iptables и nftables: фильтрацию трафика, NAT, stateful inspection, логирование, rate limiting, защиту от сканирования портов и брутфорса. В конце - переход на nftables как современную замену iptables.
+В этой лабораторной вы построите виртуальную сеть из namespace'ов (как в предыдущей работе по Linux Bridge) и на ней отработаете все ключевые возможности iptables и nftables: фильтрацию трафика, NAT, stateful inspection, логирование, rate limiting, защиту от сканирования портов и брутфорса. В конце - переход на nftables как современную замену iptables.
 
-## Что ты построишь
+## Связь с теоретическим конспектом
+Перед выполнением лабораторной работы рекомендуется ознакомиться с концепциями портов, протоколов и свойств интерфейсов в [Теоретическом конспекте](file:///root/lern/labs/linux-basics/networking/abstract1/README.md).
+
+## Что вы построите
 
 ```
                         Internet
@@ -34,7 +66,7 @@
         └─────────┘ └─────────┘ └────────────┘
 ```
 
-Три namespace имитируют реальные серверы: **web** (фронтенд), **app** (бэкенд), **db** (база данных). Ты настроишь firewall-правила, соответствующие типичной production-среде.
+Три namespace имитируют реальные серверы: **web** (фронтенд), **app** (бэкенд), **db** (база данных). Вы настроите firewall-правила, соответствующие типичной production-среде.
 
 ## Что нужно
 
@@ -68,7 +100,7 @@ sudo apt-get install -y iproute2 iptables nftables ncat tcpdump curl conntrack
 
 **Цель:** развернуть сеть из трёх namespace'ов, подключённых к bridge. Это фундамент для всех последующих заданий.
 
-**Шаг 1.** Очисти предыдущие конфигурации (если есть):
+**Шаг 1.** Очистите предыдущие конфигурации (если есть):
 
 ```bash
 # Удалить namespace'ы если остались от прошлой лабы
@@ -81,7 +113,7 @@ sudo iptables -t nat -F
 sudo iptables -F FORWARD
 ```
 
-**Шаг 2.** Создай bridge:
+**Шаг 2.** Создайте bridge:
 
 ```bash
 sudo ip link add br0 type bridge
@@ -89,7 +121,7 @@ sudo ip link set br0 up
 sudo ip addr add 10.0.0.1/24 dev br0
 ```
 
-**Шаг 3.** Создай три namespace и подключи к bridge:
+**Шаг 3.** Создайте три namespace и подключи к bridge:
 
 ```bash
 for NS in web app db; do
@@ -103,7 +135,7 @@ for NS in web app db; do
 done
 ```
 
-**Шаг 4.** Назначь IP-адреса:
+**Шаг 4.** Назначьте IP-адреса:
 
 ```bash
 sudo ip netns exec web ip addr add 10.0.0.2/24 dev eth0-web
@@ -119,12 +151,12 @@ sudo ip netns exec db ip link set eth0-db up
 sudo ip netns exec db ip route add default via 10.0.0.1
 ```
 
-**Шаг 5.** Включи IP forwarding и базовый NAT:
+**Шаг 5.** Включите IP forwarding и базовый NAT:
 
 ```bash
 sudo sysctl -w net.ipv4.ip_forward=1
 
-# Определи внешний интерфейс
+# Определите внешний интерфейс
 EXT_IF=$(ip route show default | awk '{print $5}')
 echo "Внешний интерфейс: $EXT_IF"
 
@@ -134,7 +166,7 @@ sudo iptables -A FORWARD -i $EXT_IF -o br0 -m state --state RELATED,ESTABLISHED 
 sudo iptables -A FORWARD -i br0 -o br0 -j ACCEPT
 ```
 
-**Шаг 6.** Проверь связность:
+**Шаг 6.** Проверьте связность:
 
 ```bash
 # Namespace'ы видят друг друга
@@ -149,7 +181,7 @@ sudo ip netns exec web ping -c 1 10.0.0.1
 sudo ip netns exec web ping -c 1 8.8.8.8
 ```
 
-**Шаг 7.** Запусти «сервисы» в каждом namespace:
+**Шаг 7.** Запустите «сервисы» в каждом namespace:
 
 ```bash
 # Web-сервер (HTTP на порту 80)
@@ -199,7 +231,7 @@ sudo ip netns exec app ncat -z -v 10.0.0.4 3306
 
 **Цель:** понять архитектуру iptables и научиться читать/добавлять/удалять правила.
 
-**Шаг 1.** Посмотри все существующие правила на хосте:
+**Шаг 1.** Посмотрите все существующие правила на хосте:
 
 ```bash
 # Таблица filter (по умолчанию)
@@ -215,9 +247,9 @@ sudo iptables -t mangle -L -n -v --line-numbers
 sudo iptables -t raw -L -n -v --line-numbers
 ```
 
-> **❓ Вопрос:** Ты видишь цепочки INPUT, FORWARD, OUTPUT в таблице filter и PREROUTING, POSTROUTING в nat. Почему в filter нет PREROUTING? Через какие цепочки проходит пакет, идущий транзитом (от namespace к интернету)?
+> **❓ Вопрос:** Вы видишь цепочки INPUT, FORWARD, OUTPUT в таблице filter и PREROUTING, POSTROUTING в nat. Почему в filter нет PREROUTING? Через какие цепочки проходит пакет, идущий транзитом (от namespace к интернету)?
 
-**Шаг 2.** Посмотри правила внутри namespace web:
+**Шаг 2.** Посмотрите правила внутри namespace web:
 
 ```bash
 sudo ip netns exec web iptables -L -n -v --line-numbers
@@ -300,7 +332,7 @@ sudo iptables -Z
 # sudo iptables -P INPUT DROP   # осторожно! заблокирует всё
 ```
 
-Посмотри текущее состояние после манипуляций:
+Посмотрите текущее состояние после манипуляций:
 
 ```bash
 sudo iptables -L -n -v --line-numbers
@@ -321,7 +353,7 @@ sudo iptables-save > /tmp/iptables-backup.rules
 cat /tmp/iptables-backup.rules
 ```
 
-**Шаг 2.** Очисти цепочку INPUT (NAT и FORWARD оставим):
+**Шаг 2.** Очистите цепочку INPUT (NAT и FORWARD оставим):
 
 ```bash
 sudo iptables -F INPUT
@@ -350,7 +382,7 @@ sudo iptables -A INPUT -p udp --sport 53 -j ACCEPT
 sudo iptables -P INPUT DROP
 ```
 
-**Шаг 4.** Проверь:
+**Шаг 4.** Проверьте:
 
 ```bash
 # Ping из namespace - работает (правило 3)
@@ -360,7 +392,7 @@ sudo ip netns exec web ping -c 2 10.0.0.1
 sudo ip netns exec web curl -s --connect-timeout 2 10.0.0.1:12345
 echo "Exit code: $?"
 
-# Посмотри счётчики - какие правила сработали
+# Посмотрите счётчики - какие правила сработали
 sudo iptables -L INPUT -n -v --line-numbers
 ```
 
@@ -376,7 +408,7 @@ echo "Exit code: $?"
 ```
 
 ```bash
-# Удали тестовое правило
+# Удалите тестовое правило
 sudo iptables -D INPUT -p tcp --dport 12345 -j REJECT --reject-with tcp-reset
 ```
 
@@ -388,7 +420,7 @@ sudo iptables -D INPUT -p tcp --dport 12345 -j REJECT --reject-with tcp-reset
 
 **Цель:** настроить правила пересылки между namespace'ами: web может ходить в app, app может ходить в db, но web НЕ может ходить в db напрямую (трёхуровневая архитектура).
 
-**Шаг 1.** Очисти цепочку FORWARD и начни с чистого листа:
+**Шаг 1.** Очистите цепочку FORWARD и начни с чистого листа:
 
 ```bash
 # Сохрани NAT-правила, очисти только filter FORWARD
@@ -419,7 +451,7 @@ sudo iptables -A FORWARD -i $EXT_IF -o br0 -m state --state RELATED,ESTABLISHED 
 sudo iptables -P FORWARD DROP
 ```
 
-**Шаг 3.** Проверь, что трёхуровневая модель работает:
+**Шаг 3.** Проверьте, что трёхуровневая модель работает:
 
 ```bash
 # web -> app:8080 - РАЗРЕШЕНО
@@ -443,7 +475,7 @@ sudo ip netns exec web ping -c 1 10.0.0.4
 echo "--- Ожидаем: ping OK ---"
 ```
 
-**Шаг 4.** Посмотри, какие правила сработали и сколько пакетов поймали:
+**Шаг 4.** Посмотрите, какие правила сработали и сколько пакетов поймали:
 
 ```bash
 sudo iptables -L FORWARD -n -v --line-numbers
@@ -457,13 +489,13 @@ sudo iptables -L FORWARD -n -v --line-numbers
 
 **Цель:** настроить firewall непосредственно на «сервере» db - как если бы это был реальный MySQL-сервер с iptables.
 
-**Шаг 1.** Зайди в namespace db и посмотри текущее состояние:
+**Шаг 1.** Зайди в namespace db и посмотрите текущее состояние:
 
 ```bash
 sudo ip netns exec db iptables -L -n -v
 ```
 
-**Шаг 2.** Настрой firewall внутри db:
+**Шаг 2.** Настройте firewall внутри db:
 
 ```bash
 # Разрешить loopback
@@ -486,7 +518,7 @@ sudo ip netns exec db iptables -A INPUT -j LOG --log-prefix "DB-DROPPED: " --log
 sudo ip netns exec db iptables -A INPUT -j DROP
 ```
 
-**Шаг 3.** Проверь:
+**Шаг 3.** Проверьте:
 
 ```bash
 # app -> db:3306 - РАЗРЕШЕНО
@@ -496,11 +528,11 @@ sudo ip netns exec app ncat -z -v -w 2 10.0.0.4 3306
 # Примечание: FORWARD уже блокирует, но db-firewall - вторая линия обороны
 sudo ip netns exec web ncat -z -v -w 2 10.0.0.4 3306
 
-# Посмотри логи заблокированных пакетов
+# Посмотрите логи заблокированных пакетов
 sudo dmesg | grep "DB-DROPPED" | tail -5
 ```
 
-**Шаг 4.** Настрой firewall внутри web:
+**Шаг 4.** Настройте firewall внутри web:
 
 ```bash
 # Разрешить loopback
@@ -523,7 +555,7 @@ sudo ip netns exec web iptables -A INPUT -j LOG --log-prefix "WEB-DROPPED: " --l
 sudo ip netns exec web iptables -A INPUT -j DROP
 ```
 
-**Шаг 5.** Проверь:
+**Шаг 5.** Проверьте:
 
 ```bash
 # HTTP работает
@@ -532,7 +564,7 @@ sudo ip netns exec app curl -s --connect-timeout 2 10.0.0.2:80
 # SSH от app - заблокирован (разрешён только от хоста)
 sudo ip netns exec app ncat -z -v -w 2 10.0.0.2 22
 
-# Посмотри логи
+# Посмотрите логи
 sudo dmesg | grep "WEB-DROPPED" | tail -5
 ```
 
@@ -548,26 +580,26 @@ sudo dmesg | grep "WEB-DROPPED" | tail -5
 
 **Цель:** понять, как conntrack отслеживает состояния и почему stateful firewall надёжнее stateless.
 
-**Шаг 1.** Установи (если ещё нет) и посмотри текущую таблицу conntrack:
+**Шаг 1.** Установите (если ещё нет) и посмотрите текущую таблицу conntrack:
 
 ```bash
-sudo conntrack -L 2>/dev/null || echo "Установи conntrack: sudo apt install conntrack"
+sudo conntrack -L 2>/dev/null || echo "Установите conntrack: sudo apt install conntrack"
 ```
 
-**Шаг 2.** Очисти conntrack и сгенерируй трафик:
+**Шаг 2.** Очистите conntrack и сгенерируй трафик:
 
 ```bash
-# Очисти таблицу
+# Очистите таблицу
 sudo conntrack -F
 
 # Пингани из web в app
 sudo ip netns exec web ping -c 3 10.0.0.3
 
-# Посмотри, что записал conntrack
+# Посмотрите, что записал conntrack
 sudo conntrack -L -p icmp
 ```
 
-Ты увидишь что-то вроде:
+Вы увидите что-то вроде:
 
 ```
 icmp  1 29 src=10.0.0.2 dst=10.0.0.3 type=8 code=0 id=1234
@@ -584,16 +616,16 @@ sudo conntrack -F
 # HTTP-запрос
 sudo ip netns exec web curl -s 10.0.0.3:8080
 
-# Посмотри TCP-соединения
+# Посмотрите TCP-соединения
 sudo conntrack -L -p tcp
 ```
 
-Ты увидишь состояния TCP: `SYN_SENT`, `ESTABLISHED`, `TIME_WAIT` и т.д.
+Вы увидите состояния TCP: `SYN_SENT`, `ESTABLISHED`, `TIME_WAIT` и т.д.
 
 **Шаг 4.** Мониторь conntrack в реальном времени:
 
 ```bash
-# Терминал 1: наблюдай за событиями conntrack
+# Терминал 1: наблюдайте за событиями conntrack
 sudo conntrack -E
 ```
 
@@ -603,9 +635,9 @@ sudo ip netns exec web curl -s 10.0.0.3:8080
 sudo ip netns exec web ping -c 1 10.0.0.4
 ```
 
-Ты увидишь события `[NEW]`, `[UPDATE]`, `[DESTROY]` для каждого соединения.
+Вы увидите события `[NEW]`, `[UPDATE]`, `[DESTROY]` для каждого соединения.
 
-**Шаг 5.** Посмотри статистику conntrack:
+**Шаг 5.** Посмотрите статистику conntrack:
 
 ```bash
 sudo conntrack -S
@@ -681,7 +713,7 @@ FW-FORWARD-DROP: IN=br0 OUT=br0 SRC=10.0.0.2 DST=10.0.0.4
 **Шаг 4.** Логируй с ограничением частоты (чтобы не забить лог):
 
 ```bash
-# Удали старое правило без лимита
+# Удалите старое правило без лимита
 sudo iptables -D FORWARD -j LOG --log-prefix "FW-FORWARD-DROP: " --log-level 4
 
 # Добавь с лимитом: максимум 10 записей в минуту
@@ -699,7 +731,7 @@ sudo iptables -I FORWARD 3 -d 10.0.0.4 -m state --state NEW \
 # Сгенерируй трафик
 sudo ip netns exec app ncat -z -v -w 2 10.0.0.4 3306
 
-# Посмотри лог
+# Посмотрите лог
 sudo dmesg | grep "DB-NEW-CONN" | tail -5
 ```
 
@@ -719,7 +751,7 @@ sudo dmesg | grep "DB-NEW-CONN" | tail -5
 
 ```bash
 # Добавь ПЕРЕД правилом, разрешающим SSH
-# Сначала посмотри правила web
+# Сначала посмотрите правила web
 sudo ip netns exec web iptables -L INPUT -n --line-numbers
 
 # Добавь rate limit для новых SSH-соединений
@@ -733,7 +765,7 @@ sudo ip netns exec web iptables -I INPUT 4 -p tcp --dport 22 \
     -m state --state NEW -j DROP
 ```
 
-**Шаг 2.** Протестируй - попробуй «забрутфорсить» SSH:
+**Шаг 2.** Протестируй - попробуйте «забрутфорсить» SSH:
 
 ```bash
 # Быстро 10 раз подключиться к SSH web
@@ -748,7 +780,7 @@ done
 **Шаг 3.** Более умный подход - модуль `recent` для бана по IP:
 
 ```bash
-# Очисти предыдущие rate-limit правила из web
+# Очистите предыдущие rate-limit правила из web
 sudo ip netns exec web iptables -F INPUT
 
 # Пересоздай правила для web с модулем recent
@@ -786,7 +818,7 @@ for i in $(seq 1 8); do
     sleep 0.5
 done
 
-# Посмотри логи
+# Посмотрите логи
 sudo dmesg | grep "SSH-BRUTE" | tail -5
 ```
 
@@ -810,13 +842,13 @@ sudo iptables -I FORWARD 3 -d 10.0.0.2 -p tcp --dport 80 \
 
 **Цель:** сделать web-сервер (namespace web) доступным снаружи через порт хоста.
 
-**Шаг 1.** Настрой DNAT: порт 80 хоста → порт 80 web (10.0.0.2):
+**Шаг 1.** Настройте DNAT: порт 80 хоста → порт 80 web (10.0.0.2):
 
 ```bash
 sudo iptables -t nat -A PREROUTING -p tcp --dport 80 \
     -j DNAT --to-destination 10.0.0.2:80
 
-# Разреши forward для этого трафика (если ещё нет)
+# Разрешите forward для этого трафика (если ещё нет)
 sudo iptables -I FORWARD 2 -p tcp -d 10.0.0.2 --dport 80 \
     -m state --state NEW -j ACCEPT
 ```
@@ -828,13 +860,13 @@ sudo iptables -t nat -A OUTPUT -p tcp --dport 80 \
     -j DNAT --to-destination 10.0.0.2:80
 ```
 
-**Шаг 3.** Проверь:
+**Шаг 3.** Проверьте:
 
 ```bash
 # С хоста
 curl -s localhost:80
 
-# Посмотри NAT-таблицу
+# Посмотрите NAT-таблицу
 sudo iptables -t nat -L -n -v --line-numbers
 ```
 
@@ -855,7 +887,7 @@ sudo iptables -I FORWARD 2 -p tcp -d 10.0.0.3 --dport 8080 \
 curl -s localhost:8080
 ```
 
-**Шаг 5.** Посмотри, как NAT меняет пакеты - запусти tcpdump:
+**Шаг 5.** Посмотрите, как NAT меняет пакеты - запусти tcpdump:
 
 ```bash
 # Терминал 1: слушай br0
@@ -865,7 +897,7 @@ sudo tcpdump -i br0 -n tcp port 80
 curl -s localhost:80
 ```
 
-> **❓ Вопрос:** В tcpdump на br0 ты видишь destination 10.0.0.2:80, хотя оригинальный запрос шёл на localhost:80. В какой цепочке произошла подмена? Что увидит tcpdump на внешнем интерфейсе?
+> **❓ Вопрос:** В tcpdump на br0 вы видишь destination 10.0.0.2:80, хотя оригинальный запрос шёл на localhost:80. В какой цепочке произошла подмена? Что увидит tcpdump на внешнем интерфейсе?
 
 ---
 
@@ -879,7 +911,7 @@ curl -s localhost:80
 # Сохрани в файл
 sudo iptables-save > /tmp/iptables-current.rules
 
-# Посмотри содержимое
+# Посмотрите содержимое
 cat /tmp/iptables-current.rules
 ```
 
@@ -913,7 +945,7 @@ cat /tmp/iptables-web.rules
 **Шаг 3.** Симулируй «перезагрузку» - очисти всё и восстанови:
 
 ```bash
-# Очисти правила хоста
+# Очистите правила хоста
 sudo iptables -F
 sudo iptables -t nat -F
 sudo iptables -P INPUT ACCEPT
@@ -925,7 +957,7 @@ sudo iptables -L -n
 # Восстанови
 sudo iptables-restore < /tmp/iptables-current.rules
 
-# Проверь, что всё вернулось
+# Проверьте, что всё вернулось
 sudo iptables -L -n -v --line-numbers
 sudo iptables -t nat -L -n -v --line-numbers
 ```
@@ -967,14 +999,14 @@ sudo iptables -P FORWARD ACCEPT
 sudo iptables -P OUTPUT ACCEPT
 ```
 
-**Шаг 2.** Очисти nftables:
+**Шаг 2.** Очистите nftables:
 
 ```bash
 sudo nft flush ruleset
 sudo nft list ruleset
 ```
 
-**Шаг 3.** Создай базовую структуру - таблицу и цепочки:
+**Шаг 3.** Создайте базовую структуру - таблицу и цепочки:
 
 ```bash
 # Создать таблицу (аналог "filter" в iptables, но имя произвольное)
@@ -989,11 +1021,11 @@ sudo nft add chain inet firewall forward {type filter hook forward priority 0\; 
 # Создать цепочку OUTPUT
 sudo nft add chain inet firewall output {type filter hook output priority 0\; policy accept\;}
 
-# Посмотри структуру
+# Посмотрите структуру
 sudo nft list ruleset
 ```
 
-> **Обрати внимание:** В nftables ты сам выбираешь имена таблиц и цепочек. `inet` - семейство (IPv4 + IPv6). Приоритет и hook определяют, куда цепочка подключается в Netfilter.
+> **Обратите внимание:** В nftables вы сам выбираешь имена таблиц и цепочек. `inet` - семейство (IPv4 + IPv6). Приоритет и hook определяют, куда цепочка подключается в Netfilter.
 
 **Шаг 4.** Сравни ключевые отличия синтаксиса:
 
@@ -1030,7 +1062,7 @@ sudo nft add rule inet firewall input ip protocol icmp icmp type echo-request li
 # SSH от namespace'ов
 sudo nft add rule inet firewall input ip saddr 10.0.0.0/24 tcp dport 22 accept
 
-# Посмотри правила
+# Посмотрите правила
 sudo nft list chain inet firewall input
 ```
 
@@ -1078,13 +1110,13 @@ sudo nft add chain inet nat output {type nat hook output priority -100\;}
 sudo nft add rule inet nat output tcp dport 80 dnat to 10.0.0.2:80
 ```
 
-**Шаг 8.** Проверь всю конфигурацию:
+**Шаг 8.** Проверьте всю конфигурацию:
 
 ```bash
 sudo nft list ruleset
 ```
 
-**Шаг 9.** Проверь, что всё работает:
+**Шаг 9.** Проверьте, что всё работает:
 
 ```bash
 # web -> app
@@ -1109,7 +1141,7 @@ sudo ip netns exec web ping -c 1 10.0.0.4
 
 **Цель:** использовать sets и maps - мощные конструкции nftables, которых нет в iptables.
 
-**Шаг 1.** Создай named set для «доверенных» IP-адресов:
+**Шаг 1.** Создайте named set для «доверенных» IP-адресов:
 
 ```bash
 # Создать set
@@ -1125,7 +1157,7 @@ sudo nft add rule inet firewall input ip saddr @trusted_ips tcp dport 22 accept
 sudo nft list set inet firewall trusted_ips
 ```
 
-**Шаг 2.** Создай set портов, которые открыты на web:
+**Шаг 2.** Создайте set портов, которые открыты на web:
 
 ```bash
 # Set портов
@@ -1135,7 +1167,7 @@ sudo nft add element inet firewall web_ports { 80, 443, 8080 }
 # Правило: разрешить трафик на любой из этих портов к web
 sudo nft add rule inet firewall forward ip daddr 10.0.0.2 tcp dport @web_ports accept
 
-# Посмотри
+# Посмотрите
 sudo nft list set inet firewall web_ports
 ```
 
@@ -1165,14 +1197,14 @@ for i in $(seq 1 8); do
     echo "Attempt $i: exit code $?"
 done
 
-# Посмотри, попал ли IP в бан
+# Посмотрите, попал ли IP в бан
 sudo nft list set inet firewall ssh_banned
 ```
 
 **Шаг 5.** Maps - маршрутизация трафика по портам (verdict maps):
 
 ```bash
-# Создай verdict map: порт -> действие
+# Создайте verdict map: порт -> действие
 sudo nft add map inet firewall port_policy { type inet_service : verdict \; }
 sudo nft add element inet firewall port_policy { 80 : accept, 443 : accept, 22 : drop, 3306 : drop }
 
@@ -1195,7 +1227,7 @@ sudo nft list ruleset > /tmp/nftables-current.conf
 cat /tmp/nftables-current.conf
 ```
 
-**Шаг 2.** Создай конфигурационный файл с нуля:
+**Шаг 2.** Создайте конфигурационный файл с нуля:
 
 ```bash
 cat > /tmp/nftables-lab.conf << 'EOF'
@@ -1302,11 +1334,11 @@ echo "Validation exit code: $?"
 # Применение
 sudo nft -f /tmp/nftables-lab.conf
 
-# Проверь
+# Проверьте
 sudo nft list ruleset
 ```
 
-**Шаг 4.** Проверь, что всё работает:
+**Шаг 4.** Проверьте, что всё работает:
 
 ```bash
 sudo ip netns exec web curl -s --connect-timeout 2 10.0.0.3:8080
@@ -1339,7 +1371,7 @@ curl -s --connect-timeout 2 localhost:80
 
 **Цель:** использовать nftables trace для пошаговой отладки прохождения пакета через все цепочки.
 
-**Шаг 1.** Включи трассировку для конкретного трафика:
+**Шаг 1.** Включите трассировку для конкретного трафика:
 
 ```bash
 # Добавь правило trace в начало prerouting
@@ -1347,7 +1379,7 @@ sudo nft add chain inet firewall trace_chain { type filter hook prerouting prior
 sudo nft add rule inet firewall trace_chain ip saddr 10.0.0.2 ip daddr 10.0.0.4 meta nftrace set 1
 ```
 
-**Шаг 2.** Запусти мониторинг трассировки:
+**Шаг 2.** Запустите мониторинг трассировки:
 
 ```bash
 # Терминал 1: мониторинг
@@ -1359,12 +1391,12 @@ sudo nft monitor trace
 sudo ip netns exec web ncat -z -w 2 10.0.0.4 3306 2>/dev/null
 ```
 
-В терминале 1 ты увидишь полный путь пакета через каждую цепочку, каждое правило, с указанием verdict (accept/drop/continue).
+В терминале 1 вы увидите полный путь пакета через каждую цепочку, каждое правило, с указанием verdict (accept/drop/continue).
 
-**Шаг 3.** Попробуй разрешённый трафик:
+**Шаг 3.** Попробуйте разрешённый трафик:
 
 ```bash
-# Удали старое правило trace и добавь новое для app -> db
+# Удалите старое правило trace и добавь новое для app -> db
 sudo nft flush chain inet firewall trace_chain
 sudo nft add rule inet firewall trace_chain ip saddr 10.0.0.3 ip daddr 10.0.0.4 meta nftrace set 1
 ```
@@ -1381,7 +1413,7 @@ sudo ip netns exec app ncat -z -w 2 10.0.0.4 3306
 
 Сравни: для заблокированного трафика путь заканчивается на drop, для разрешённого - accept.
 
-**Шаг 4.** Очисти trace (чтобы не засорял):
+**Шаг 4.** Очистите trace (чтобы не засорял):
 
 ```bash
 sudo nft delete chain inet firewall trace_chain
@@ -1407,7 +1439,7 @@ sudo nft delete chain inet firewall trace_chain
 | Все namespace'ы | Друг к другу | ICMP | ACCEPT |
 | Всё остальное | - | - | DROP + LOG |
 
-**Шаг 1.** Создай финальный конфигурационный файл:
+**Шаг 1.** Создайте финальный конфигурационный файл:
 
 ```bash
 cat > /tmp/nftables-production.conf << 'NFTEOF'
@@ -1582,7 +1614,7 @@ echo "=== Test 8: Internet from web (ALLOW) ==="
 sudo ip netns exec web ping -c 1 -W 2 8.8.8.8
 ```
 
-**Шаг 4.** Посмотри счётчики - какие правила срабатывают:
+**Шаг 4.** Посмотрите счётчики - какие правила срабатывают:
 
 ```bash
 sudo nft list ruleset | grep -E "counter packets [1-9]"
@@ -1593,7 +1625,7 @@ sudo nft list ruleset | grep -E "counter packets [1-9]"
 ### Задание 15: Очистка
 
 ```bash
-# Удали nftables
+# Удалите nftables
 sudo nft flush ruleset
 
 # Убей процессы в namespace'ах
@@ -1601,24 +1633,24 @@ for NS in web app db; do
     sudo ip netns pids $NS 2>/dev/null | xargs -r sudo kill 2>/dev/null
 done
 
-# Удали namespace'ы
+# Удалите namespace'ы
 for NS in web app db; do
     sudo ip netns del $NS 2>/dev/null
 done
 
-# Удали bridge
+# Удалите bridge
 sudo ip link del br0 2>/dev/null
 
 # Выключи forwarding
 sudo sysctl -w net.ipv4.ip_forward=0
 
-# Очисти iptables (на случай если остались)
+# Очистите iptables (на случай если остались)
 sudo iptables -F
 sudo iptables -t nat -F
 sudo iptables -P INPUT ACCEPT
 sudo iptables -P FORWARD ACCEPT
 
-# Проверь
+# Проверьте
 ip netns list
 ip link show type bridge
 sudo nft list ruleset
@@ -1733,6 +1765,15 @@ sudo iptables -L -n
 **Задание 13 - nftables trace**
 
 > Trace критичен, когда трафик дропается, но непонятно каким правилом. В сложных конфигурациях с десятками цепочек и правил ручной анализ невозможен. Trace показывает точную цепочку и номер правила, которое приняло решение. Без trace приходится добавлять LOG перед каждым правилом, что засоряет конфигурацию и логи.
+
+## Как это звучит на собеседовании
+
+1. **Вопрос:** В чем разница между `iptables` и `nftables` на архитектурном уровне?
+   **Ответ:** `iptables` использует жестко закодированные таблицы и цепочки в ядре, а каждое правило обрабатывается последовательно, что замедляет работу при большом количестве правил. `nftables` использует более простую виртуальную машину в ядре (JIT-компиляция байткода) и динамические структуры данных (sets/maps), что обеспечивает O(1) скорость поиска независимо от размера набора правил. Также `nftables` объединяет функционал `iptables`, `ip6tables`, `arptables` и `ebtables` в едином синтаксисе.
+2. **Вопрос:** Чем отличается `conntrack` состояние `ESTABLISHED` от `RELATED`?
+   **Ответ:** Состояние `ESTABLISHED` означает, что пакет принадлежит к уже установленному двустороннему соединению. Состояние `RELATED` означает, что пакет начинает новое соединение, но оно ассоциировано с уже существующим (например, передача данных по FTP на порту 20 после авторизации на порту 21, или пакеты ICMP об ошибках доставки).
+3. **Вопрос:** Как работает защита от сканирования портов или Syn Flood с использованием модуля `recent` в `iptables`?
+   **Ответ:** Модуль `recent` позволяет создавать динамические списки IP-адресов прямо в памяти ядра. При получении пакета (например, SYN-пакета) мы проверяем, как часто этот IP-адрес отправлял пакеты за последний интервал времени. Если лимит превышен (например, более 10 пакетов за 5 секунд), мы добавляем IP в список заблокированных и сбрасываем его трафик на определенное время.
 
 ## Проверка модуля
 

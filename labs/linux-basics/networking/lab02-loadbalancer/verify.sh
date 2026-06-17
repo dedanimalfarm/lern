@@ -27,10 +27,18 @@ unique_servers=$(echo "$responses" | grep -o 'Server [123]' | sort -u | wc -l)
 
 if [ "$unique_servers" -ge 2 ]; then
     echo "  [OK] Round-robin load balancing is active. Responses received from multiple backends."
-    echo "✅ Lab 2 Verification Successful!"
-    exit 0
 else
     echo "[FAIL] Load balancing verification failed. Response: "
     echo "$responses"
     exit 1
 fi
+
+# 4. Verify statistics page is running
+if ! curl -fsS --connect-timeout 2 http://localhost:8404/ >/dev/null; then
+    echo "[FAIL] HAProxy statistics page on port 8404 is not responding."
+    exit 1
+fi
+echo "  [OK] HAProxy statistics page is accessible on port 8404."
+
+echo "✅ Lab 2 Verification Successful!"
+exit 0

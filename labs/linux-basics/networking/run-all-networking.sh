@@ -14,16 +14,16 @@ C_GREEN=$'\033[32m'; C_RED=$'\033[31m'; C_RESET=$'\033[0m'
 
 LABS=(
   "lab01-routing-dnat"
-  "lab02_loadbalancer"
-  "lab03_wireguard"
-  "lab04_vlan"
-  "lab05_dns_dhcp"
-  "lab06_linux_bridge"
-  "lab07_ip_nftables"
-  "lab09_traffic_control"
-  "lab10_bgp"
-  "lab11_mini_docker"
-  "lab12_cni_intro"
+  "lab02-loadbalancer"
+  "lab03-wireguard"
+  "lab04-vlan"
+  "lab05-dns-dhcp"
+  "lab06-linux-bridge"
+  "lab07-ip-nftables"
+  "lab09-traffic-control"
+  "lab10-bgp"
+  "lab11-mini-docker"
+  "lab12-cni-intro"
 )
 
 OK=()
@@ -54,14 +54,14 @@ for lab in "${LABS[@]}"; do
       ip netns exec router_ns sysctl -w net.ipv4.ip_forward=1 >/dev/null || STATUS=1
       ip netns exec router_ns iptables -t nat -A PREROUTING -d 10.0.1.1 -p tcp --dport 80 -j DNAT --to-destination 10.0.2.2:8080 || STATUS=1
     fi
-  elif [[ "$lab" == "lab11_mini_docker" ]]; then
+  elif [[ "$lab" == "lab11-mini-docker" ]]; then
     echo "Running setup (mini-docker run)..."
     (cd "$lab" && chmod +x *.sh && bash mini-docker.sh run myweb 8080:80) || STATUS=1
     sleep 2
   else
     echo "Running setup..."
     (cd "$lab" && chmod +x *.sh && ./setup.sh) || STATUS=1
-    if [[ "$lab" == "lab10_bgp" ]]; then
+    if [[ "$lab" == "lab10-bgp" ]]; then
       sleep 8
     else
       sleep 2

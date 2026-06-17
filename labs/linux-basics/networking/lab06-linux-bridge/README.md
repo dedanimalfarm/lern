@@ -4,11 +4,36 @@
 
 ---
 
+## Оглавление
+<!-- TOC -->
+- [Обзор лабораторной](#обзор-лабораторной)
+- [Что вы построите](#что-вы-построите)
+- [Что нужно](#что-нужно)
+- [Ключевые концепции](#ключевые-концепции)
+- [Часть 1: Основы](#часть-1-основы)
+  - [Задание 1: Создание Network Namespaces](#задание-1-создание-network-namespaces)
+  - [Задание 2: veth-пары — виртуальные кабели](#задание-2-veth-пары--виртуальные-кабели)
+  - [Задание 3: Создание bridge](#задание-3-создание-bridge)
+  - [Задание 4: Исследование L2 — MAC-таблица, ARP, tcpdump](#задание-4-исследование-l2--mac-таблица-arp-tcpdump)
+- [Часть 2: Маршрутизация и NAT](#часть-2-маршрутизация-и-nat)
+  - [Задание 5: Выход в интернет через bridge + NAT](#задание-5-выход-в-интернет-через-bridge--nat)
+  - [Задание 6: Проброс портов (DNAT) — входящий трафик](#задание-6-проброс-портов-dnat--входящий-трафик)
+  - [Задание 7: VLAN на bridge — сегментация сети](#задание-7-vlan-на-bridge--сегментация-сети)
+  - [Задание 8: Очистка](#задание-8-очистка)
+- [Проверка модуля](#проверка-модуля)
+- [Уборка](#уборка)
+<!-- /TOC -->
+
+> ⏱ время ~50 мин · сложность 3/5 · пререквизиты: базовый CLI, пройденная [lab01-routing-dnat](../lab01-routing-dnat/)
+
 ## Обзор лабораторной
 
-В этой лабораторной ты руками соберёшь то, что Docker и Kubernetes делают автоматически: создашь изолированные сетевые пространства (network namespaces), соединишь их виртуальными кабелями (veth-пары) и свяжешь через виртуальный свитч (Linux bridge). Всё на обычной VM, без Docker, без облачных сервисов.
+## Связь с теоретическим конспектом
+Перед выполнением лабораторной работы рекомендуется ознакомиться с разделами о сетевых интерфейсах, MAC-адресах, ARP и свойствах интерфейсов в [Теоретическом конспекте](file:///root/lern/labs/linux-basics/networking/abstract1/README.md).
 
-## Что ты построишь
+В этой лабораторной вы руками соберёте то, что Docker и Kubernetes делают автоматически: создадите изолированные сетевые пространства (network namespaces), соедините их виртуальными кабелями (veth-пары) и свяжете через виртуальный свитч (Linux bridge). Всё на обычной VM, без Docker, без облачных сервисов.
+
+## Что вы построишь
 
 ```
   Namespace: red        Namespace: blue       Namespace: green
@@ -52,17 +77,17 @@
 
 **Цель:** понять, что такое network namespace и убедиться, что он полностью изолирован от хоста.
 
-**Шаг 1.** Создай два namespace:
+**Шаг 1.** Создайте два namespace:
 
 ```bash
 sudo ip netns add red
 sudo ip netns add blue
 
-# Проверь
+# Проверьте
 ip netns list
 ```
 
-**Шаг 2.** Загляни внутрь namespace `red`:
+**Шаг 2.** Загляните внутрь namespace `red`:
 
 ```bash
 # Какие интерфейсы есть?
@@ -78,26 +103,26 @@ sudo ip netns exec red ping -c 1 127.0.0.1
 > **❓ Вопрос:** Ping на 127.0.0.1 не работает. Почему?
 > *Подсказка: посмотри состояние lo интерфейса.*
 
-**Шаг 3.** Подними loopback:
+**Шаг 3.** Поднимите loopback:
 
 ```bash
 sudo ip netns exec red ip link set lo up
 sudo ip netns exec red ping -c 1 127.0.0.1
 ```
 
-**Шаг 4.** Убедись в изоляции — namespace не видит интерфейсы хоста:
+**Шаг 4.** Убедитесь в изоляции — namespace не видит интерфейсы хоста:
 
 ```bash
-# На хосте (ты увидишь все свои интерфейсы: lo, eth0/enp3s0, docker0 и т.д.)
+# На хосте (вы увидишь все свои интерфейсы: lo, eth0/enp3s0, docker0 и т.д.)
 ip -br link show
 
-# В изолированном namespace (ты увидишь ТОЛЬКО loopback интерфейс lo)
+# В изолированном namespace (вы увидишь ТОЛЬКО loopback интерфейс lo)
 sudo ip netns exec red ip -br link show
 ```
 
-> **❓ Вопрос:** Namespace видит только `lo`. Это значит, что каждый namespace имеет полностью свой сетевой стек. Как думаешь, у каждого namespace свои iptables-правила тоже?
+> **❓ Вопрос:** Namespace видит только `lo`. Это значит, что каждый namespace имеет полностью свой сетевой стек. Как вы думаете, у каждого namespace свои iptables-правила тоже?
 
-Проверь:
+Проверьте:
 
 ```bash
 sudo ip netns exec red iptables -L -n
@@ -110,16 +135,16 @@ sudo iptables -L -n
 
 **Цель:** соединить два namespace напрямую veth-парой и установить связь.
 
-**Шаг 1.** Создай veth-пару:
+**Шаг 1.** Создайте veth-пару:
 
 ```bash
 sudo ip link add veth-red type veth peer name veth-blue
 
-# Посмотри — оба конца на хосте
+# Посмотрите — оба конца на хосте
 ip link show type veth
 ```
 
-**Шаг 2.** Раскидай концы по namespace:
+**Шаг 2.** Раскидайте концы по namespace:
 
 ```bash
 # Один конец в red
@@ -128,7 +153,7 @@ sudo ip link set veth-red netns red
 # Другой в blue
 sudo ip link set veth-blue netns blue
 
-# Проверь — на хосте veth пропали
+# Проверьте — на хосте veth пропали
 ip link show type veth
 
 # Они теперь внутри namespace
@@ -138,7 +163,7 @@ sudo ip netns exec blue ip link show
 
 > **❓ Вопрос:** После `ip link set ... netns red`, интерфейс исчез с хоста. Он физически переместился? Что произошло на уровне ядра?
 
-**Шаг 3.** Назначь IP-адреса и подними интерфейсы:
+**Шаг 3.** Назначьте IP-адреса и подними интерфейсы:
 
 ```bash
 # В red
@@ -150,20 +175,20 @@ sudo ip netns exec blue ip addr add 10.0.0.3/24 dev veth-blue
 sudo ip netns exec blue ip link set veth-blue up
 ```
 
-**Шаг 4.** Проверь связь:
+**Шаг 4.** Проверьте связь:
 
 ```bash
 sudo ip netns exec red ping -c 3 10.0.0.3
 sudo ip netns exec blue ping -c 3 10.0.0.2
 ```
 
-**Шаг 5.** Посмотри ARP-таблицу:
+**Шаг 5.** Посмотрите ARP-таблицу:
 
 ```bash
 sudo ip netns exec red ip neigh show
 ```
 
-> **❓ Вопрос:** Ты видишь MAC-адрес blue в ARP-таблице red. Как пакет нашёл этот MAC, если нет свитча? Через какой механизм прошёл ARP-запрос?
+> **❓ Вопрос:** Вы видишь MAC-адрес blue в ARP-таблице red. Как пакет нашел этот MAC, если нет свитча? Через какой механизм прошёл ARP-запрос?
 
 ---
 
@@ -173,27 +198,27 @@ sudo ip netns exec red ip neigh show
 
 > ⚠️ **Важно:** Сначала удалим прямое veth-соединение из Задания 2. В новой схеме каждый namespace подключён к bridge, а не друг к другу.
 
-**Шаг 1.** Удали старые namespace и начни с чистого листа:
+**Шаг 1.** Удалите старые namespace и начни с чистого листа:
 
 ```bash
 sudo ip netns del red
 sudo ip netns del blue
 ```
 
-**Шаг 2.** Создай bridge:
+**Шаг 2.** Создайте bridge:
 
 ```bash
 sudo ip link add br0 type bridge
 sudo ip link set br0 up
 sudo ip addr add 10.0.0.1/24 dev br0
 
-# Проверь
+# Проверьте
 ip addr show br0
 ```
 
-> **❓ Вопрос:** Мы дали bridge IP-адрес 10.0.0.1. Зачем? Bridge работает на L2, ему не нужен IP для пересылки фреймов. Для чего тогда этот адрес?
+> **❓ Вопрос:** Мы назначили bridge IP-адрес 10.0.0.1. Зачем? Bridge работает на L2, ему не нужен IP для пересылки фреймов. Для чего тогда этот адрес?
 
-**Шаг 3.** Создай три namespace и подключи каждый к bridge:
+**Шаг 3.** Создайте три пространства имен и подключи каждый к bridge:
 
 ```bash
 for NS in red blue green; do
@@ -226,7 +251,7 @@ sudo ip netns exec green ip addr add 10.0.0.4/24 dev eth0-green
 sudo ip netns exec green ip link set eth0-green up
 ```
 
-**Шаг 5.** Проверь, что все видят всех:
+**Шаг 5.** Проверьте, что все видят всех:
 
 ```bash
 sudo ip netns exec red ping -c 2 10.0.0.3    # red -> blue
@@ -241,21 +266,21 @@ sudo ip netns exec green ping -c 2 10.0.0.1  # green -> bridge (host)
 
 **Цель:** увидеть, как bridge работает на канальном уровне — MAC-таблица, ARP, broadcast.
 
-**Шаг 1.** Посмотри MAC-таблицу bridge (FDB — Forwarding DataBase):
+**Шаг 1.** Посмотрите MAC-таблицу bridge (FDB — Forwarding DataBase):
 
 ```bash
 bridge fdb show br br0
 ```
 
-Ты увидишь MAC-адреса и к какому порту (veth) они привязаны. Это аналог CAM-таблицы физического свитча.
+Вы увидишь MAC-адреса и к какому порту (veth) они привязаны. Это аналог CAM-таблицы физического свитча.
 
-**Шаг 2.** Посмотри, какие интерфейсы подключены к bridge:
+**Шаг 2.** Посмотрите, какие интерфейсы подключены к bridge:
 
 ```bash
 bridge link show
 ```
 
-**Шаг 3.** Запусти tcpdump на bridge и наблюдай трафик:
+**Шаг 3.** Запустите tcpdump на bridge и наблюдайте за трафиком:
 
 ```bash
 # Терминал 1: слушай bridge
@@ -267,9 +292,9 @@ sudo tcpdump -i br0 -n -e
 sudo ip netns exec red ping -c 3 10.0.0.3
 ```
 
-> **❓ Вопрос:** В tcpdump ты видишь ARP-запросы и ICMP. Обрати внимание на флаг `-e` — он показывает MAC-адреса. Кто отправляет ARP who-has? Кто отвечает? Через какой интерфейс ответ приходит?
+> **❓ Вопрос:** В tcpdump вы видишь ARP-запросы и ICMP. Обрати внимание на флаг `-e` — он показывает MAC-адреса. Кто отправляет ARP who-has? Кто отвечает? Через какой интерфейс ответ приходит?
 
-**Шаг 4.** Проверь ARP из каждого namespace:
+**Шаг 4.** Проверьте ARP из каждого namespace:
 
 ```bash
 sudo ip netns exec red ip neigh show
@@ -302,51 +327,51 @@ sudo ip netns exec red ping -c 3 10.0.0.3
 
 **Цель:** дать namespace доступ в интернет. Это то, что Docker делает автоматически при `docker run`.
 
-**Шаг 1.** Сначала проверь, что интернета нет:
+**Шаг 1.** Сначала проверьте, что интернета нет:
 
 ```bash
 sudo ip netns exec red ping -c 2 -W 2 8.8.8.8
 # Не работает — нет default route
 ```
 
-**Шаг 2.** Добавь default route в каждый namespace:
+**Шаг 2.** Добавьте default route в каждый namespace:
 
 ```bash
 sudo ip netns exec red ip route add default via 10.0.0.1
 sudo ip netns exec blue ip route add default via 10.0.0.1
 sudo ip netns exec green ip route add default via 10.0.0.1
 
-# Проверь
+# Проверьте
 sudo ip netns exec red ip route show
 ```
 
 Теперь пакеты из namespace уходят на 10.0.0.1 (bridge на хосте). Но хост должен их переслать дальше.
 
-**Шаг 3.** Включи IP forwarding:
+**Шаг 3.** Включите IP forwarding:
 
 ```bash
 sudo sysctl -w net.ipv4.ip_forward=1
 
-# Проверь
+# Проверьте
 cat /proc/sys/net/ipv4/ip_forward
 ```
 
 > **❓ Вопрос:** Без `ip_forward=1` ядро Linux дропает пакеты, которые не адресованы ему. Зачем такое поведение по умолчанию?
 
-**Шаг 4.** Настрой NAT (masquerade):
+**Шаг 4.** Настройте NAT (masquerade):
 
 ```bash
-# Узнай имя внешнего интерфейса хоста
-ip route show default
-# Обычно ens4, eth0, enp0s3 и т.д.
+# Определим имя внешнего интерфейса динамически
+EXT_IF=$(ip route get 8.8.8.8 | awk '{print $5; exit}')
+echo "Внешний интерфейс хоста: $EXT_IF"
 
-# Подставь своё имя интерфейса вместо ens4
+# Настроим NAT (masquerade) для сети bridge
 sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/24 \
-    -o ens4 -j MASQUERADE
+    -o "$EXT_IF" -j MASQUERADE
 
-# Разреши forward-трафик
-sudo iptables -A FORWARD -i br0 -o ens4 -j ACCEPT
-sudo iptables -A FORWARD -i ens4 -o br0 \
+# Разрешим forward-трафик
+sudo iptables -A FORWARD -i br0 -o "$EXT_IF" -j ACCEPT
+sudo iptables -A FORWARD -i "$EXT_IF" -o br0 \
     -m state --state RELATED,ESTABLISHED -j ACCEPT
 ```
 
@@ -356,17 +381,17 @@ sudo iptables -A FORWARD -i ens4 -o br0 \
 > - `RELATED,ESTABLISHED` — ответные пакеты пропускаем обратно в br0.
 > - Это ровно то, что делает Docker с сетью `docker0`!
 
-**Шаг 5.** Проверь доступ в интернет:
+**Шаг 5.** Проверьте доступ в интернет:
 
 ```bash
 sudo ip netns exec red ping -c 3 8.8.8.8
 sudo ip netns exec blue ping -c 3 1.1.1.1
 ```
 
-**Шаг 6.** Проверь DNS (нужен резолвер):
+**Шаг 6.** Проверьте DNS (нужен резолвер):
 
 ```bash
-# Создай resolv.conf для namespace
+# Создайте resolv.conf для namespace
 sudo mkdir -p /etc/netns/red
 echo 'nameserver 8.8.8.8' | sudo tee /etc/netns/red/resolv.conf
 
@@ -374,7 +399,7 @@ echo 'nameserver 8.8.8.8' | sudo tee /etc/netns/red/resolv.conf
 sudo ip netns exec red ping -c 2 example.com
 ```
 
-> **❓ Вопрос:** Мы используем MASQUERADE, а не SNAT. Вспомни лекцию — почему здесь masquerade уместен? В каком случае лучше было бы использовать SNAT?
+> **❓ Вопрос:** Мы используем MASQUERADE, а не SNAT. Вспомните лекцию — почему здесь masquerade уместен? В каком случае лучше было бы использовать SNAT?
 
 ---
 
@@ -382,25 +407,25 @@ sudo ip netns exec red ping -c 2 example.com
 
 **Цель:** сделать сервис внутри namespace доступным снаружи. Это аналог `docker run -p 8080:80`.
 
-**Шаг 1.** Запусти простой HTTP-сервер в namespace red:
+**Шаг 1.** Запустите простой HTTP-сервер в namespace red:
 
 ```bash
-# Установи ncat если нет
+# Установите ncat если нет
 sudo apt-get install -y ncat 2>/dev/null || sudo yum install -y nmap-ncat
 
-# Запусти сервер в red на порту 80
+# Запустите сервер в red на порту 80
 sudo ip netns exec red sh -c \
     'echo "Hello from namespace red!" | ncat -l -p 80 -k &'
 ```
 
-**Шаг 2.** Проверь, что сервер работает изнутри:
+**Шаг 2.** Проверьте, что сервер работает изнутри:
 
 ```bash
 sudo ip netns exec blue curl -s 10.0.0.2:80
 # Должен вернуть: Hello from namespace red!
 ```
 
-**Шаг 3.** Настрой DNAT для проброса порта 8080 хоста → порт 80 в red:
+**Шаг 3.** Настройте DNAT для проброса порта 8080 хоста → порт 80 в red:
 
 ```bash
 sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 \
@@ -409,28 +434,28 @@ sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 \
 sudo iptables -A FORWARD -p tcp -d 10.0.0.2 --dport 80 -j ACCEPT
 ```
 
-**Шаг 4.** Проверь с хоста:
+**Шаг 4.** Проверьте с хоста:
 
 ```bash
 curl -s localhost:8080
 ```
 
-**Шаг 5.** Посмотри, что происходит в iptables:
+**Шаг 5.** Посмотрите, что происходит в iptables:
 
 ```bash
 sudo iptables -t nat -L -n -v
 sudo iptables -L FORWARD -n -v
 ```
 
-> **❓ Вопрос:** Ты настроил DNAT в PREROUTING. Почему именно PREROUTING, а не OUTPUT или POSTROUTING? Нарисуй путь пакета через цепочки iptables.
+> **❓ Вопрос:** Вы настроил DNAT в PREROUTING. Почему именно PREROUTING, а не OUTPUT или POSTROUTING? Нарисуйте путь пакета через цепочки iptables.
 
-> **Сравни с Docker:**
+> **Сравните с Docker:**
 > `docker run -p 8080:80 nginx` делает ровно то же самое:
 > 1. Создаёт veth-пару (контейнер ↔ docker0)
 > 2. DNAT: `PREROUTING --dport 8080 → container_ip:80`
 > 3. MASQUERADE: `POSTROUTING` для исходящего трафика контейнера
 >
-> Ты только что повторил это руками!
+> Вы только что повторил это руками!
 
 ---
 
@@ -438,13 +463,13 @@ sudo iptables -L FORWARD -n -v
 
 **Цель:** разделить namespace на разные VLAN и убедиться, что они изолированы друг от друга на L2.
 
-**Шаг 1.** Включи VLAN filtering на bridge:
+**Шаг 1.** Включите VLAN filtering на bridge:
 
 ```bash
 sudo ip link set br0 type bridge vlan_filtering 1
 ```
 
-**Шаг 2.** Назначь VLAN: red и blue в VLAN 10, green в VLAN 20:
+**Шаг 2.** Назначьте VLAN: red и blue в VLAN 10, green в VLAN 20:
 
 ```bash
 # red -> VLAN 10
@@ -459,7 +484,7 @@ sudo bridge vlan del vid 1 dev veth-blue
 sudo bridge vlan add vid 20 dev veth-green pvid untagged
 sudo bridge vlan del vid 1 dev veth-green
 
-# Проверь
+# Проверьте
 bridge vlan show
 ```
 
@@ -468,10 +493,10 @@ bridge vlan show
 > - `untagged` — исходящие фреймы из этого VLAN отправляются без тега.
 > - Это аналог access-порта на физическом свитче.
 
-**Шаг 3.** Проверь изоляцию:
+**Шаг 3.** Проверьте изоляцию:
 
 ```bash
-# Сбрось ARP-кэш
+# Сбросьте ARP-кэш
 sudo ip netns exec red ip neigh flush all
 sudo ip netns exec green ip neigh flush all
 
@@ -488,7 +513,7 @@ sudo ip netns exec red ping -c 2 -W 2 10.0.0.4
 
 ### Задание 8: Очистка
 
-Удали все созданные ресурсы:
+Удалите все созданные ресурсы:
 
 ```bash
 # Namespace (удаление автоматически удаляет veth-пары)
@@ -499,20 +524,20 @@ sudo ip netns del green
 # Bridge
 sudo ip link del br0
 
-# iptables
-sudo iptables -t nat -F
-sudo iptables -F FORWARD
-
-# ip_forward
-sudo sysctl -w net.ipv4.ip_forward=0
+# Безопасное удаление правил iptables (без общего сброса iptables -F)
+EXT_IF=$(ip route get 8.8.8.8 | awk '{print $5; exit}')
+sudo iptables -t nat -D POSTROUTING -s 10.0.0.0/24 -o "$EXT_IF" -j MASQUERADE 2>/dev/null || true
+sudo iptables -D FORWARD -i br0 -o "$EXT_IF" -j ACCEPT 2>/dev/null || true
+sudo iptables -D FORWARD -i "$EXT_IF" -o br0 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+sudo iptables -t nat -D PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.0.0.2:80 2>/dev/null || true
+sudo iptables -D FORWARD -p tcp -d 10.0.0.2 --dport 80 -j ACCEPT 2>/dev/null || true
 
 # DNS config
-sudo rm -rf /etc/netns/red
+sudo rm -rf /etc/netns/red /etc/netns/blue /etc/netns/green
 
-# Проверь, что всё чисто
+# Проверьте, что всё чисто
 ip netns list
 ip link show type bridge
-sudo iptables -t nat -L -n
 ```
 
 > **❓ Вопрос:** Почему удаление namespace автоматически удаляет veth-пары? Что происходит с тем концом, который был подключён к bridge?
@@ -599,6 +624,15 @@ DNAT должен произойти ДО решения о маршрутиза
 
 veth — это пара. Удаление одного конца (вместе с namespace) автоматически уничтожает второй конец. Bridge обнаруживает, что порт исчез, и удаляет его из своей конфигурации. Связанные FDB-записи тоже очищаются.
 </details>
+
+## Как это звучит на собеседовании
+
+1. **Вопрос:** Что такое Linux Bridge и на каком уровне модели OSI он работает?
+   **Ответ:** Linux Bridge — это программный виртуальный коммутатор (L2), реализованный в ядре Linux. Он пересылает Ethernet-кадры между подключенными к нему интерфейсами на основе таблицы MAC-адресов (Forwarding Database, FDB).
+2. **Вопрос:** Почему при создании veth-пары и перемещении одного конца в Network Namespace мы видим, что порт пропадает на хосте?
+   **Ответ:** veth-пары работают как виртуальные двунаправленные патч-корды. При переносе одного из концов пары в другой сетевой namespace ядро атомарно меняет его сетевой контекст (namespace ID). В исходном namespace (например, init_net на хосте) этот интерфейс перестает существоват.
+3. **Вопрос:** В чем разница между PVID (Port VLAN ID) и обычным тегированием VLAN на Linux Bridge?
+   **Ответ:** PVID задает VLAN по умолчанию для нетегированных входящих кадров на конкретном порту моста (Access-порт). При включении `vlan_filtering 1` на мосту, кадры без тега на входе помечаются тегом PVID, а на выходе с этого порта тег снимается (untagged). Обычные тегированные VLAN пропускают кадры только с соответствующим тегом 802.1q (Trunk-порт).
 
 ## Проверка модуля
 
