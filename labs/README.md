@@ -9,7 +9,7 @@
 | Папка | О чём | Кол-во |
 |-------|-------|--------|
 | [`linux-basics`](./linux-basics/) | Жизнь в терминале, boot, диски, сеть, ресурсы — стартовый блок | 8 разделов |
-| [`linux-memory`](./linux-memory/) | Управление памятью: virtual/physical, malloc/mmap, swap, shm | 1 (5 модулей) |
+| [`linux-memory`](./linux-memory/) | Управление памятью: основы, лимиты cgroup v2, Transparent Hugepages (THP) | 3 лабы |
 | [`linux-cgroups`](./linux-cgroups/) | cgroup v2: CPU, IO, Memory | 3 |
 | [`linux-processes`](./linux-processes/) | Процессы: основы и стартовая лаба | 2 |
 | [`linux-process-isolation`](./linux-process-isolation/) | Изоляция процессов: chroot, namespaces, cgroups, seccomp, AppArmor — путь к контейнерам | 15 этапов |
