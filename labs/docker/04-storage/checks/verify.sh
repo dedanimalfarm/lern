@@ -5,6 +5,9 @@ set -euo pipefail
 docker compose -f lab/compose.yaml up -d >/dev/null
 trap 'docker compose -f lab/compose.yaml down -v --remove-orphans >/dev/null 2>&1 || true' EXIT
 
+# Wait for PostgreSQL to start and initialize
+sleep 5
+
 docker compose -f lab/compose.yaml exec -T db psql -U appuser -d appdb \
   -c "INSERT INTO notes(text) VALUES ('verify');" >/dev/null
 
