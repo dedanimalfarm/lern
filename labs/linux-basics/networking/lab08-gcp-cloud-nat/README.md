@@ -388,7 +388,7 @@ gcloud compute networks list --filter="name=nat-lab-vpc"
 
 ---
 
-## Как это звучит на собеседовании
+## Вопросы
 
 1. В чем разница между Cloud NAT в GCP и традиционным NAT-инстансом (NAT VM)?
 2. Что такое исчерпание портов (port exhaustion) в Cloud NAT и как с этим бороться?
