@@ -432,12 +432,15 @@ sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 \
     -j DNAT --to-destination 10.0.0.2:80
 
 sudo iptables -A FORWARD -p tcp -d 10.0.0.2 --dport 80 -j ACCEPT
+
+# Для тестирования локально с самого хоста (так как локальный трафик обходит PREROUTING) дополнительно добавим правило в цепочку OUTPUT:
+sudo iptables -t nat -A OUTPUT -p tcp --dport 8080 -j DNAT --to-destination 10.0.0.2:80
 ```
 
-**Шаг 4.** Проверьте с хоста:
+**Шаг 4.** Проверьте с хоста (используем IP bridge 10.0.0.1, так как при обращении к localhost/127.0.0.1 ответные пакеты будут некорректно отправлены в локальный loopback внутри namespace red):
 
 ```bash
-curl -s localhost:8080
+curl -s 10.0.0.1:8080
 ```
 
 **Шаг 5.** Посмотрите, что происходит в iptables:
@@ -530,6 +533,7 @@ sudo iptables -t nat -D POSTROUTING -s 10.0.0.0/24 -o "$EXT_IF" -j MASQUERADE 2>
 sudo iptables -D FORWARD -i br0 -o "$EXT_IF" -j ACCEPT 2>/dev/null || true
 sudo iptables -D FORWARD -i "$EXT_IF" -o br0 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
 sudo iptables -t nat -D PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.0.0.2:80 2>/dev/null || true
+sudo iptables -t nat -D OUTPUT -p tcp --dport 8080 -j DNAT --to-destination 10.0.0.2:80 2>/dev/null || true
 sudo iptables -D FORWARD -p tcp -d 10.0.0.2 --dport 80 -j ACCEPT 2>/dev/null || true
 
 # DNS config

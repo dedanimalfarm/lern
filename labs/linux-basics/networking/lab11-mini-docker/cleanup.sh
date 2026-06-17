@@ -26,12 +26,12 @@ fi
 
 # Delete any NAT rules containing 10.11.0. subnet
 if command -v iptables-save &>/dev/null; then
-    iptables-save -t nat | grep "10.11.0." | sed 's/^-A //g' | while read -r rule; do
-        iptables -t nat -D $rule 2>/dev/null || true
+    (iptables-save -t nat | grep "10.11.0." || true) | sed 's/^-A //g' | while read -r rule; do
+        if [ -n "$rule" ]; then iptables -t nat -D $rule 2>/dev/null || true; fi
     done
     # Delete any NAT rules referencing port 8080 (our test port)
-    iptables-save -t nat | grep "8080" | sed 's/^-A //g' | while read -r rule; do
-        iptables -t nat -D $rule 2>/dev/null || true
+    (iptables-save -t nat | grep "8080" || true) | sed 's/^-A //g' | while read -r rule; do
+        if [ -n "$rule" ]; then iptables -t nat -D $rule 2>/dev/null || true; fi
     done
 fi
 

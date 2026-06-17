@@ -21,6 +21,7 @@ if [ -n "$DEFAULT_IFACE" ]; then
     iptables -D FORWARD -i "$DEFAULT_IFACE" -o br0 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
 fi
 iptables -t nat -D PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.0.0.2:80 2>/dev/null || true
+iptables -t nat -D OUTPUT -p tcp --dport 8080 -j DNAT --to-destination 10.0.0.2:80 2>/dev/null || true
 iptables -D FORWARD -p tcp -d 10.0.0.2 --dport 80 -j ACCEPT 2>/dev/null || true
 
 echo "✅ Lab 6 cleanup complete."

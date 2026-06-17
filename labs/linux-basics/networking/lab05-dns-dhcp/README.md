@@ -145,6 +145,9 @@ dhcp-option=option:router,192.168.66.66
 dhcp-option=option:dns-server,192.168.66.66
 EOF
 
+# Добавим IP-адрес из новой подсети на интерфейс сервера (иначе dnsmasq не сможет выдавать адреса из этого диапазона)
+sudo ip netns exec server ip addr add 192.168.66.1/24 dev veth-srv
+
 # Запускаем Rogue DHCP сервер
 sudo ip netns exec server dnsmasq -C /tmp/rogue-dnsmasq/rogue.conf -x /tmp/rogue-dnsmasq/rogue.pid
 ```
@@ -201,6 +204,8 @@ sudo ip netns exec client busybox udhcpc -i veth-cli -s /tmp/udhcpc.script -n -q
 ```bash
 sudo killall dnsmasq
 sudo rm -rf /tmp/rogue-dnsmasq
+# Удалим временный IP-адрес злоумышленника с интерфейса сервера
+sudo ip netns exec server ip addr del 192.168.66.1/24 dev veth-srv
 
 # Запуск правильного Dnsmasq
 sudo ip netns exec server dnsmasq -C /tmp/dnsmasq/dnsmasq.conf -x /tmp/dnsmasq/dnsmasq.pid
