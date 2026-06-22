@@ -17,9 +17,10 @@
 - [Часть 4: Troubleshooting](#-4-troubleshooting)
   - [Теория: диагностика по симптому](#---)
   - [Инцидент 1: Job не завершается (sidecar-антипаттерн)](#-1-job---sidecar-)
+  - [Troubleshooting — частые проблемы](#troubleshooting---)
 - [Проверка модуля](#-)
 - [Финальная карта ресурсов модуля](#---)
-- [Теоретические вопросы (итоговые)](#--)
+- [Контрольные вопросы](#-)
 - [Практические задания (отработка)](#--)
 - [Шпаргалка](#)
 - [Чему вы научились](#--)
@@ -267,6 +268,18 @@ kubectl -n lab patch pod resize-demo --subresource resize --type=json \
 Разобран в `broken/scenario-01/` (логгер в `containers[]` → Job висит). Решение —
 сделать его native sidecar (`initContainers` + `restartPolicy: Always`).
 
+### Troubleshooting — частые проблемы
+
+1. **Job висит в состоянии Running бесконечно**
+   - *Причина:* Скорее всего, sidecar-контейнер настроен как обычный контейнер в `containers`, а не `initContainer` с `restartPolicy: Always`.
+   - *Решение:* Перенесите sidecar в `initContainers` и добавьте `restartPolicy: Always`.
+2. **Pod завис в состоянии Pending с причиной SchedulingGated**
+   - *Причина:* В спецификации пода указан массив `schedulingGates`, и он не пуст.
+   - *Решение:* Снимите gate, отправив патч: `kubectl patch pod <name> --type=merge -p '{"spec":{"schedulingGates":[]}}'`.
+3. **In-place resize выдаёт ошибку "Pod QOS Class may not change"**
+   - *Причина:* Ваше изменение ресурсов приводит к изменению класса QoS (например, `requests` становятся равны `limits` по всем ресурсам).
+   - *Решение:* Убедитесь, что после изменения класс QoS останется прежним (например, не делайте `requests` равными `limits`, если под был `Burstable`).
+
 ---
 
 ## Проверка модуля
@@ -295,11 +308,11 @@ bash verify/verify.sh
 
 ---
 
-## Теоретические вопросы (итоговые)
-1. Три отличия native sidecar от обычного init-контейнера (блокировка, время жизни, порядок останова)?
-2. Чем Pending по gate отличается от Pending по ресурсам, и как снять gate?
-3. Два ограничения in-place resize и зачем `resizePolicy` различает CPU и память?
-4. Какие из трёх фич требуют аддонов? (ответ: ни одна — только свежий kube-apiserver/kubelet)
+## Контрольные вопросы
+1. В чём принципиальное различие между `initContainers` без `restartPolicy` и с `restartPolicy: Always` в контексте sidecar-паттерна?
+2. Почему для изменения класса QoS пода (например, с Burstable на Guaranteed) недостаточно использовать in-place resize?
+3. Каким образом scheduling gates помогают оптимизировать использование кластера по сравнению с init-контейнерами, которые просто ожидают (busy-wait)?
+4. Как повлияет настройка `resizePolicy: RestartContainer` на работу контейнера при обновлении его `requests`/`limits` для памяти?
 
 ---
 
@@ -352,8 +365,7 @@ kubectl -n lab delete job,pod --all
 ## Уборка
 
 ```bash
-kubectl -n lab delete job sidecar-job --ignore-not-found
-kubectl -n lab delete pod gated-demo resize-demo --ignore-not-found
+bash verify/cleanup.sh
 ```
 
 > Дальше по дизайну v2-расширения (см. handoff NEW-MODULES-DESIGN.md): NM-3 DRA

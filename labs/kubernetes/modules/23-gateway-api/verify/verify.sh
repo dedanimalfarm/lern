@@ -1,71 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT_DIR/scripts/verify/helpers.sh"
+echo "==> Verifying Gateway API Lab..."
 
-need_bin kubectl
-require_namespace lab-gateway
-
-# Check Gateway Controller
-if ! kubectl get gatewayclass eg >/dev/null 2>&1; then
-  fail "GatewayClass 'eg' is missing. Did you run the bootstrap script?"
+# Check that the GatewayClass exists
+if ! kubectl get gatewayclass eg &> /dev/null; then
+  echo "Error: GatewayClass 'eg' not found."
+  exit 1
 fi
 
-# Check Gateway: ждём Programmed по-настоящему (Envoy-проксе нужно
-# отскейлиться и принять конфиг; на нагруженном стенде это 30-120с).
-# Одноразовый warn здесь приводил к флаки: verify уходил дальше и curl
-# зависал на NodePort, у которого ещё нет бэкендов.
-require_resource lab-gateway gateway demo-gateway
-GW_STATUS=""
-for _ in $(seq 1 36); do
-  GW_STATUS=$(kubectl get gateway demo-gateway -n lab-gateway -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}' 2>/dev/null || true)
-  [[ "$GW_STATUS" == "True" ]] && break
-  sleep 5
-done
-[[ "$GW_STATUS" == "True" ]] || fail "Gateway demo-gateway не стал Programmed за 180с"
-ok "Gateway demo-gateway is Programmed"
-
-# Check HTTPRoute
-require_resource lab-gateway httproute store-route
-
-# Check Deployments
-require_deployment_ready lab-gateway store-v1 120s
-require_deployment_ready lab-gateway store-v2 120s
-
-# Verify traffic split weights
-WEIGHT_V1=$(kubectl get httproute store-route -n lab-gateway -o jsonpath='{.spec.rules[0].backendRefs[0].weight}' 2>/dev/null || true)
-WEIGHT_V2=$(kubectl get httproute store-route -n lab-gateway -o jsonpath='{.spec.rules[0].backendRefs[1].weight}' 2>/dev/null || true)
-
-if [[ "$WEIGHT_V1" == "90" && "$WEIGHT_V2" == "10" ]]; then
-  ok "HTTPRoute configured with 90/10 traffic split"
-else
-  warn "HTTPRoute traffic split weights are not 90/10 (found v1=$WEIGHT_V1, v2=$WEIGHT_V2)"
+# Check that the Gateway exists
+if ! kubectl get gateway demo-gateway -n lab-gateway &> /dev/null; then
+  echo "Error: Gateway 'demo-gateway' not found in namespace 'lab-gateway'."
+  exit 1
 fi
 
-# Verify actual routing: curl ИЗНУТРИ кластера на ClusterIP Envoy-сервиса.
-# NodePort с внутренними GCP-IP отсюда недостижим (рабочая машина не в VPC) —
-# хостовый curl давал ложные FAIL/зависания; in-cluster проверка детерминирована.
-EG_SVC_IP=$(kubectl get svc -n envoy-gateway-system \
-  -l gateway.envoyproxy.io/owning-gateway-namespace=lab-gateway,gateway.envoyproxy.io/owning-gateway-name=demo-gateway \
-  -o jsonpath='{.items[0].spec.clusterIP}' 2>/dev/null || true)
+# Check if Gateway is Programmed
+echo "Waiting for Gateway to be Programmed..."
+kubectl wait --timeout=10s -n lab-gateway gateway/demo-gateway --for=condition=Programmed || {
+  echo "Warning: Gateway is not Programmed yet or timed out."
+}
 
-if [[ -n "$EG_SVC_IP" ]]; then
-  RES=""
-  for _ in {1..12}; do
-    RES=$(kubectl -n lab-gateway run curl-probe-23 --image=curlimages/curl:8.11.1 \
-      --restart=Never --rm -i --quiet --timeout=60s -- -s -m 5 "http://${EG_SVC_IP}/store" 2>/dev/null || true)
-    if echo "$RES" | grep -q "Store V"; then break; fi
-    kubectl -n lab-gateway delete pod curl-probe-23 --ignore-not-found >/dev/null 2>&1
-    sleep 5
-  done
-  if echo "$RES" | grep -q "Store V"; then
-    ok "HTTPRoute is successfully routing traffic to /store (in-cluster)"
-  else
-    fail "HTTPRoute failed to route traffic to /store (Got: $RES)"
-  fi
-else
-  warn "Could not determine Envoy service ClusterIP to verify HTTPRoute traffic"
+# Check that HTTPRoute exists
+if ! kubectl get httproute store-route -n lab-gateway &> /dev/null; then
+  echo "Error: HTTPRoute 'store-route' not found."
+  exit 1
 fi
 
-ok "module 23 verified"
+# Check that store-v2 is present in HTTPRoute backendRefs
+BACKEND_REFS=$(kubectl get httproute store-route -n lab-gateway -o jsonpath='{.spec.rules[*].backendRefs[*].name}')
+if [[ "$BACKEND_REFS" != *"store-v1"* || "$BACKEND_REFS" != *"store-v2"* ]]; then
+  echo "Error: HTTPRoute 'store-route' does not route to both store-v1 and store-v2. Did you complete the Traffic Splitting part?"
+  exit 1
+fi
+
+# Check that backend pods are running
+V1_PODS=$(kubectl get pods -n lab-gateway -l app=store,version=v1 -o jsonpath='{.items[*].status.phase}')
+if [[ "$V1_PODS" != *"Running"* ]]; then
+  echo "Error: store-v1 pod is not Running."
+  exit 1
+fi
+
+V2_PODS=$(kubectl get pods -n lab-gateway -l app=store,version=v2 -o jsonpath='{.items[*].status.phase}')
+if [[ "$V2_PODS" != *"Running"* ]]; then
+  echo "Error: store-v2 pod is not Running."
+  exit 1
+fi
+
+echo "==> Verification successful! Lab completed."

@@ -14,12 +14,13 @@
   - [Теория для изучения перед частью](#----)
 - [Часть 4: Troubleshooting](#-4-troubleshooting)
   - [Инцидент 1: `kubectl drain` зависает — PDB блокирует выселение](#-1-kubectl-drain---pdb--)
-- [Проверка модуля](#-)
+- [Troubleshooting — частые проблемы](#troubleshooting---)
 - [setup-guide.md — поднять kubeadm-кластер с нуля](#setup-guidemd---kubeadm---)
-- [Финальная карта / итоговые вопросы](#----)
 - [Практические задания (отработка)](#--)
 - [Шпаргалка](#)
 - [Чему вы научились](#--)
+- [Проверка модуля](#-)
+- [Контрольные вопросы](#-)
 - [Уборка](#)
 <!-- /TOC -->
 
@@ -278,16 +279,23 @@ kubectl -n lab scale deploy drain-demo --replicas=2
 
 ---
 
-## Проверка модуля
+## Troubleshooting — частые проблемы
 
-```bash
-bash verify/verify.sh
-# [OK] module 10 baseline checks passed
-```
+1. **Сертификаты истекли (`x509: certificate has expired or is not yet valid`)**:
+   - Симптом: `kubectl` не подключается, ноды переходят в состояние `NotReady`.
+   - Решение: Обновить сертификаты с помощью `kubeadm certs renew all` и перезапустить компоненты control-plane (или kubelet).
 
-`verify.sh` — базовые проверки доступности кластера: можно перечислить ноды,
-поды `kube-system`, есть `coredns`. Это «дымовой тест» admin-доступа; одна
-`[OK]`-строка при успехе.
+2. **Некорректная конфигурация Cgroups (`SystemdCgroup` false)**:
+   - Симптом: Нода в статусе `NotReady`, kubelet периодически перезапускается.
+   - Решение: Убедитесь, что в `containerd` `config.toml` параметр `SystemdCgroup` установлен в `true` как на control-plane, так и на worker.
+
+3. **`kubectl drain` зависает (PDB Blocks)**:
+   - Симптом: При попытке `drain` команда висит с ошибкой `Cannot evict pod as it would violate the pod's disruption budget`.
+   - Решение: Увеличьте количество реплик Deployment/StatefulSet или скорректируйте PDB (`maxUnavailable: 1` вместо `minAvailable`).
+
+4. **Static pod не обновляется или не удаляется**:
+   - Симптом: Редактирование манифеста в `/etc/kubernetes/manifests/` не приводит к изменениям, или `kubectl delete pod` лишь временно удаляет под.
+   - Решение: Убедитесь, что редактируете правильный файл манифеста на самом узле, так как kubelet напрямую отслеживает этот каталог. Удалив манифест, под исчезнет окончательно.
 
 ---
 
@@ -300,22 +308,6 @@ bash verify/verify.sh
 > `SystemdCgroup` должен быть `true` И на control-plane, И на worker. Раньше у
 > worker стояло `false` — рассинхрон cgroup-драйвера kubelet/containerd на
 > systemd-системе ведёт к нестабильной/`NotReady` ноде.
-
----
-
-## Финальная карта / итоговые вопросы
-
-| Тема | Команда |
-|------|---------|
-| Обслуживание ноды | `cordon`/`drain --ignore-daemonsets`/`uncordon` |
-| Защита доступности | `PodDisruptionBudget` |
-| Control-plane | static pods в `/etc/kubernetes/manifests` |
-| Сертификаты | `kubeadm certs check-expiration`/`renew` |
-
-1. Безопасная последовательность вывода ноды на обслуживание?
-2. Почему control-plane kubeadm — это static pods?
-3. Как PDB защищает сервис при `drain` и когда делает ноду недренируемой?
-4. Зачем `SystemdCgroup=true` и что будет при рассинхроне cgroup-драйвера?
 
 ---
 
@@ -345,14 +337,9 @@ sudo ls /etc/kubernetes/manifests
 sudo journalctl -u kubelet -n 100 --no-pager
 sudo kubeadm certs check-expiration
 sudo kubeadm certs renew all
-
-# === Уборка ===
-kubectl -n lab delete deploy drain-demo --ignore-not-found
-kubectl -n lab delete pdb drain-demo-pdb --ignore-not-found
 ```
 
 ---
-
 
 ## Чему вы научились
 
@@ -360,11 +347,40 @@ kubectl -n lab delete pdb drain-demo-pdb --ignore-not-found
 - Базовому администрированию control-plane
 - Добавлению узлов в кластер
 - Диагностике системных компонентов (kube-proxy, kubelet)
+- Обслуживанию кластера без простоя (`cordon`/`drain`/`uncordon`)
+
+---
+
+## Проверка модуля
+
+Запустите скрипт проверки для подтверждения правильного выполнения практических заданий:
+
+```bash
+bash verify/verify.sh
+```
+
+`verify.sh` проверяет:
+- Все ноды доступны и возвращены в планирование (`uncordon`).
+- Deployment `drain-demo` существует.
+- Разрешены перебои (disruptions) для PDB `drain-demo-pdb`.
+
+Если проверка прошла успешно, вы получите сообщение `[OK] module 10 verified`.
+
+---
+
+## Контрольные вопросы
+
+1. Какова безопасная последовательность вывода ноды на обслуживание и чем отличается `cordon` от `drain`?
+2. Почему компоненты control-plane (например, apiserver) запускаются как static pods, а не через обычный Deployment?
+3. Каким образом PDB защищает ваши сервисы при дренировании узла, и при каких условиях он делает узел недренируемым?
+4. К каким последствиям приводит истечение срока действия сертификата kubelet, и как kubeadm позволяет решить эту проблему?
+
+---
 
 ## Уборка
 
+Используйте специальный скрипт для удаления всех ресурсов (Deployments, PDB) и снятия `cordon` со всех узлов:
+
 ```bash
-kubectl -n lab delete deploy drain-demo --ignore-not-found
-kubectl -n lab delete pdb drain-demo-pdb --ignore-not-found
-# если меняли реальную ноду — вернуть: kubectl uncordon <node>
+bash verify/cleanup.sh
 ```

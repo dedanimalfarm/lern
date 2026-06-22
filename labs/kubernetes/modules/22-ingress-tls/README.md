@@ -16,12 +16,10 @@
   - [Теория для изучения перед частью](#----)
   - [3.1 ClusterIssuer + Ingress с аннотацией](#31-clusterissuer--ingress--)
   - [3.2 Проверка HTTPS](#32--https)
-- [Часть 4: Troubleshooting](#-4-troubleshooting)
-  - [Инцидент 1: Ingress без ADDRESS — неверный `ingressClassName`](#-1-ingress--address---ingressclassname)
-  - [Прочие частые причины](#--)
+- [Troubleshooting — частые проблемы](#troubleshooting---)
 - [Проверка модуля](#-)
 - [Финальная карта ресурсов модуля](#---)
-- [Теоретические вопросы (итоговые)](#--)
+- [Контрольные вопросы](#-)
 - [Практические задания (отработка)](#--)
 - [Шпаргалка](#)
 - [Чему вы научились](#--)
@@ -272,58 +270,43 @@ kubectl -n lab run cm --image=curlimages/curl:8.10.1 --restart=Never -i --rm --c
 
 ---
 
-## Часть 4: Troubleshooting
+## Troubleshooting — частые проблемы
 
-### Инцидент 1: Ingress без ADDRESS — неверный `ingressClassName`
+### 1. Ingress не получает IP-адрес (ADDRESS пуст)
+**Симптом:** При выполнении `kubectl get ingress` поле `ADDRESS` остается пустым длительное время.
+**Причина:** Неверно указан `ingressClassName`, либо ingress-контроллер не запущен.
+**Решение:** Убедитесь, что класс Ingress совпадает с настроенным в кластере (обычно `nginx`). Проверьте поды контроллера: `kubectl -n ingress-nginx get pods`.
 
-Оформлен в `broken/scenario-01/`. `ingressClassName: nginx-does-not-exist` —
-контроллер игнорирует такой Ingress.
+### 2. Ошибка "404 Not Found" (default backend)
+**Симптом:** Запрос по домену или пути возвращает страницу 404 от NGINX.
+**Причина:** Ingress-контроллер не нашел совпадений по `host` или `path` в существующих правилах Ingress.
+**Решение:** Проверьте `kubectl get ingress` и убедитесь, что `host` в запросе (переданный через заголовок Host или SNI) совпадает со `spec.rules[].host`. Если маршрутизация по `path`, проверьте `pathType` и использование аннотации `rewrite-target`, если приложение не ожидает полный путь.
 
-```bash
-kubectl -n lab apply -f broken/scenario-01/ingress.yaml
-kubectl -n lab get ingress broken-routing
-# ADDRESS пуст   <- контроллер не взял Ingress (класса nginx-does-not-exist нет)
-kubectl get ingressclass                                      # реально есть только nginx
-kubectl -n lab apply -f solutions/01-wrong-class/ingress.yaml # class -> nginx
-# через ~10с ADDRESS=10.10.0.4 — контроллер принял
-```
+### 3. Ошибка "SSL certificate problem: self-signed certificate"
+**Симптом:** При доступе через HTTPS curl возвращает ошибку сертификата.
+**Причина:** Используется самоподписанный сертификат (SelfSigned Issuer), которому не доверяет ваша ОС.
+**Решение:** Для тестирования добавьте флаг `-k` (`--insecure`) в `curl`. В продакшене используйте доверенные центры сертификации (например, Let's Encrypt через ACME Issuer).
 
-### Прочие частые причины
-
-| Симптом | Причина | Где смотреть / фикс |
-|---------|---------|---------------------|
-| ADDRESS пуст | нет контроллера / неверный класс | `kubectl get ingressclass`; класс = nginx |
-| `404 default backend` | host/path не совпал ни с одним Ingress | проверить `host`/`pathType`; SNI = host |
-| HTTPS отдаёт «не тот» cert | SNI не совпал / нет `spec.tls` для host | cert по SNI; добавить host в `spec.tls.hosts` |
-| `certificate verify failed` | self-signed не доверен | это норма для демо; `curl -k` / добавить CA в trust |
-| admission `host ... already defined` | дубль host+path в двух Ingress | разнести по host/path |
-| cert-manager Secret не появился | issuer не Ready / webhook не готов | `kubectl describe certificate <n>`, события cert-manager |
-
-**Контрольные вопросы:**
-1. Ingress без ADDRESS — с чего начать диагностику?
-2. Почему один и тот же host+path в двух Ingress отвергается?
-3. Как понять, какой сертификат реально отдал контроллер?
+### 4. Сертификат не выпускается (Certificate не переходит в Ready)
+**Симптом:** `kubectl get certificate` показывает `Ready=False`.
+**Причина:** Проблема с конфигурацией Issuer, ошибкой webhook'ов cert-manager или нехваткой прав.
+**Решение:** Проверьте статусы `kubectl describe certificate <name>` и логи cert-manager `kubectl -n cert-manager logs -l app=cert-manager`. Часто проблема кроется в опечатках в аннотации `cert-manager.io/cluster-issuer` на Ingress.
 
 ---
 
 ## Проверка модуля
 
-```bash
-kubectl -n lab apply -k manifests/                              # apps + routing-ingress
-kubectl -n lab apply -f manifests/cert-manager/clusterissuer.yaml -f manifests/cert-manager/ingress-cm.yaml
-kubectl -n lab rollout status deploy/web-a --timeout=120s
-kubectl -n lab rollout status deploy/web-b --timeout=120s
+Для автоматической проверки успешности выполнения задания запустите скрипт проверки:
 
+```bash
 bash verify/verify.sh
-# [OK] ingress-nginx controller ready + web-routing(class=nginx)
-# [OK] cert-manager: Certificate/auto-tls Ready + Secret/auto-tls создан автоматически
-# [OK] module 22 verified
 ```
 
-`verify.sh`: namespace `lab` → `web-a`/`web-b` готовы → `Ingress/web-routing` с
-`ingressClassName=nginx` → контроллер `ingress-nginx` готов → (мягко) cert-manager
-`Certificate/auto-tls` Ready + Secret создан. Без контроллера — `[FAIL]`; без
-cert-manager — `[WARN]` (Части 1-2 от него не зависят).
+Он проверит:
+- Наличие namespace `lab` и готовность бэкендов (`web-a`, `web-b`).
+- Корректность Ingress-ресурса (наличие `ingressClassName=nginx`).
+- Работоспособность Ingress-контроллера.
+- Успешный выпуск сертификата cert-manager-ом и создание Secret.
 
 ---
 
@@ -341,14 +324,12 @@ cert-manager — `[WARN]` (Части 1-2 от него не зависят).
 
 ---
 
-## Теоретические вопросы (итоговые)
+## Контрольные вопросы
 
-1. Опишите цепочку `IngressClass → Ingress → Service → Pod` и роль контроллера.
-2. host-based vs path-based роутинг; зачем `rewrite-target`?
-3. Что такое TLS termination на Ingress и в каком Secret лежит сертификат?
-4. Как контроллер выбирает сертификат при нескольких host (SNI)?
-5. Роли `ClusterIssuer`/`Certificate`/ingress-shim в cert-manager.
-6. Чем SelfSigned-issuer отличается от ACME и когда какой нужен?
+1. Каков жизненный цикл запроса от пользователя до пода при использовании Ingress? Как Ingress-контроллер понимает, на какой Service маршрутизировать трафик?
+2. В чём заключается разница между маршрутизацией на основе хоста (Host-based) и маршрутизацией на основе пути (Path-based)? В каких случаях необходимо применять аннотацию `rewrite-target`?
+3. Объясните механизм TLS termination на Ingress. Как контроллер определяет, какой сертификат предоставить клиенту, если на одном IP-адресе обслуживается несколько доменов (механизм SNI)?
+4. Какую роль выполняют ресурсы `Issuer`/`ClusterIssuer` и `Certificate` в архитектуре cert-manager? Как взаимодействует механизм ingress-shim с аннотациями на Ingress для автоматического выпуска сертификатов?
 
 ---
 
@@ -403,11 +384,10 @@ kubectl delete clusterissuer selfsigned-issuer --ignore-not-found
 
 ## Уборка
 
+Для полной очистки ресурсов, созданных в рамках данного модуля (включая Ingress-контроллер, cert-manager, CRD, вебхуки и namespace `lab`), используйте предоставленный скрипт:
+
 ```bash
-kubectl -n lab delete -k manifests/
-kubectl -n lab delete -f manifests/cert-manager/ingress-cm.yaml --ignore-not-found
-kubectl -n lab delete ingress secure-tls --ignore-not-found
-kubectl -n lab delete secret secure-tls auto-tls --ignore-not-found
-kubectl delete clusterissuer selfsigned-issuer --ignore-not-found
-# ingress-nginx и cert-manager — общие аддоны, ОСТАВЛЯЕМ для других модулей.
+bash verify/cleanup.sh
 ```
+
+> **Внимание!** Скрипт очистки удалит системные операторы, такие как ingress-nginx и cert-manager. Используйте его, только если вы полностью завершили работу с модулем и данные аддоны не требуются для других лабораторных.

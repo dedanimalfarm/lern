@@ -19,9 +19,10 @@
   - [4.2 Динамика: каждый запрос — НОВЫЙ пользователь](#42------)
   - [4.3 VSO кладёт динамические креды в k8s Secret](#43-vso-----k8s-secret)
 - [Сравнение подходов](#-)
+- [Troubleshooting — частые проблемы](#troubleshooting---)
 - [Проверка модуля](#-)
 - [Финальная карта ресурсов модуля](#---)
-- [Теоретические вопросы (итоговые)](#--)
+- [Контрольные вопросы](#-)
 - [Практические задания (отработка)](#--)
 - [Чему вы научились](#--)
 - [Уборка](#)
@@ -289,19 +290,31 @@ kubectl -n lab get secret pg-dynamic-creds -o jsonpath='{.data.username}' | base
 
 ---
 
+## Troubleshooting — частые проблемы
+
+1. **SealedSecret не расшифровывается (`Secret` не появляется):**
+   - **Причина:** SealedSecret зашифрован ключом другого кластера или контроллер не запущен.
+   - **Решение:** Проверьте логи контроллера `kubectl logs -n kube-system deploy/sealed-secrets-controller`. Перегенерируйте секрет утилитой `kubeseal` на текущем кластере.
+
+2. **ExternalSecret висит в статусе `SecretStoreNotFound` или `ProviderError`:**
+   - **Причина:** Неверно указан провайдер или нет прав доступа к внешнему хранилищу (Vault/AWS/GCP).
+   - **Решение:** Проверьте статус `SecretStore`: `kubectl describe secretstore <name>`.
+
+3. **VaultDynamicSecret не создаёт Secret (ошибка `client error: error auth`):**
+   - **Причина:** Неверно настроена аутентификация Kubernetes (`VaultAuth`). ServiceAccount не имеет прав или `auth-delegator` ClusterRoleBinding отсутствует.
+   - **Решение:** Проверьте логи VSO: `kubectl logs -n vault-secrets-operator-system deploy/vso-vault-secrets-operator`. Убедитесь, что `VaultAuth` ссылается на правильный ServiceAccount.
+
+---
+
 ## Проверка модуля
+
+Запустите скрипт проверки, чтобы убедиться, что все задания выполнены успешно:
 
 ```bash
 bash verify/verify.sh
-# [OK] Sealed Secrets: SealedSecret -> Secret/app-creds расшифрован контроллером
-# [OK] External Secrets Operator присутствует (CRD external-secrets.io)
-# [OK] Vault Secrets Operator присутствует (CRD secrets.hashicorp.com)
-# [OK] module 16 verified
 ```
 
-`verify.sh`: применяет `SealedSecret` → контроллер создаёт `Secret/app-creds`
-(детерминированное ядро) + проверяет наличие ESO и VSO (мягко). Части 1/4 —
-интерактивные (SSH к etcd / Vault-стек).
+Этот скрипт проверит состояние контроллеров Sealed Secrets, ESO, VSO, а также убедится в работоспособности Vault и генерации динамических секретов.
 
 ---
 
@@ -317,13 +330,12 @@ bash verify/verify.sh
 
 ---
 
-## Теоретические вопросы (итоговые)
+## Контрольные вопросы
 
-1. Почему `Secret`/base64 — не защита? Что меняет encryption-at-rest?
-2. Sealed Secrets: как делает git-safe и почему привязан к кластеру?
-3. ESO: что в git, что во внешнем менеджере?
-4. Динамические секреты Vault: в чём преимущество перед статическими?
-5. Сравните 4 подхода: где живёт секрет, git-safe ли, ротация.
+1. В чём заключаются фундаментальные отличия и риски использования обычных `Secret` в Kubernetes (даже с base64) по сравнению с включённым `encryption-at-rest` в etcd?
+2. Архитектура Sealed Secrets подразумевает асимметричное шифрование. Каким образом `kubeseal` понимает, каким публичным ключом шифровать данные, и как предотвращается расшифровка секрета на другом кластере?
+3. Объясните механизм аутентификации Vault Secrets Operator (VSO) в кластере Vault. Какую роль в этом играет Kubernetes ServiceAccount и права `system:auth-delegator`?
+4. Динамические секреты Vault создают новые учетные данные on-demand с заданным TTL. Каким образом обеспечивается автоматическая ротация этих секретов в Kubernetes Secret без ручного вмешательства, и как приложение узнаёт об их обновлении?
 
 ---
 
@@ -349,11 +361,8 @@ bash verify/verify.sh
 
 ## Уборка
 
+Для очистки кластера от всех созданных ресурсов, включая CRD, контроллеры (Sealed Secrets, ESO, VSO) и webhook-и, запустите подготовленный скрипт очистки:
+
 ```bash
-kubectl -n lab delete -f manifests/vault/vso-secrets.yaml --ignore-not-found
-kubectl -n lab delete -f manifests/vault/vault-pg.yaml -f manifests/vault/rbac.yaml --ignore-not-found
-kubectl -n lab delete sealedsecret app-creds --ignore-not-found
-kubectl -n lab delete secret app-creds pg-dynamic-creds --ignore-not-found
-kubectl delete clusterrolebinding vault-token-reviewer --ignore-not-found
-# Операторы (sealed-secrets/ESO/VSO) — общие аддоны, ОСТАВЛЯЕМ.
+bash verify/cleanup.sh
 ```

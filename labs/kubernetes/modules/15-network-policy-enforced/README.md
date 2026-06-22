@@ -16,13 +16,14 @@
   - [3.1 Почему allow-dns обязателен](#31--allow-dns-)
 - [Часть 4: namespaceSelector и ipBlock (расширение)](#-4-namespaceselector--ipblock-)
   - [Теория для изучения перед частью](#----)
-- [Часть 5: Troubleshooting](#-5-troubleshooting)
+- [Troubleshooting — частые проблемы](#troubleshooting---)
   - [Инцидент 1: default-deny сломал весь namespace (нет allow-dns)](#-1-default-deny---namespace--allow-dns)
   - [Инцидент 2: забыли egress-сторону](#-2--egress-)
   - [Инцидент 3: «политика не работает»](#-3---)
+  - [Инцидент 4: Ошибка AND vs OR в селекторах](#-4--and-vs-or--)
 - [Проверка модуля](#-)
 - [Финальная карта (матрица сегментации)](#---)
-- [Теоретические вопросы (итоговые)](#--)
+- [Контрольные вопросы](#-)
 - [Практические задания (отработка)](#--)
 - [Шпаргалка](#)
 - [Чему вы научились](#--)
@@ -300,7 +301,7 @@ egress:
 
 ---
 
-## Часть 5: Troubleshooting
+## Troubleshooting — частые проблемы
 
 ### Инцидент 1: default-deny сломал весь namespace (нет allow-dns)
 
@@ -326,6 +327,20 @@ kubectl -n lab apply -f manifests/netpol/02-web.yaml
 # Если запрещённый путь ВСЁ РАВНО проходит — почти всегда CNI без enforcement.
 kubectl -n kube-system get pods | grep -iE "calico|cilium" || \
   echo "нет calico/cilium -> политики декоративны (managed GKE без Dataplane V2 / kind)"
+```
+
+### Инцидент 4: Ошибка AND vs OR в селекторах
+
+Симптом: вы хотели разрешить доступ только подам `app=prometheus` из неймспейса `monitoring`, но в итоге доступ получил вообще любой под в кластере, у которого есть лейбл `app=prometheus`, а также все поды из неймспейса `monitoring`.
+Причина: вы использовали два элемента списка (с дефисами) вместо одного.
+```yaml
+# НЕПРАВИЛЬНО (OR)
+- namespaceSelector: { matchLabels: { name: monitoring } }
+- podSelector: { matchLabels: { app: prometheus } }
+
+# ПРАВИЛЬНО (AND)
+- namespaceSelector: { matchLabels: { name: monitoring } }
+  podSelector: { matchLabels: { app: prometheus } }
 ```
 
 **Контрольные вопросы:**
@@ -368,17 +383,12 @@ bash verify/verify.sh
 
 ---
 
-## Теоретические вопросы (итоговые)
+## Контрольные вопросы
 
-1. Объясните allow-list модель NetworkPolicy и роль `default-deny`. Что делает CNI
-   (Calico) «под капотом», чтобы политика реально резала трафик?
-2. Почему для пути A→B нужны egress у A и ingress у B одновременно?
-3. **AND vs OR:** в чём разница между `namespaceSelector`+`podSelector` в ОДНОМ
-   элементе `from` и в ДВУХ? Почему это дыра №1?
-4. Почему `allow-dns` критичен; почему открывают и UDP, и TCP :53?
-5. Чем `podSelector`/`namespaceSelector`/`ipBlock` отличаются? Когда нужен `ipBlock`
-   (внешние ресурсы) и почему им не стоит описывать in-cluster трафик?
-6. От чего зависит, БУДЕТ ли NetworkPolicy реально применяться?
+1. Объясните allow-list модель NetworkPolicy и роль `default-deny`. Что делает CNI (Calico/Cilium) на уровне ноды, чтобы трафик реально блокировался?
+2. Почему для успешного соединения от пода A к поду B необходимо наличие соответствующих политик `egress` у пода A и `ingress` у пода B одновременно?
+3. В чём принципиальная разница между объединением `namespaceSelector` и `podSelector` в одном элементе списка (AND) и в разных (OR)? Почему ошибка в одном символе дефиса может привести к серьезной бреши в безопасности?
+4. Почему `allow-dns` является критическим правилом при включении `default-deny`, и в каких случаях для DNS требуется разрешать TCP-трафик на порт 53, а не только UDP?
 
 ---
 
@@ -410,8 +420,7 @@ kubectl -n lab run p --labels app=web --image=busybox:1.36 --restart=Never -i --
 kubectl -n kube-system get pods | grep -iE "calico|cilium"
 
 # === Уборка ===
-kubectl -n lab delete netpol --all      # СНАЧАЛА снять политики
-kubectl -n lab delete -f manifests/app.yaml
+bash verify/cleanup.sh
 ```
 
 ---
@@ -426,7 +435,8 @@ kubectl -n lab delete -f manifests/app.yaml
 
 ## Уборка
 
+Для очистки ресурсов лаборатории выполните скрипт:
+
 ```bash
-kubectl -n lab delete netpol --all          # снять политики первыми
-kubectl -n lab delete -f manifests/app.yaml
+bash verify/cleanup.sh
 ```
