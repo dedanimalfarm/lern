@@ -1,5 +1,20 @@
 # 04 · Virtualization / контейнеры (Docker)
 
+⏱ **Время на выполнение:** ~1.5 - 2 часа
+📈 **Сложность:** Средняя
+
+## Оглавление
+
+- [Цель и навыки](#цель-и-навыки)
+- [Теоретический минимум](#теоретический-минимум)
+- [Базовая отработка](#базовая-отработка)
+- [Расширенная отработка](#расширенная-отработка)
+- [Бонус — KVM в одном абзаце](#бонус--kvm-в-одном-абзаце)
+- [Troubleshooting — частые проблемы](#troubleshooting--частые-проблемы)
+- [Проверка модуля](#проверка-модуля)
+- [Контрольные вопросы](#контрольные-вопросы)
+- [Уборка](#уборка)
+
 > Тема из вакансии: «Опыт с виртуализацией или контейнерами: KVM / Proxmox / VMware **или** Docker». «Развёртывание виртуализации».
 
 ## Цель и навыки
@@ -241,28 +256,41 @@ sudo virsh shutdown guest1 && sudo virsh undefine --remove-all-storage guest1
 
 `virsh` — это `kubectl` для libvirt, выучи 5 команд: `list`, `start`, `shutdown`, `destroy` (force-kill), `console`.
 
-## Acceptance criteria
+## Troubleshooting — частые проблемы
 
-- [ ] `docker version` показывает CE, не snap.
-- [ ] `docker run hello-world` отвечает.
-- [ ] Свой образ `lab04/app:1.0.0` стартует, отвечает на `curl localhost:8000`, **не от root** внутри.
-- [ ] `docker compose up -d` поднимает 2 контейнера, `curl localhost:8081` отвечает.
-- [ ] Контейнеры зачищены: `docker ps -a` пуст, `docker volume ls` пуст.
-
-## Что обсудить на ревью
-
-1. Почему контейнер — не VM? Какие сценарии всё равно требуют KVM/Firecracker?
-2. Что такое overlay2 и как добавляются слои?
-3. Зачем `--cap-drop=ALL`? Какие caps нужны самым обычным сервисам?
-4. Разница между `EXPOSE` в Dockerfile и `-p` в `docker run` — это два разных контракта.
-5. Где живёт build cache и почему он гадит на маленьком диске?
-
-## Грабли
-
-| Симптом | Причина | Лечение |
+| Симптом / Ошибка | Причина | Лечение |
 |---------|---------|---------|
-| `permission denied` на `docker.sock` | не в группе `docker` | `usermod -aG docker $USER && newgrp docker` |
-| `bridge` контейнеры не резолвят друг друга по имени | дефолтная bridge без встроенного DNS | user-defined network |
-| `docker compose` нет такой команды | ставил snap или старый `docker-compose` | пакет `docker-compose-plugin` из docker-репо |
-| Полный диск | accumulated images/volumes | `docker system prune -af --volumes` |
-| `iptables: command not found` после Docker | dockerd сам ставит правила через nft на 24.04 | `sudo nft list ruleset` вместо `iptables -S` |
+| `permission denied while trying to connect to the Docker daemon socket` | Пользователь не в группе `docker` | Выполнить `sudo usermod -aG docker $USER` и перелогиниться (или `newgrp docker`) |
+| `bridge` контейнеры не резолвят друг друга по имени | дефолтная bridge сеть не предоставляет встроенный DNS | Создать user-defined network (`docker network create ...`) или использовать `docker compose` |
+| `docker compose: command not found` | Установлена старая версия `docker-compose` или snap | Установить пакет `docker-compose-plugin` из официального репозитория Docker |
+| Полный диск (`No space left on device`) | Скопилось много старых образов и volume'ов | `docker system prune -af --volumes` |
+| `iptables: command not found` после установки Docker | dockerd сам ставит правила через nft на Ubuntu 24.04 | Использовать `sudo nft list ruleset` вместо `iptables -S` |
+| Порт уже занят (`Bind for 0.0.0.0:80 failed: port is already allocated`) | Какой-то процесс (например, nginx хоста или другой контейнер) уже слушает этот порт | Поменять порт проброса (`-p 8080:80`) или остановить процесс, занимающий порт (`sudo netstat -tlpn` / `sudo ss -tlpn`) |
+| Контейнер сразу падает после запуска (статус `Exited (1)`) | Процесс завершился с ошибкой или отсутствует foreground-задача | Проверить логи контейнера командой `docker logs <container_name>` |
+
+## Проверка модуля
+
+Чтобы убедиться, что модуль пройден корректно, запустите скрипт проверки:
+
+```bash
+./verify.sh
+```
+
+Он проверит наличие необходимых файлов (Dockerfile, app.py, compose.yml, proxy.conf), установку Docker и собранный образ приложения.
+
+## Контрольные вопросы
+
+1. **Изоляция:** Почему контейнер — не виртуальная машина (VM)? В каких сценариях вам всё равно потребуется использовать KVM или Firecracker для запуска стороннего кода?
+2. **Файловая система:** Что такое драйвер `overlay2` и как Docker добавляет слои в образ? Почему размер контейнера может расти при записи файлов, если образ read-only?
+3. **Безопасность:** Зачем использовать `--cap-drop=ALL`? Какие capabilities нужны обычным веб-сервисам? Почему не стоит запускать процессы в контейнере от пользователя `root`?
+4. **Сети:** В чём разница между инструкцией `EXPOSE` в `Dockerfile` и флагом `-p` при выполнении `docker run`? Можно ли обратиться к порту `EXPOSE` извне без `-p`?
+
+## Уборка
+
+По завершении лабораторной работы, вызовите скрипт очистки для удаления созданных контейнеров, volume-ов и директорий:
+
+```bash
+./cleanup.sh
+```
+
+Скрипт полностью удалит рабочую директорию `~/lab04` и очистит Docker от остановленных контейнеров и неиспользуемых сетей. Убедитесь, что больше не нуждаетесь в результатах лабы перед его запуском.

@@ -8,7 +8,7 @@ echo "Имитируем неудачные попытки входа по SSH (
 # В реальности мы бы долбились по ssh, но проще записать в auth.log/btmp
 # Генерируем 3 failed login события для юзера 'hacker' через sshd
 for i in {1..3}; do
-  ssh -o ConnectTimeout=1 -o StrictHostKeyChecking=no hacker@127.0.0.1 "echo fail" >/dev/null 2>&1 || true
+  ssh -o BatchMode=yes -o ConnectTimeout=1 -o StrictHostKeyChecking=no hacker@127.0.0.1 "echo fail" >/dev/null 2>&1 || true
 done
 
 echo "Настраиваем auditd на слежение за файлом /tmp/top_secret.txt..."

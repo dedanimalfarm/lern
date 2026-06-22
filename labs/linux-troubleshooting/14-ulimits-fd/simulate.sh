@@ -10,7 +10,7 @@ fi
 echo "Запускаем процесс, пытающийся открыть 5000 файлов (ulimit -n = $(ulimit -n)) ..."
 
 python3 - <<'EOF'
-import os, tempfile
+import os, tempfile, sys
 opened = []
 try:
     for i in range(5000):
@@ -19,9 +19,11 @@ try:
     print(f"Открыто {len(opened)} файлов — лимит не достигнут")
 except OSError as e:
     print(f"Открыто {len(opened)} файлов, дальше упало: {e}")
+    sys.exit(1)
 finally:
     for f in opened:
         f.close()
         try: os.unlink(f.name)
         except OSError: pass
 EOF
+

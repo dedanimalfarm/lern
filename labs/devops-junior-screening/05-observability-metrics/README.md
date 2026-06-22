@@ -2,6 +2,19 @@
 
 > Тема из вакансии: «Поднимать и поддерживать мониторинг и метрики (Prometheus / Grafana)».
 
+⏱ **Время на выполнение:** ~1.5 часа
+**Сложность:** 4/10
+
+## Оглавление
+- [Цель и навыки](#цель-и-навыки)
+- [Теоретический минимум](#теоретический-минимум)
+- [Базовая отработка](#базовая-отработка)
+- [Расширенная отработка](#расширенная-отработка)
+- [Проверка модуля](#проверка-модуля)
+- [Контрольные вопросы](#контрольные-вопросы)
+- [Troubleshooting — частые проблемы](#troubleshooting--частые-проблемы)
+- [Уборка](#уборка)
+
 ## Цель и навыки
 
 Поднять минимальный production-shape стек метрик и понять, что внутри. Не «накликать пэйнел», а **разобрать pull-модель Prometheus**, формат экспортёра, retention и базовый алертинг.
@@ -13,7 +26,7 @@
 - настраиваешь `prometheus.yml` (scrape jobs, labels, relabeling);
 - умеешь PromQL на уровне `rate`, `irate`, `histogram_quantile`, `sum by (…)`;
 - знаешь, как Grafana подключает datasource и где живут дашборды;
-- понимаешь, **что Prometheus — не для логов**, и почему дальше идёт [06](../06-observability-logs/) с Loki.
+- понимаешь, **что Prometheus — не для логов**, и почему дальше идёт лаба 06 с Loki.
 
 ## Теоретический минимум
 
@@ -27,7 +40,7 @@
 
 **PromQL** — язык запросов. Базовые конструкции:
 
-```
+```promql
 node_cpu_seconds_total                                      # raw counter
 rate(node_cpu_seconds_total[1m])                            # per-second
 sum by (instance)(rate(node_cpu_seconds_total{mode!="idle"}[1m]))   # CPU usage
@@ -36,7 +49,7 @@ histogram_quantile(0.95, sum by (le)(rate(http_req_duration_seconds_bucket[5m]))
 
 **Grafana** — UI поверх datasource'ов (Prometheus, Loki, Postgres, etc.). Дашборд — JSON. В дев-режиме пользователь `admin/admin`, на prod — sso/oauth/oidc.
 
-**На 1 GB RAM на t3.micro**: Prometheus + Grafana без проблем (Prom ≈150 MB, Grafana ≈120 MB), но **гаси compose-стек из [04](../04-virtualization/)** перед запуском, иначе словишь OOM.
+**На 1 GB RAM на t3.micro**: Prometheus + Grafana без проблем (Prom ≈150 MB, Grafana ≈120 MB), но **гаси compose-стек из предыдущих лаб** перед запуском, иначе словишь OOM.
 
 ## Базовая отработка
 
@@ -136,7 +149,7 @@ curl -s 'http://127.0.0.1:9090/api/v1/targets' | jq '.data.activeTargets[] | {sc
 
 С локальной машины (или через ssh-туннель `ssh -L 9090:127.0.0.1:9090 ubuntu@<VM>`) открой http://localhost:9090 и попробуй:
 
-```
+```promql
 up                                                  # 1 = up, 0 = down
 rate(node_cpu_seconds_total{mode!="idle"}[1m])      # raw CPU
 sum by (host) (rate(node_cpu_seconds_total{mode!="idle"}[1m]))  # CPU per host
@@ -195,36 +208,32 @@ HTTPServer(("0.0.0.0", 9101), H).serve_forever()
 
 Сделай искусственный backfill (накачай данные за день), посмотри размер `prom-data`. Прикинь: при `retention 30d` сколько займёт TSDB? Это разговор про планирование диска.
 
-## Acceptance criteria
+## Проверка модуля
 
-- [ ] `docker compose ps` показывает `prometheus`, `node-exporter`, `grafana` running.
-- [ ] `curl :9090/api/v1/targets` — все targets `up`.
-- [ ] В Grafana импортирован дашборд 1860, графики ненулевые.
-- [ ] (Расширенная) собственный `myexp` виден в targets и метрика `lab_random_value` запрашивается в Prom UI.
-
-## Что обсудить на ревью
-
-1. Pull vs push — где push реально нужен? (Подсказка: batch-jobs → Pushgateway.)
-2. Зачем `rate` против `irate`? Что произойдёт на счётчике при рестарте сервиса?
-3. Чем gauge отличается от counter и почему histogram дороже summary?
-4. Как ты бы развернул HA-Prometheus на проде? (Подсказка: Thanos / Cortex / Mimir / Victoria.)
-5. Где у тебя секреты в этом стенде (Grafana admin password) и почему сейчас они в env-vars compose'а — плохо? — переход к [`07-secrets-vault`](../07-secrets-vault/).
-
-## Как погасить (важно на t3.micro)
-
+Вы можете запустить скрипт автоматической проверки, чтобы убедиться в корректности базовой настройки (поднятые контейнеры, доступность портов):
 ```bash
-cd ~/lab05 && docker compose down            # контейнеры стопают
-docker volume ls                              # данные в bind-mount'е, volume'ов нет
-# Полная зачистка:
-rm -rf ~/lab05/{prom-data,grafana-data}
+./verify.sh
 ```
 
-## Грабли
+## Контрольные вопросы
 
-| Симптом | Причина | Лечение |
-|---------|---------|---------|
-| Grafana 472 permission denied | bind-mount без chown 472:472 | `sudo chown -R 472:472 grafana-data` |
-| Prometheus падает с `permission denied` на /prometheus | bind-mount без chown 65534 | `sudo chown -R 65534:65534 prom-data` |
-| node_exporter показывает 0 памяти/CPU | не примонтировал `/proc` или `/sys` | используй `network_mode: host` и `--path.rootfs=/host` |
-| Prometheus не видит свой экспортёр на хосте | DNS `host.docker.internal` не настроен | `extra_hosts: ["host.docker.internal:host-gateway"]` |
-| OOM после старта Grafana | не погасил compose из лабы 04 | `docker compose -f ~/lab04/compose.yml down` |
+1. **Pull vs Push**: В чем фундаментальные отличия pull-модели Prometheus от push-моделей (например, StatsD/Graphite)? В каких редких случаях push всё-таки необходим и как Prometheus решает эту задачу?
+2. **Типы метрик**: Чем `gauge` отличается от `counter`? Почему использование агрегатных функций (например, `sum` или `rate`) на `gauge` в большинстве случаев не имеет смысла? Почему `histogram` дороже в хранении, чем `summary`?
+3. **Функции PromQL**: Зачем нужны функции `rate` и `irate`? Что произойдет с графиком счетчика (counter) при рестарте сервиса или экспортёра и как Prometheus обрабатывает этот сценарий?
+4. **Архитектура и масштабирование**: Как развернуть High Availability (HA) Prometheus в продакшене? Если данных становится слишком много для одного узла, какие решения позволяют организовать долгосрочное хранение и горизонтальное масштабирование?
+
+## Troubleshooting — частые проблемы
+
+- **Grafana (472) permission denied**: Контейнер не может записать данные, так как директория `grafana-data` создана под root. **Лечение**: `sudo chown -R 472:472 ~/lab05/grafana-data`.
+- **Prometheus (65534) permission denied**: Аналогичная проблема с директорией `prom-data`. **Лечение**: `sudo chown -R 65534:65534 ~/lab05/prom-data`.
+- **node_exporter показывает 0 памяти/CPU**: Экспортер не примонтировал директории `/proc` или `/sys` хоста, из-за чего он смотрит на собственное окружение контейнера. **Лечение**: Используй `network_mode: host` и флаг `--path.rootfs=/host`.
+- **Prometheus не видит свой экспортёр (myexp) на хосте**: Имя `host.docker.internal` не разрешается. **Лечение**: Добавь `extra_hosts: ["host.docker.internal:host-gateway"]` к сервису Prometheus в `compose.yml`.
+- **OOM (Out Of Memory) или зависание после старта Grafana**: Вероятно, вы забыли погасить compose-стек из предыдущих лабораторных. На слабых виртуалках (1 GB RAM) это частая проблема. **Лечение**: Очистите ресурсы командой `docker compose -f ~/lab04/compose.yml down` и перезапустите текущий стек.
+
+## Уборка
+
+После завершения работы не забудьте удалить созданные ресурсы, чтобы они не мешали следующим модулям. Используйте предоставленный скрипт:
+
+```bash
+./cleanup.sh
+```

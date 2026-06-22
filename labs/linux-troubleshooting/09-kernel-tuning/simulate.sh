@@ -12,6 +12,9 @@ fi
 # Когда студент уже поднял лимит и хочет проверить, что это помогло —
 # запускает с KEEP_LIMIT=1 sudo ./simulate.sh, и тогда мы лимит не трогаем.
 ORIG_LIMIT=$(sysctl -n fs.inotify.max_user_watches)
+if [ ! -f /tmp/inotify_orig_limit.txt ]; then
+    echo "$ORIG_LIMIT" > /tmp/inotify_orig_limit.txt
+fi
 if [[ "${KEEP_LIMIT:-0}" != "1" ]]; then
     sysctl -w fs.inotify.max_user_watches=8192 >/dev/null
 fi
