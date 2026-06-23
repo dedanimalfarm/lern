@@ -2,40 +2,43 @@
 
 ## Оглавление
 <!-- TOC -->
-- [Предварительные требования](#-)
-- [Стартовая проверка](#-)
-- [Часть 1: CustomResourceDefinition](#-1-customresourcedefinition)
-  - [Теория для изучения перед частью](#----)
-  - [1.1 Регистрация CRD](#11--crd)
-- [Часть 2: Custom Resources и схема](#-2-custom-resources--)
-  - [Теория для изучения перед частью](#----)
-  - [2.1 Создать CR и проверить схему](#21--cr---)
-- [Часть 3: Operator pattern](#-3-operator-pattern)
-  - [Теория для изучения перед частью](#----)
-  - [3.1 prometheus-operator как пример](#31-prometheus-operator--)
-  - [3.2 Свой контроллер для WebApp (reconcile вживую)](#32----webapp-reconcile-)
-- [Часть 4: kubectl и кастомные ресурсы](#-4-kubectl---)
-- [Часть 5: Troubleshooting](#-5-troubleshooting)
-  - [Теория: методология диагностики CRD/CR](#---crdcr)
-  - [Инцидент 1: CR отклонён схемой](#-1-cr--)
-  - [Инцидент 2: `kubectl get <kind>` — «not found»](#-2-kubectl-get-kind--not-found)
-- [Проверка модуля](#-)
-- [Финальная карта ресурсов модуля](#---)
-- [Теоретические вопросы (итоговые)](#--)
-- [Практические задания (отработка)](#--)
-- [Шпаргалка](#)
-- [Чему вы научились](#--)
-- [Уборка](#)
+- [Предварительные требования](#предварительные-требования)
+- [Стартовая проверка](#стартовая-проверка)
+- [Введение: Kubernetes как Платформа](#введение-kubernetes-как-платформа)
+- [Часть 1: CustomResourceDefinition (CRD)](#часть-1-customresourcedefinition-crd)
+  - [Теория: Архитектура расширения API](#теория-архитектура-расширения-api)
+  - [1.1 Анатомия манифеста CRD](#11-анатомия-манифеста-crd)
+  - [1.2 Регистрация CRD в кластере](#12-регистрация-crd-в-кластере)
+- [Часть 2: Custom Resources (CR) и Схема](#часть-2-custom-resources-cr-и-схема)
+  - [Теория: OpenAPI Schema, Pruning и CEL](#теория-openapi-schema-pruning-и-cel)
+  - [2.1 Создание CR и проверка валидации](#21-создание-cr-и-проверка-валидации)
+  - [2.2 Демонстрация Server-side pruning](#22-демонстрация-server-side-pruning)
+- [Часть 3: Operator Pattern (Паттерн Оператор)](#часть-3-operator-pattern-паттерн-оператор)
+  - [Теория: Reconcile Loop, Informers и Идемпотентность](#теория-reconcile-loop-informers-и-идемпотентность)
+  - [Теория: Finalizers и OwnerReferences](#теория-finalizers-и-ownerreferences)
+  - [3.1 Наблюдение за существующим оператором (prometheus-operator)](#31-наблюдение-за-существующим-оператором-prometheus-operator)
+  - [3.2 Запуск собственного контроллера (на примере Kopf)](#32-запуск-собственного-контроллера-на-примере-kopf)
+- [Часть 4: Интеграция с kubectl и API-сервером](#часть-4-интеграция-с-kubectl-и-api-сервером)
+  - [Теория: Subresources и Printer Columns](#теория-subresources-и-printer-columns)
+  - [4.1 Практика масштабирования через subresources.scale](#41-практика-масштабирования-через-subresourcesscale)
+- [Часть 5: Troubleshooting (Диагностика инцидентов)](#часть-5-troubleshooting-диагностика-инцидентов)
+  - [Методология диагностики CRD/CR](#методология-диагностики-crdcr)
+  - [Инцидент 1: CR отклонён валидатором (Invalid value / Required)](#инцидент-1-cr-отклонён-валидатором-invalid-value--required)
+  - [Инцидент 2: Объект завис в статусе Terminating (Проблема с Finalizer)](#инцидент-2-объект-завис-в-статусе-terminating-проблема-с-finalizer)
+  - [Инцидент 3: `kubectl get <kind>` — «not found»](#инцидент-3-kubectl-get-kind--not-found)
+  - [Инцидент 4: Контроллер работает нестабильно (Отсутствие Leader Election / RBAC ошибки)](#инцидент-4-контроллер-работает-нестабильно-отсутствие-leader-election--rbac-ошибки)
+- [Проверка модуля](#проверка-модуля)
+- [Финальная карта ресурсов модуля](#финальная-карта-ресурсов-модуля)
+- [Теоретические вопросы (итоговые)](#теоретические-вопросы-итоговые)
+- [Практические задания (отработка)](#практические-задания-отработка)
+- [Шпаргалка](#шпаргалка)
+- [Чему вы научились](#чему-вы-научились)
+- [Уборка](#уборка)
 <!-- /TOC -->
 
+> ⏱ время ~45-60 мин · сложность 4.5/5 · пререквизиты: Трек 1, Трек 3 (RBAC, API)
 
-> ⏱ время ~30 мин · сложность 4/5 · пререквизиты: Трек 1 и Трек 3
-
-Цель: понять, как Kubernetes из «оркестратора контейнеров» превращается в
-платформу — через CustomResourceDefinition (свои типы ресурсов) и оператор-паттерн
-(CRD + контроллер). К концу модуля вы регистрируете свой ресурс со схемой и
-валидацией и понимаете, что делает оператор на реальном примере
-(prometheus-operator из модуля 17).
+**Цель:** глубоко погрузиться в механизмы, которые превращают Kubernetes из обычного «оркестратора контейнеров» в мощную, расширяемую платформу. Вы изучите CustomResourceDefinition (создание своих типов данных), валидацию схем на базе OpenAPI и CEL, а также архитектуру операторов (CRD + контроллер) на реальных и учебных примерах.
 
 ---
 
@@ -44,448 +47,604 @@
 ```bash
 # kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
 export KUBECONFIG=/root/.kube/kubespray.conf
+
+# Создадим namespace для лабораторной
 kubectl get ns lab >/dev/null 2>&1 || kubectl create ns lab
+
+# Проверим версию кластера
 kubectl version -o json 2>/dev/null | grep -i gitVersion | head -1
 ```
 
 ## Стартовая проверка
 
-Убедитесь, что кластер доступен:
+Убедитесь, что кластер доступен и ноды находятся в статусе Ready:
 ```bash
 kubectl get nodes
 ```
 
 ---
 
-## Часть 1: CustomResourceDefinition
+## Введение: Kubernetes как Платформа
 
-### Теория для изучения перед частью
+Исторически Kubernetes создавался для управления подами, сервисами и томами. Однако со временем стало ясно, что его декларативный API, идемпотентность и механизм `watch` (подписка на изменения) образуют идеальную базу для управления *любыми* ресурсами: от баз данных в кластере до облачных виртуальных машин (например, через Crossplane) или CI/CD пайплайнов (ArgoCD, Tekton).
 
-- **CRD** регистрирует НОВЫЙ тип ресурса в API-сервере. После этого он работает
-  как встроенный: `kubectl get/apply/describe`, RBAC, watch, etcd-хранение — всё
-  бесплатно.
-- Идентификация: `group` (`lab.example.com`) + `version` (`v1`) + `kind`
-  (`WebApp`). `scope`: `Namespaced` или `Cluster`.
-- CRD — фундамент «Kubernetes как платформа»: операторы, GitOps-инструменты,
-  service mesh — все добавляют свои CRD.
+**Почему не использовать ConfigMap для хранения конфигурации своих приложений?**
+* **Отсутствие схемы:** В ConfigMap можно записать любую строку, опечатка не вызовет ошибку на этапе `kubectl apply`.
+* **Нет статус-поля:** ConfigMap не может хранить раздельно желаемое состояние (`spec`) и фактическое (`status`).
+* **Нет контроля доступа на уровне типа:** Нельзя дать права "только на создание баз данных", RBAC применяется ко всем ConfigMap в неймспейсе сразу.
+* **Нет интеграции с kubectl:** Для ConfigMap нельзя настроить удобные столбцы `kubectl get` или использовать команду `kubectl scale`.
 
-**Версионирование CRD** (`spec.versions[]` — у нас одна `v1`, но их может быть много):
+**Custom Resource (CR)** решает все эти проблемы, делая ваш объект полноправным гражданином Kubernetes API.
 
-| Поле версии | Что значит |
-|-------------|------------|
-| `served: true` | версия ОТДАЁТСЯ через API (можно `get/apply` по этому `apiVersion`) |
-| `storage: true` | в КАКОМ формате CR лежит в etcd. **Ровно ОДНА** версия = storage |
-| `deprecated: true` (+`deprecationWarning`) | версия помечена устаревшей — kubectl печатает warning |
+---
 
-```yaml
-# наш crd.yaml: одна версия, она же и served, и storage
-versions:
-- name: v1
-  served: true
-  storage: true       # <- единственное хранилище
+## Часть 1: CustomResourceDefinition (CRD)
+
+### Теория: Архитектура расширения API
+
+Чтобы API-сервер Kubernetes начал понимать новый тип объектов (Custom Resource), его нужно зарегистрировать. Это делается с помощью объекта `CustomResourceDefinition`.
+
+```text
+       [ Пользователь / CI-CD ]
+                  │
+          (kubectl apply)
+                  │
+                  ▼
+    +---------------------------+
+    |  Kubernetes API Server    |
+    |                           |
+    |  [Встроенные ресурсы]     |
+    |   - Pod, Deployment...    |
+    |                           |
+    |  [Пользовательские API]   |
+    |   - WebApp (наш CRD)      | <--- Мы регистрируем этот тип!
+    |   - Prometheus (внешний)  |
+    +---------------------------+
+         │                 │
+    Сохранение в etcd   Отправка событий (watch)
+         │                 │
+         ▼                 ▼
+     [ etcd ]         [ Контроллеры / Операторы ]
 ```
 
-> При нескольких версиях (v1alpha1 → v1) одна — `storage`, остальные — только
-> `served`, а между ними нужна **conversion**-стратегия (`spec.conversion`:
-> `None` если поля совместимы, или `Webhook` для нетривиальной конвертации).
-> Так API эволюционирует без поломки старых клиентов.
+Идентификация любого ресурса в Kubernetes состоит из трёх элементов (GVK):
+* **Group:** Группа API (например, `lab.example.com`). Позволяет избежать конфликтов имен (ваш `WebApp` не пересечётся с `WebApp` от другой компании).
+* **Version:** Версия (например, `v1`). Отражает стадию зрелости API (`v1alpha1` -> `v1beta1` -> `v1`).
+* **Kind:** Имя типа (например, `WebApp`).
 
----
+**Версионирование CRD и `spec.versions[]`**
+Ресурсы могут эволюционировать. В CRD можно описать несколько версий.
 
-**Цель:** зарегистрировать тип `WebApp`.
+| Поле версии | Что означает |
+|-------------|--------------|
+| `served: true` | Данная версия доступна через REST API (можно делать GET/POST по этому `apiVersion`). |
+| `storage: true` | Указывает, в каком формате ресурс **физически хранится** в etcd. Ровно ОДНА версия из всех должна иметь `storage: true`. |
+| `deprecated: true` | Версия устарела. API-сервер отдаст Warning клиенту (например, kubectl напечатает желтый текст). |
 
-**Ресурс:** `manifests/crd.yaml`.
+> 💡 **Webhook Conversion:** Если клиент запрашивает ресурс в версии `v1beta1`, а в etcd он хранится как `v1`, API-сервер автоматически конвертирует его на лету. Если поля кардинально изменились (например, поле переименовано), применяется механизм `spec.conversion.strategy: Webhook`, который вызывает внешний сервис для трансляции данных между версиями.
 
----
+### 1.1 Анатомия манифеста CRD
 
-### 1.1 Регистрация CRD
+Изучим структуру нашего CRD (файл `manifests/crd.yaml`):
+
+```yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: webapps.lab.example.com     # Должно быть в формате: <plural>.<group>
+spec:
+  group: lab.example.com
+  names:
+    kind: WebApp
+    plural: webapps
+    singular: webapp
+    shortNames:
+      - wa                          # Позволяет писать: kubectl get wa
+    categories:
+      - all                         # Позволяет попадать в 'kubectl get all'
+  scope: Namespaced                 # Объект будет жить в конкретном namespace (как Pod)
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        # Здесь описывается OpenAPI валидация (см. Часть 2)
+        openAPIV3Schema:
+          type: object
+```
+
+### 1.2 Регистрация CRD в кластере
+
+**Цель:** зарегистрировать новый тип `WebApp` в кластере.
 
 ```bash
+# Применяем CRD
 kubectl apply -f manifests/crd.yaml
+
+# Убеждаемся, что CRD зарегистрирован
 kubectl get crd webapps.lab.example.com
-# NAME                       CREATED AT
-# webapps.lab.example.com    ...
 
-# Новый ресурс виден в API наравне со встроенными:
+# Проверяем видимость нового ресурса в API-сервере
 kubectl api-resources | grep -i webapp
-# webapps   wa   lab.example.com/v1   true   WebApp
+# Вывод: webapps   wa   lab.example.com/v1   true   WebApp
 ```
 
 **Контрольные вопросы:**
-1. Что даёт CRD и что появляется «бесплатно» после регистрации?
-2. Из чего складывается идентификатор ресурса (group/version/kind)?
-3. Почему CRD называют фундаментом «Kubernetes как платформа»?
+1. Что происходит в API-сервере при создании объекта `CustomResourceDefinition`?
+2. Почему для имени CRD обязательно использовать нотацию `<plural>.<group>`?
+3. В чём отличие `served: true` от `storage: true` для версии API?
 
 ---
 
-## Часть 2: Custom Resources и схема
+## Часть 2: Custom Resources (CR) и Схема
 
-### Теория для изучения перед частью
+### Теория: OpenAPI Schema, Pruning и CEL
 
-- Экземпляр CRD — **Custom Resource (CR)**. Валидируется по `openAPIV3Schema`:
-  типы полей, `required`, `minimum`/`maximum`, паттерны — apiserver отклоняет
-  несоответствие на admission.
-- Полезное в CRD: `additionalPrinterColumns` (колонки в `kubectl get`),
-  `subresources.status` (отдельный `/status`), `subresources.scale` (`kubectl scale`),
-  `shortNames`, `categories` (попадание в `kubectl get all`).
+Экземпляр CRD называется **Custom Resource (CR)**. Когда вы делаете `kubectl apply` для CR, API-сервер проводит строгую проверку структуры (валидацию) перед тем как сохранить объект в базу `etcd`.
 
-**Схема — это и есть валидация (фрагмент нашего `crd.yaml`):**
+Эта проверка настраивается в CRD через `openAPIV3Schema`.
+
+#### 1. Структурная схема (Server-side pruning)
+С Kubernetes 1.16+ схемы стали "структурными". Это значит, что API-сервер реализует **pruning (обрезку)**.
+Если вы в манифесте укажете поле, которого **нет** в `openAPIV3Schema` (например, опечатка `replcas: 3` вместо `replicas`), API-сервер молча **вырежет** это неизвестное поле перед сохранением в etcd. 
+Это защищает контроллеры от мусора. Чтобы разрешить произвольные JSON-структуры в определённом поле (например, для передачи сырых конфигураций), используется флаг `x-kubernetes-preserve-unknown-fields: true`.
+
+#### 2. Базовая валидация типов (OpenAPI)
+Можно задавать типы (`string`, `integer`, `boolean`, `array`), обязательность полей (`required`), лимиты (`minimum`, `maximum`, `maxLength`), регулярные выражения (`pattern`).
 
 ```yaml
-openAPIV3Schema:
-  type: object
-  properties:
-    spec:
-      type: object
-      required: ["image", "replicas"]   # без них apply ОТКЛОНЯЕТСЯ ("Required value")
-      properties:
-        image:    { type: string }
-        replicas: { type: integer, minimum: 1, maximum: 10 }   # 99 -> "Invalid value: should be <= 10"
-        host:     { type: string }
-    status:                              # пишется контроллером, не пользователем
-      type: object
-      properties: { availableReplicas: { type: integer } }
+        properties:
+          image:
+            type: string
+          replicas:
+            type: integer
+            minimum: 1
+            maximum: 10
 ```
 
-- **Server-side pruning (структурные схемы, `apiextensions.k8s.io/v1`).** Поля CR,
-  которых НЕТ в схеме, apiserver МОЛЧА ВЫРЕЗАЕТ при сохранении (не просто
-  игнорирует — их не будет в etcd). Это защищает от опечаток (`replcas: 3` не
-  «потеряется тихо», а исчезнет — и валидация `required` поймает отсутствие
-  `replicas`). Чтобы РАЗРЕШИТЬ произвольные поля в поддереве — явно
-  `x-kubernetes-preserve-unknown-fields: true`.
-
-#### CEL-валидация (`x-kubernetes-validations`) — без webhook'ов
-
-`minimum`/`maximum`/`required` проверяют ОДНО поле. Кросс-полевые правила («min ≤
-max», «host обязателен, если ingress включён») раньше требовали admission-webhook.
-С k8s 1.29 (GA) их пишут прямо в схеме на **CEL** (Common Expression Language):
+#### 3. Продвинутая валидация (CEL - Common Expression Language)
+До Kubernetes 1.29 для сложной логики (например: "поле B обязательно, если поле A = true", или "minReplicas должно быть меньше maxReplicas") требовалось поднимать отдельный микросервис — Validating Admission Webhook. 
+Теперь можно писать правила прямо в CRD с помощью `x-kubernetes-validations` (CEL):
 
 ```yaml
-properties:
-  spec:
-    type: object
-    properties:
-      minReplicas: { type: integer }
-      maxReplicas: { type: integer }
     x-kubernetes-validations:
-    - rule: "self.minReplicas <= self.maxReplicas"      # self = текущий объект (spec)
-      message: "minReplicas must be <= maxReplicas"      # текст в ошибке apply
+    - rule: "self.spec.replicas % 2 == 0"
+      message: "Количество реплик должно быть четным"
+    - rule: "self.metadata.name.startsWith('prod-') ? self.spec.replicas >= 3 : true"
+      message: "Prod-окружения должны иметь минимум 3 реплики"
+```
+*Преимущество CEL:* Правила выполняются мгновенно прямо внутри API-сервера, не требуя сетевых запросов к вебхукам (отсутствие точек отказа, задержек и проблем с сертификатами).
+
+```text
+    [ Жизненный цикл запроса kubectl apply -f my-webapp.yaml ]
+
+Authentication -> Authorization (RBAC)
+      │
+      ▼
+Mutating Admission Webhooks (изменяют манифест на лету, если настроено)
+      │
+      ▼
+Object Schema Validation (OpenAPI: типы, required, min/max, pruning)
+      │
+      ▼
+Validating Admission (в т.ч. выполнение правил CEL внутри схемы)
+      │
+      ▼
+Сохранение в etcd (Успех!)
 ```
 
-**Reality (проверено на нашем 1.36):**
+### 2.1 Создание CR и проверка валидации
+
+Попробуем создать валидный объект:
 ```bash
-# BAD: min=5 > max=2
-kubectl apply -f bad-cr.yaml
-# The CelTest "bad" is invalid: spec: Invalid value: minReplicas must be <= maxReplicas
-# GOOD: min=1 <= max=3  -> celtest/good created
-```
+# Изучите манифест (содержит spec.image и spec.replicas)
+cat manifests/webapp.yaml
 
-- **`self`** — валидируемый узел; `oldSelf` доступен в transition-правилах (с
-  `optionalOldSelf`) для проверки «поле нельзя уменьшать». `messageExpression` —
-  динамическое сообщение через CEL.
-- **Плюс над webhook:** ноль инфраструктуры (нет пода-вебхука, сертификата,
-  `ValidatingWebhookConfiguration`), правило живёт в самом CRD, выполняется
-  apiserver синхронно. Это тот же CEL, что в **ValidatingAdmissionPolicy**
-  (модуль 14) — но привязан к схеме конкретного CRD.
-- **Граница:** CEL валидирует объект в момент записи (без обращения к другим
-  ресурсам и внешним системам) — для «проверить, что Deployment с таким именем уже
-  есть» по-прежнему нужен webhook/контроллер.
-
----
-
-**Цель:** создать CR и увидеть валидацию.
-
-**Ресурсы:** `manifests/webapp.yaml`, `broken/scenario-01/bad-webapp.yaml`.
-
----
-
-### 2.1 Создать CR и проверить схему
-
-```bash
+# Применим его
 kubectl apply -f manifests/webapp.yaml
-kubectl -n lab get webapp           # или: kubectl -n lab get wa
-# NAME        IMAGE              REPLICAS   AGE
-# my-webapp   nginx:1.27-alpine  3          5s     <- additionalPrinterColumns
 
-# Невалидный CR отклоняется СХЕМОЙ (admission), не создаётся:
-kubectl apply -f broken/scenario-01/bad-webapp.yaml
-# error: ... spec.replicas: Invalid value: 99: ... should be <= 10
-#        spec.image: Required value
+# Проверим, что ресурс создался
+kubectl -n lab get webapp
 ```
 
-> Валидацию вы получили, лишь описав схему — без единой строки кода контроллера.
-
-**Контрольные вопросы:**
-1. Где описывается валидация CR и на каком этапе она срабатывает?
-2. Что дают `additionalPrinterColumns` и `subresources.status`?
-3. Зачем `shortNames` и `categories`?
-
----
-
-## Часть 3: Operator pattern
-
-### Теория для изучения перед частью
-
-- CRD сам по себе — лишь «запись в базе»: создав `WebApp`, вы НЕ получите поды.
-  Чтобы CR что-то ДЕЛАЛ, нужен **контроллер** — программа с reconcile-циклом:
-  «увидел желаемое (CR) → привёл фактическое к нему → записал status».
-- **CRD + контроллер = оператор.** Операторы инкапсулируют эксплуатационные
-  знания (как развернуть/бэкапить/обновить БД и т.п.).
-
-**Reconcile loop по шагам** (что делал бы контроллер WebApp):
-
-```
-   watch WebApp/Deployment ──> очередь ──> Reconcile(ns/name):
-        │                                      │
-        │   1. observe DESIRED: прочитать CR WebApp (spec.image, spec.replicas)
-        │   2. observe ACTUAL:  есть ли уже Deployment <name>? какой у него стейт?
-        │   3. diff:            spec.replicas=3, а Deployment=1  → расхождение
-        │   4. act (идемпотентно): create/update Deployment под spec (3 реплики)
-        │   5. write STATUS:    status.availableReplicas = факт (subresource /status)
-        └────────────── повтор на КАЖДОЕ изменение CR или managed-ресурса ◄──┘
-```
-
-- **Идемпотентность + level-triggered.** Reconcile вызывается на ЛЮБОЕ изменение и
-  должен давать тот же итог независимо от того, сколько раз вызван и что было
-  раньше (реагирует на ТЕКУЩЕЕ состояние = level, а не на «событие» = edge). Поэтому
-  потеря события не страшна — следующий reconcile всё выровняет.
-- **ownerReferences.** Контроллер ставит на созданный Deployment `ownerReference`
-  на свой WebApp. Тогда удаление WebApp каскадно удаляет Deployment (garbage
-  collector по owner-цепочке) — без ручной уборки. (Так же `Deployment`→`ReplicaSet`
-  →`Pod` из модуля 03.)
-- **finalizers.** Если при удалении CR нужно прибрать ВНЕШНЕЕ (облачный LB, запись в
-  СУБД), контроллер вешает на CR `finalizer`. Тогда `delete` лишь ставит
-  `deletionTimestamp`, объект «висит» `Terminating`, пока контроллер не сделает
-  cleanup и не СНИМЕТ finalizer — только потом apiserver реально удаляет CR.
-
----
-
-**Цель:** увидеть реальный оператор на кластере.
-
----
-
-### 3.1 prometheus-operator как пример
-
+Теперь проверим, как работает `openAPIV3Schema`. Попробуем создать невалидные объекты:
 ```bash
-# CRD, которыми управляет prometheus-operator (из модуля 17):
-kubectl get crd | grep monitoring.coreos.com
-# alertmanagers / prometheuses / servicemonitors / prometheusrules ...
+# 1. Попытка задать > 10 реплик (сработает правило maximum)
+kubectl -n lab apply -f broken/scenario-01/bad-webapp.yaml
+# Ожидаемый ответ: The WebApp "bad-webapp" is invalid: spec.replicas: Invalid value: 99: spec.replicas: Invalid value: 99: must be less than or equal to 10
 
-# Сам контроллер-оператор:
-kubectl -n monitoring get pods | grep operator
-# kps-kube-prometheus-stack-operator-...   Running
-
-# Когда вы создаёте ServiceMonitor (CR), оператор РЕАГИРУЕТ — перенастраивает
-# Prometheus. Это reconcile в действии (вы это видели в модуле 17).
-```
-
-### 3.2 Свой контроллер для WebApp (на базе Kopf)
-
-CRD `WebApp` сам по себе ничего не разворачивает. Сделаем его «живым»: учебный
-контроллер `controller/operator.py` (написанный на мощном фреймворке Kopf) для каждого `WebApp X` создаёт `Deployment X-deploy`
-(образ/реплики из `spec`) + `Service X-svc`, пишет статус и добавляет
-`ownerReferences` → их КАСКАДНО снесёт GC при удалении CR.
-
-```bash
-# 1) Запустить контроллер на control-машине (использует текущий KUBECONFIG)
-pip install -r controller/requirements.txt
-kopf run controller/operator.py -A &         # Ctrl+C / kill — остановить
-#    [webapp-operator] reconciled my-webapp: my-webapp-deploy(replicas=3,...) + my-webapp-svc
-
-# 2) Создать новый CR — контроллер сам развернёт Deployment+Service
-kubectl apply -f - <<'EOF'
+# 2. Попытка не указать image (сработает правило required)
+cat <<EOF | kubectl apply -f -
 apiVersion: lab.example.com/v1
 kind: WebApp
-metadata: { name: test-webapp, namespace: lab }
-spec: { replicas: 2, image: nginx:alpine }
+metadata:
+  name: missing-image
+  namespace: lab
+spec:
+  replicas: 2
 EOF
-kubectl -n lab get deploy test-webapp-deploy svc/test-webapp-svc    # появились сами
-kubectl -n lab get webapp test-webapp -o jsonpath='{.status.availableReplicas}{"\n"}'  # контроллер пишет status
+# Ожидаемый ответ: The WebApp "missing-image" is invalid: spec.image: Required value
+```
 
-# 3) Изменить spec — reconcile применит к Deployment (level-triggered)
+### 2.2 Демонстрация Server-side pruning
+
+Создадим ресурс с полем `unsupportedField`, которого нет в схеме CRD:
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: lab.example.com/v1
+kind: WebApp
+metadata:
+  name: pruned-webapp
+  namespace: lab
+spec:
+  image: nginx:latest
+  replicas: 1
+  unsupportedField: "this will be dropped silently"
+EOF
+
+# Проверим YAML в кластере
+kubectl -n lab get webapp pruned-webapp -o yaml | grep unsupportedField
+# Ничего не выведет! API-сервер вырезал это поле.
+```
+
+**Контрольные вопросы:**
+1. Что такое Server-side pruning и для чего он нужен?
+2. Какие преимущества у CEL-валидации перед Validating Webhooks?
+3. На каком этапе API-запроса происходит проверка OpenAPI-схемы?
+
+---
+
+## Часть 3: Operator Pattern (Паттерн Оператор)
+
+### Теория: Reconcile Loop, Informers и Идемпотентность
+
+Сам по себе CRD и CR — это просто записи в базе данных etcd. Создав `WebApp`, вы не запустили ни одного контейнера. Чтобы CR превратился в реальные поды, нужна активная логика — **Контроллер (или Оператор)**.
+
+Оператор непрерывно отслеживает состояние объектов (через механизм `watch`) и выполняет цикл согласования — **Reconcile Loop**.
+
+```text
++---------------------------------------------------+
+|                  Kubernetes Cluster               |
+|                                                   |
+|  [ CR "WebApp" ] <--- watch ---+                  |
+|       ^                        |                  |
+|       | update status          |                  |
+|       v                        v                  |
+|  +---------------------------------------------+  |
+|  |                Оператор                     |  |
+|  |  +-------------------+   +---------------+  |  |
+|  |  | Informer / Cache  |-->|  Workqueue    |  |  |
+|  |  +-------------------+   +---------------+  |  |
+|  |                                |            |  |
+|  |                                v            |  |
+|  |                      +-------------------+  |  |
+|  |                      | Reconcile(ns/name)|  |  |
+|  |                      +-------------------+  |  |
+|  +--------------------------------|------------+  |
+|                                   |               |
+|  [ Deployment ] <--- create/update/delete         |
+|  [ Service    ] <--- create/update/delete         |
++---------------------------------------------------+
+```
+
+**Шаги Reconcile:**
+1. **Observe (Наблюдение):** Получение текущего желаемого состояния из CR (например, 3 реплики). Получение фактического состояния кластера (сколько Deployment реально запущено).
+2. **Diff (Сравнение):** Сравнение желаемого и действительного.
+3. **Act (Действие):** Принятие мер: создание Deployment, масштабирование или изменение образа.
+4. **Update Status:** Запись текущего фактического состояния в поле `status` кастомного ресурса.
+
+**Важнейшие свойства операторов:**
+* **Идемпотентность:** Функция `Reconcile()` должна безопасно вызываться много раз подряд с одним и тем же входом, не создавая дубликатов ресурсов.
+* **Level-triggered (срабатывание по уровню):** Контроллер не полагается на последовательность *событий* ("было 1, стало 2"), так как события могут потеряться. Он смотрит на *конечное состояние* в базе ("сейчас должно быть 2") и приводит систему к этому уровню.
+
+### Теория: Finalizers и OwnerReferences
+
+**OwnerReferences (Владение)**
+Когда оператор создает Deployment на основе `WebApp`, он добавляет в `metadata.ownerReferences` Деплоймента ссылку на `WebApp`.
+*Зачем?* Если вы удалите `WebApp`, встроенный Garbage Collector Kubernetes увидит связь и **каскадно удалит** зависящие от него Deployment и Service. Без этого пришлось бы чистить хвосты вручную или усложнять логику контроллера.
+
+**Finalizers (Финализаторы)**
+Что если оператор создает ресурсы *вне* Kubernetes (например, поднимает AWS S3 бакет или записи в Cloudflare)? GC Kubernetes не может дотянуться до облака.
+Для этого используются Finalizers. В метаданные `WebApp` прописывается строчка (например `webapp.operator.io/cleanup`). 
+* Механизм: При попытке выполнить `kubectl delete`, API-сервер *не удаляет* объект из БД. Он ставит ему метку времени `metadata.deletionTimestamp`.
+* Объект зависает в статусе `Terminating`.
+* Оператор видит это событие, идёт в AWS, удаляет S3 бакет.
+* Когда внешняя уборка окончена, оператор удаляет свою строку из массива `finalizers`.
+* Когда массив финализаторов становится пустым, Kubernetes окончательно стирает объект из etcd.
+
+---
+
+### 3.1 Наблюдение за существующим оператором (prometheus-operator)
+
+Вы уже встречали операторы в других модулях:
+```bash
+# CRD, которыми управляет prometheus-operator:
+kubectl get crd | grep monitoring.coreos.com
+# Вывод: alertmanagers, prometheuses, servicemonitors, prometheusrules...
+
+# Сам под контроллера-оператора:
+kubectl -n monitoring get pods | grep operator
+# Вывод: kube-prometheus-stack-operator-...   Running
+
+# Вспомните: когда вы создаете ServiceMonitor, оператор видит его, 
+# генерирует конфигурацию scrape_configs и перезагружает сервер Prometheus.
+```
+
+### 3.2 Запуск собственного контроллера (на примере Kopf)
+
+CRD `WebApp` сейчас безжизненна. Запустим контроллер, написанный на Python с использованием фреймворка Kopf (`controller/operator.py`). Он слушает события `WebApp` и управляет соответствующими `Deployment` и `Service`.
+
+```bash
+# 1. Установим зависимости для Python
+pip install -r controller/requirements.txt
+
+# 2. Запустим контроллер локально на вашей машине (он будет общаться с кластером через ~/.kube/config)
+# Запускаем в фоновом режиме (подавляя вывод, чтобы не мешал в терминале)
+kopf run controller/operator.py -A > /tmp/operator.log 2>&1 &
+OPERATOR_PID=$!
+echo "Operator started with PID: $OPERATOR_PID"
+
+# Проверим логи (он уже должен был поймать ранее созданные webapp и создать им Deployment)
+sleep 3
+cat /tmp/operator.log
+```
+
+Теперь посмотрим магию в действии:
+
+```bash
+# 3. Создадим новый CR — контроллер сам развернёт Deployment+Service
+cat <<EOF | kubectl apply -f -
+apiVersion: lab.example.com/v1
+kind: WebApp
+metadata: 
+  name: test-webapp
+  namespace: lab
+spec: 
+  replicas: 2
+  image: nginx:alpine
+EOF
+
+# Ждем пару секунд и проверяем созданные дочерние ресурсы:
+kubectl -n lab get deploy test-webapp-deploy
+kubectl -n lab get svc test-webapp-svc
+# Они появились сами!
+
+# Проверим, что контроллер записал статус:
+kubectl -n lab get webapp test-webapp -o yaml | grep -A2 status:
+# Должно быть: status.availableReplicas: 2
+
+# 4. Проверим идемпотентность и Level-triggered логику:
+# Изменим количество реплик на 3
 kubectl -n lab patch webapp test-webapp --type=merge -p '{"spec":{"replicas":3}}'
-kubectl -n lab get deploy test-webapp-deploy -w     # реплики -> 3
 
-# 4) Удалить CR — Deployment и Service уйдут САМИ (ownerReferences -> GC)
+# Контроллер моментально масштабирует Deployment:
+kubectl -n lab get deploy test-webapp-deploy -w
+# Нажмите Ctrl+C, когда увидите 3/3 реплик
+
+# 5. Каскадное удаление (Garbage Collection по ownerReferences):
 kubectl -n lab delete webapp test-webapp
-kubectl -n lab get deploy,svc -l app=test-webapp    # пусто
+
+# Проверим, что дочерние ресурсы удалились:
+kubectl -n lab get deploy,svc -l app=test-webapp
+# Вывод должен быть пуст
 ```
 
-> ✅ **Прогнано на Kubespray:** create → `test-webapp-deploy`(2)+`test-webapp-svc`;
-> `replicas:3` → масштаб до 3; смена `image` → обновился Deployment; delete CR →
-> deploy+svc снесены каскадно (через `ownerReferences`, см. теорию 3.x). Это и есть
-> оператор-паттерн в миниатюре. **Прод-версия:** запускать контроллер как Pod в
-> кластере с ServiceAccount+RBAC (на `webapps`,`deployments`,`services`) и
-> использовать `--watch`/informers вместо poll; писать на Go (controller-runtime/
-> Kubebuilder) или Python (kopf).
-
-> 🏭 **Прод-реализация в этом же модуле:** `controller/webapp_controller.py` —
-> тот же оператор на Python (informers + workqueue + resync, client `kubernetes`),
-> упакованный в контейнер (`controller/Dockerfile`, non-root) и разворачиваемый
-> как Pod с least-privilege RBAC: `kubectl apply -k controller/manifests/`
-> (ns `webapp-operator` + SA + ClusterRole на webapps/deployments/services +
-> sample WebApp). Это «как в реальности», bash-версия выше — для понимания петли.
-
-**Контрольные вопросы:**
-1. Чем CRD без контроллера отличается от оператора?
-2. Что такое reconcile loop и какие три шага он делает?
-3. Как `ownerReferences` обеспечивают удаление Deployment/Service при удалении CR?
-4. Приведите два реальных оператора и что они автоматизируют.
-
----
-
-## Часть 4: kubectl и кастомные ресурсы
-
+*После теста не забудьте остановить локальный процесс оператора:*
 ```bash
-kubectl -n lab get wa -o wide                  # short name
-kubectl -n lab get webapp my-webapp -o yaml | grep -A3 spec
-kubectl -n lab describe webapp my-webapp
-kubectl api-resources --api-group=lab.example.com
+kill $OPERATOR_PID
 ```
+
+> 🏭 **Прод-реализация:** В реальной жизни операторы пишут на Go (с использованием Kubebuilder / Operator SDK) и разворачивают как Pod'ы внутри кластера с собственным `ServiceAccount` и строгим RBAC (чтобы контроллер WebApp не мог случайно удалить чужие секреты).
 
 **Контрольные вопросы:**
-1. Как сделать так, чтобы CR попадал в `kubectl get all`?
-2. Зачем `status` как отдельный subresource (кто его пишет)?
-3. Как посмотреть все ресурсы вашей API-группы?
+1. Объясните принцип "Level-triggered" логики. Чем она лучше "Edge-triggered" (срабатывания по событиям)?
+2. Что произойдет, если мы удалим `WebApp`, у которого есть Finalizer, но сам контроллер в этот момент "упал" (CrashLoopBackOff)?
+3. В чём отличие `ownerReferences` от `finalizers`?
 
 ---
 
-## Часть 5: Troubleshooting
+## Часть 4: Интеграция с kubectl и API-сервером
 
-### Теория: методология диагностики CRD/CR
+### Теория: Subresources и Printer Columns
 
-Проблемы делятся на три слоя — определи слой, тогда ясна команда:
+В CRD можно настроить отображение ресурса в консоли, сделав его поведение неотличимым от родных ресурсов Kubernetes.
 
-```
-Что не так?
- ├─ CR не СОЗДАЁТСЯ (apply падает)
- │     ├─ "Invalid value" / "Required value"  -> СХЕМА (openAPIV3Schema): чини CR под required/min/max
- │     └─ "no matches for kind WebApp"          -> CRD не применён / не та group-version
- │            kubectl get crd | grep example.com ; kubectl api-resources --api-group=lab.example.com
- │
- ├─ CR создан, но НИЧЕГО НЕ ПРОИСХОДИТ (нет подов)
- │     -> это норма БЕЗ контроллера: CRD = только запись. Нужен оператор (Часть 3).
- │        Если оператор есть: смотри ЕГО логи и status CR:
- │        kubectl -n lab get webapp my-webapp -o jsonpath='{.status}' ; kubectl logs <operator-pod>
- │
- └─ CR не УДАЛЯЕТСЯ (висит Terminating)
-       -> finalizer не снят (контроллер мёртв/не дочистил внешнее):
-          kubectl get webapp my-webapp -o jsonpath='{.metadata.finalizers}'
-          (крайняя мера — убрать finalizer вручную: kubectl patch ... -p '{"metadata":{"finalizers":[]}}' --type=merge)
+* **`additionalPrinterColumns`:** Позволяет вывести значения из JSON-полей объекта прямо в `kubectl get`. Например, достать версию образа из `.spec.image`.
+* **`subresources.status`:** Создаёт отдельный endpoint `/apis/lab.example.com/v1/namespaces/lab/webapps/my-webapp/status`. Это крайне важно с точки зрения безопасности! Пользователям (через RBAC) можно дать права на редактирование основного ресурса, а права на обновление статуса дать *только* СервисАккаунту контроллера. Так пользователи не смогут подделать статус.
+* **`subresources.scale`:** Позволяет стандартным командам (вроде `kubectl scale` или HorizontalPodAutoscaler) работать с вашим кастомным ресурсом, указывая, где в JSON лежит целевое количество реплик и фактическое.
+
+### 4.1 Практика масштабирования через subresources.scale
+
+Наш CRD уже настроен с `subresources.scale`:
+```yaml
+      subresources:
+        status: {}
+        scale:
+          specReplicasPath: .spec.replicas
+          statusReplicasPath: .status.availableReplicas
 ```
 
----
-
-### Инцидент 1: CR отклонён схемой
-
-Разобран в `broken/scenario-01/`. Симптом: `apply` падает с `Invalid value` /
-`Required value`. Диагностика — прочитать ошибку (поле + правило), привести CR в
-соответствие схеме CRD. Профилактика: писать строгие схемы (required/min/max),
-ловить ошибки на admission, а не в рантайме контроллера.
-
-### Инцидент 2: `kubectl get <kind>` — «not found»
-
+Давайте протестируем:
 ```bash
-# Причины: CRD не применён, неверная group/version, опечатка в kind.
-kubectl get crd | grep example.com           # есть ли CRD
-kubectl api-resources | grep -i webapp        # под каким group/version
-# apiVersion в CR должен быть lab.example.com/v1 (group/version из CRD).
+# Возьмем существующий (или создадим новый) webapp
+kubectl -n lab apply -f manifests/webapp.yaml
+
+# Проверим вывод столбцов (работает additionalPrinterColumns)
+kubectl -n lab get wa -o wide
+# NAME        IMAGE              REPLICAS   AGE
+# my-webapp   nginx:1.27-alpine  3          ...
+
+# Масштабируем через стандартный инструмент:
+kubectl -n lab scale webapp my-webapp --replicas=5
+# Output: webapp.lab.example.com/my-webapp scaled
+
+# Проверим:
+kubectl -n lab get wa my-webapp
+# Replicas должно стать 5
 ```
 
-**Контрольные вопросы:**
-1. Как из ошибки валидации понять, ЧТО нарушено?
-2. `kubectl get webapp` пишет «not found» — три причины?
-3. Где взять правильный `apiVersion` для своего CR?
+---
+
+## Часть 5: Troubleshooting (Диагностика инцидентов)
+
+### Методология диагностики CRD/CR
+
+При работе с CRD/Операторами проблемы делятся на три слоя абстракции:
+
+```text
+Где проблема?
+  ├─ 1. CR не СОЗДАЁТСЯ (kubectl apply падает)
+  │     ├─ Ошибка "Invalid value" / "Required value"  -> Проблема в СХЕМЕ (openAPIV3Schema/CEL).
+  │     └─ Ошибка "no matches for kind WebApp"        -> CRD не применён или неверная group/version.
+  │
+  ├─ 2. CR создан, но НИЧЕГО НЕ ПРОИСХОДИТ (дочерние ресурсы не появляются)
+  │     ├─ Контроллер не запущен.
+  │     ├─ Ошибки RBAC у контроллера (нет прав создать Deployment). -> Читать логи пода оператора.
+  │     └─ Ошибка в логике оператора (паника в коде).
+  │
+  └─ 3. CR не УДАЛЯЕТСЯ (завис в Terminating)
+        └─ Не снят finalizer (оператор мертв или внешняя система API недоступна).
+```
+
+### Инцидент 1: CR отклонён валидатором (Invalid value / Required)
+
+**Симптом:** При применении манифеста вы получаете длинный текст ошибки от API-сервера.
+**Причина:** Несоответствие ресурса `openAPIV3Schema` в CRD.
+**Решение:** 
+1. Внимательно прочитайте ошибку. API-сервер всегда указывает конкретный путь, например `spec.replicas`.
+2. Проверьте манифест CRD (команда `kubectl get crd webapps.lab.example.com -o yaml`), найдите это поле и посмотрите ограничения (`minimum`, `required`).
+3. Исправьте свой `webapp.yaml`.
+
+### Инцидент 2: Объект завис в статусе Terminating (Проблема с Finalizer)
+
+**Симптом:** Вы удаляете ресурс `kubectl delete webapp stuck-webapp`, команда "зависла" и не возвращает управление. Вы нажимаете Ctrl+C. Ресурс остаётся в кластере со статусом `Terminating`.
+**Причина:** В объекте прописан `metadata.finalizers`, но контроллер, который должен его обработать и удалить, не работает.
+**Решение:**
+1. Посмотреть финализаторы объекта: 
+   `kubectl -n lab get webapp my-webapp -o jsonpath='{.metadata.finalizers}'`
+2. Найти и починить контроллер, чтобы он штатно выполнил очистку.
+3. *Крайняя мера (только если внешняя система очищена вручную):* Принудительно удалить финализатор патчем:
+   ```bash
+   kubectl -n lab patch webapp my-webapp --type=merge -p '{"metadata":{"finalizers":[]}}'
+   ```
+   Как только массив опустеет, объект исчезнет.
+
+### Инцидент 3: `kubectl get <kind>` — «not found» / «the server doesn't have a resource type»
+
+**Симптом:** Вы печатаете команду, но получаете ошибку о неизвестном ресурсе.
+**Причины:**
+1. Опечатка в `kind` (например, `webap`). Пользуйтесь `shortNames` (например, `wa`), они редко меняются.
+2. CRD физически не применен в кластере: проверьте `kubectl get crd | grep example.com`.
+3. В `apiVersion` манифеста указана неверная группа или версия (например `apiVersion: example.com/v2` вместо `lab.example.com/v1`).
+
+### Инцидент 4: Контроллер работает нестабильно (Отсутствие Leader Election / RBAC ошибки)
+
+**Симптом:** Состояние дочерних ресурсов (например, Deployment) постоянно "прыгает" туда-сюда. В событиях (`kubectl get events`) видны частые Create/Delete/Update.
+**Причина (Split-brain):** В кластере запущено несколько реплик контроллера без механизма **Leader Election** (выбор лидера). Оба процесса реагируют на одни и те же CR и мешают друг другу.
+**Причина (RBAC):** Если контроллер вообще ничего не делает, часто проблема в том, что его `ServiceAccount` не имеет прав (ClusterRole) на управление целевыми ресурсами (Deployment, Service). Проверяйте логи: `kubectl logs <operator-pod>` на предмет "Forbidden".
 
 ---
 
 ## Проверка модуля
 
 ```bash
+# Применим базовые манифесты, если не применили ранее
 kubectl apply -f manifests/crd.yaml
 kubectl apply -f manifests/webapp.yaml
 
+# Запуск автопроверки
 bash verify/verify.sh
-# [OK] CRD WebApp registered + my-webapp instance exists
+# Вывод:
+# [OK] CRD WebApp registered
+# [OK] my-webapp instance exists
 # [OK] module 19 verified
 ```
-
-`verify.sh`: namespace `lab` → CRD `webapps.lab.example.com` зарегистрирована →
-экземпляр `my-webapp` существует.
 
 ---
 
 ## Финальная карта ресурсов модуля
 
-| Ресурс | Что демонстрирует |
+| Ресурс | Роль и назначение |
 |--------|-------------------|
-| `webapps.lab.example.com` (CRD) | расширение API своим типом + схема/валидация |
-| `my-webapp` (CR) | экземпляр кастомного ресурса, printer columns |
-| `bad-webapp` (broken) | отклонение по схеме (admission) |
-| prometheus-operator (внешний) | реальный оператор (CRD + reconcile) |
+| `webapps.lab.example.com` (CRD) | Расширение API своим типом, объявление схемы, правил OpenAPI и CEL. |
+| `my-webapp` (CR) | Экземпляр нашего ресурса. Демонстрация валидации, printer columns и subresources. |
+| `bad-webapp` (broken) | Демонстрация отклонения ресурса по схеме Admission-контроллером. |
+| `prometheus-operator` | Пример реального production-grade оператора. |
+| `operator.py` (Kopf) | Учебный контроллер для понимания Reconcile Loop. |
 
 ---
 
 ## Теоретические вопросы (итоговые)
 
-1. Что регистрирует CRD и что появляется автоматически после этого?
-2. Версии CRD: чем `served` отличается от `storage` и сколько может быть каждой?
-3. Где и как валидируется Custom Resource? Что делает server-side pruning с полем,
-   которого нет в схеме?
-4. Чем CRD без контроллера отличается от оператора?
-5. Опишите reconcile loop по шагам. Что значит «идемпотентный, level-triggered»?
-6. Зачем `ownerReferences` (каскадное удаление) и `finalizers` (Terminating)?
-7. Зачем нужны `subresources.status`/`scale` и `additionalPrinterColumns`?
+1. Почему Kubernetes использует декларативную модель и Level-triggered подход в контроллерах вместо Edge-triggered (на основе событий)?
+2. На каком этапе HTTP-запроса API-сервер применяет правила `x-kubernetes-validations` (CEL)?
+3. В чем ключевая разница между `ownerReferences` и `finalizers`? Приведите пример, когда нужно использовать каждый из механизмов.
+4. Какую угрозу безопасности предотвращает разделение ресурса на основной объект и `subresources.status`?
+5. Что означает термин "Идемпотентность" в контексте функции `Reconcile()`?
+6. Что такое "Server-side pruning" и как он помогает бороться с опечатками в YAML?
 
 ---
 
 ## Практические задания (отработка)
 
-> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+> Делайте задания на живом кластере; проверяйте себя командами.
 
-1. Создайте CR с нарушением схемы (replicas=99 / без image) и прочитайте отказ admission.
-2. Докажите server-side pruning: добавьте в CR поле вне схемы и убедитесь, что оно вырезано.
-3. Запустите учебный контроллер (`kopf run controller/operator.py -A`) и проверьте reconcile: создайте WebApp → появились Deployment+Service.
-4. Обновите `spec.replicas` у WebApp и убедитесь, что контроллер масштабировал Deployment.
-5. Удалите WebApp и подтвердите каскадное удаление Deployment/Service через `ownerReferences`.
+1. **Pruning в действии:** Создайте CR `WebApp`, добавив в секцию `spec` ключ `environment: production`. Примените YAML. С помощью `kubectl get -o yaml` убедитесь, что поле `environment` бесследно исчезло.
+2. **Написание схемы:** Откройте `manifests/crd.yaml` и измените валидацию: сделайте поле `host` (внутри `spec`) обязательным (`required`). Попробуйте применить `manifests/webapp.yaml` (где нет поля `host`) и добейтесь ошибки валидации.
+3. **Зависший ресурс:** В манифест `webapp.yaml` вручную добавьте секцию `metadata.finalizers: ["lab/test-blocker"]`. Примените манифест. Затем попробуйте удалить: `kubectl delete webapp my-webapp`. Заметьте, что процесс завис. Откройте второй терминал, снимите финализатор с помощью `kubectl patch`, и убедитесь, что первый терминал завершил команду.
+4. **Масштабирование:** Убедитесь, что команда `kubectl scale --replicas=4 webapp my-webapp` работает. Посмотрите, как изменилось поле `.spec.replicas`.
+5. **Анализ логов:** Запустите `kopf run controller/operator.py -A`, измените образ `nginx:alpine` на `nginx:latest` с помощью `kubectl edit webapp my-webapp` и найдите в консоли оператора строчку о том, что Reconcile среагировал на изменения.
 
 ---
 
 ## Шпаргалка
 
 ```bash
-# === CRD ===
+# === Управление CRD ===
 kubectl apply -f manifests/crd.yaml
 kubectl get crd | grep example.com
 kubectl api-resources --api-group=lab.example.com
+# Посмотреть OpenAPI схему:
+kubectl get crd webapps.lab.example.com -o yaml
 
-# === Custom Resources ===
+# === Работа с Custom Resources ===
 kubectl -n lab apply -f manifests/webapp.yaml
 kubectl -n lab get wa -o wide
 kubectl -n lab get webapp my-webapp -o yaml
+# Масштабирование (благодаря subresources.scale):
+kubectl -n lab scale webapp my-webapp --replicas=3
 
-# === реальные операторы на кластере ===
+# === Диагностика Операторов ===
+# Поиск операторов в кластере:
 kubectl get crd | grep -E "monitoring.coreos.com|cert-manager|argoproj"
 kubectl get pods -A | grep -i operator
+# Удаление зависшего финализатора:
+kubectl patch webapp my-webapp -p '{"metadata":{"finalizers":[]}}' --type=merge
 
 # === Уборка ===
 kubectl -n lab delete -f manifests/webapp.yaml
-kubectl delete crd webapps.lab.example.com   # удаляет CRD И все его CR
+kubectl delete crd webapps.lab.example.com   # Каскадно удалит CRD И все существующие CR!
 ```
 
 ---
 
-
 ## Чему вы научились
 
 В этом модуле вы научились:
-- Расширению Kubernetes API через CustomResourceDefinition
-- Пониманию паттерна Operator/Controller
-- Управлению кастомными ресурсами через kubectl
+- Глубокому пониманию принципов расширения API Kubernetes через CustomResourceDefinition.
+- Механизмам строгой валидации ресурсов (OpenAPI, Server-side Pruning, CEL-правила).
+- Архитектуре операторов: как работают Reconcile Loop, Informers, OwnerReferences и Finalizers.
+- Интеграции собственных типов ресурсов со стандартным инструментарием `kubectl` (Printer columns, scale, status).
+- Диагностике типичных проблем при работе с кастомными ресурсами и контроллерами.
 
 ## Уборка
 
 ```bash
+# Останавливаем локальный процесс оператора, если он еще жив
+pkill -f "kopf run" || true
+
+# Удаляем ресурсы и сам CRD
 kubectl -n lab delete -f manifests/webapp.yaml --ignore-not-found
 kubectl delete crd webapps.lab.example.com --ignore-not-found
 ```

@@ -2,55 +2,59 @@
 
 ## Оглавление
 <!-- TOC -->
-- [Предварительные требования](#-)
-- [Стартовая проверка](#-)
-- [Часть 1: Модель NetworkPolicy и enforcement](#-1--networkpolicy--enforcement)
-  - [Теория для изучения перед частью](#----)
-  - [1.1 default-deny действительно режет](#11-default-deny--)
-- [Часть 2: Микросегментация web → api → db](#-2--web--api--db)
-  - [Теория для изучения перед частью](#----)
-  - [2.1 Развернуть сегментацию](#21--)
-  - [2.2 Тест матрицы связности](#22---)
-- [Часть 3: Egress-контроль и DNS](#-3-egress---dns)
-  - [Теория для изучения перед частью](#----)
-  - [3.1 Почему allow-dns обязателен](#31--allow-dns-)
-- [Часть 4: namespaceSelector и ipBlock (расширение)](#-4-namespaceselector--ipblock-)
-  - [Теория для изучения перед частью](#----)
-- [Troubleshooting — частые проблемы](#troubleshooting---)
-  - [Инцидент 1: default-deny сломал весь namespace (нет allow-dns)](#-1-default-deny---namespace--allow-dns)
-  - [Инцидент 2: забыли egress-сторону](#-2--egress-)
-  - [Инцидент 3: «политика не работает»](#-3---)
-  - [Инцидент 4: Ошибка AND vs OR в селекторах](#-4--and-vs-or--)
-- [Проверка модуля](#-)
-- [Финальная карта (матрица сегментации)](#---)
-- [Контрольные вопросы](#-)
-- [Практические задания (отработка)](#--)
-- [Шпаргалка](#)
-- [Чему вы научились](#--)
-- [Уборка](#)
+- [Предварительные требования](#предварительные-требования)
+- [Стартовая проверка](#стартовая-проверка)
+- [Архитектура и концепция микросегментации](#архитектура-и-концепция-микросегментации)
+- [Часть 1: Модель NetworkPolicy и enforcement](#часть-1-модель-networkpolicy-и-enforcement)
+  - [Теория для изучения перед частью](#теория-для-изучения-перед-частью)
+  - [1.1 default-deny действительно режет](#11-default-deny-действительно-режет)
+- [Часть 2: Микросегментация web → api → db](#часть-2-микросегментация-web--api--db)
+  - [Теория для изучения перед частью](#теория-для-изучения-перед-частью-1)
+  - [2.1 Развернуть сегментацию](#21-развернуть-сегментацию)
+  - [2.2 Тест матрицы связности](#22-тест-матрицы-связности)
+- [Часть 3: Egress-контроль и DNS](#часть-3-egress-контроль-и-dns)
+  - [Теория для изучения перед частью](#теория-для-изучения-перед-частью-2)
+  - [3.1 Почему allow-dns обязателен](#31-почему-allow-dns-обязателен)
+- [Часть 4: namespaceSelector и ipBlock (расширение)](#часть-4-namespaceselector-и-ipblock-расширение)
+  - [Теория для изучения перед частью](#теория-для-изучения-перед-частью-3)
+  - [4.1 Использование ipBlock и namespaceSelector](#41-использование-ipblock-и-namespaceselector)
+- [Troubleshooting — частые проблемы](#troubleshooting---частые-проблемы)
+  - [Инцидент 1: default-deny сломал весь namespace (нет allow-dns)](#инцидент-1-default-deny-сломал-весь-namespace-нет-allow-dns)
+  - [Инцидент 2: забыли egress-сторону](#инцидент-2-забыли-egress-сторону)
+  - [Инцидент 3: «политика не работает» (CNI без enforcement)](#инцидент-3-политика-не-работает-cni-без-enforcement)
+  - [Инцидент 4: Ошибка AND vs OR в селекторах](#инцидент-4-ошибка-and-vs-or-в-селекторах)
+  - [Инцидент 5: Ingress Controller не может достучаться до подов](#инцидент-5-ingress-controller-не-может-достучаться-до-подов)
+  - [Инцидент 6: Блокировка эфемерных портов при строгом Egress](#инцидент-6-блокировка-эфемерных-портов-при-строгом-egress)
+- [Инструменты отладки (Debugging Dataplane)](#инструменты-отладки-debugging-dataplane)
+- [Проверка модуля](#проверка-модуля)
+- [Финальная карта (матрица сегментации)](#финальная-карта-матрица-сегментации)
+- [Контрольные вопросы](#контрольные-вопросы)
+- [Практические задания (отработка)](#практические-задания-отработка)
+- [Шпаргалка](#шпаргалка)
+- [Чему вы научились](#чему-вы-научились)
+- [Уборка](#уборка)
 <!-- /TOC -->
 
+> ⏱ время ~45 мин · сложность 4/5 · пререквизиты: Трек 1 и Трек 3
 
-> ⏱ время ~25 мин · сложность 4/5 · пререквизиты: Трек 1 и Трек 3
+Цель: построить и проверить настоящую сетевую сегментацию `web → api → db` — где каждый уровень видит только то, что ему положено, а запрещённые пути по-настоящему блокируются. В отличие от базовых модулей, здесь акцент на **enforcement**: политики реально режут трафик, и мы это доказываем тестами, а также глубоко разбираем причины сбоев при настройке.
 
-Цель: построить и проверить настоящую сетевую сегментацию `web → api → db` —
-где каждый уровень видит только то, что ему положено, а запрещённые пути
-по-настоящему блокируются. В отличие от модуля 04 (база), здесь акцент на
-**enforcement**: политики реально режут трафик, и мы это доказываем тестами.
-
-> **Требование к среде.** Этот модуль имеет смысл только на кластере с CNI,
-> который применяет NetworkPolicy: **Calico / Cilium / GKE Dataplane V2**. Наш
-> Kubespray-кластер (Calico) подходит. На managed GKE без Dataplane V2 или голом
-> kind политики создаются, но трафик НЕ фильтруется — сегментация будет фикцией.
+> **Требование к среде.** Этот модуль имеет смысл только на кластере с CNI (Container Network Interface), который умеет применять NetworkPolicy: **Calico / Cilium / GKE Dataplane V2**. Наш Kubespray-кластер (Calico) подходит. На managed GKE без Dataplane V2 или базовом kind политики создаются как объекты API, но трафик НЕ фильтруется — сегментация будет лишь фикцией.
 
 ---
 
 ## Предварительные требования
 
+Перед началом лабораторной работы убедитесь, что вы подключены к правильному кластеру и ваше окружение чистое:
+
 ```bash
 # kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
 export KUBECONFIG=/root/.kube/kubespray.conf
+
+# Создаем namespace для экспериментов, если он не существует
 kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
+
+# Очищаем namespace от предыдущих запусков
 kubectl -n lab delete deploy,svc,netpol,pod --all --ignore-not-found 2>/dev/null
 
 # КЛЮЧЕВОЕ: убедиться, что CNI умеет enforcement
@@ -62,11 +66,49 @@ kubectl -n kube-system get pods | grep -iE "calico|cilium" | head -2 \
 
 ## Стартовая проверка
 
+Проверим статус CNI-плагина Calico в кластере. Calico должен быть запущен на каждой ноде кластера в виде DaemonSet.
+
 ```bash
 # Калико на всех нодах (по одному calico-node на ноду)
 kubectl -n kube-system get pods -l k8s-app=calico-node -o wide 2>/dev/null \
   || kubectl -n kube-system get pods | grep calico-node
 ```
+
+Вы должны увидеть поды `calico-node`, которые находятся в статусе `Running`. Если вы используете Cilium, ищите `cilium` в выводе.
+
+---
+
+## Архитектура и концепция микросегментации
+
+Микросегментация (Microsegmentation) — это продвинутый подход к безопасности сети, при котором сетевые сегменты изолируются друг от друга до уровня индивидуальных рабочих нагрузок (в Kubernetes — подов).
+
+Традиционная сегментация опирается на сети VLAN, подсети и IP-адреса. В Kubernetes поды эфемерны, их IP-адреса постоянно меняются. Поэтому микросегментация здесь опирается на **метки (labels)**.
+
+### Концепция Zero Trust (Нулевое доверие)
+
+В основе NetworkPolicy лежит принцип Zero Trust.
+1. **Default Allow:** Если в кластере нет объектов NetworkPolicy, применяется правило "разрешено всё" (внутри кластера поды могут свободно общаться друг с другом).
+2. **Default Deny:** Как только в namespace появляется хотя бы одна NetworkPolicy, которая затрагивает под (попадает под селектор), для этого пода включается режим "запрещено всё, что явно не разрешено политиками".
+
+Архитектура классического 3-tier приложения с микросегментацией выглядит так:
+
+```text
+       [ Внешний интернет / Клиенты ]
+               │
+               ▼ (Ingress Controller)
+      ┌─────────────────┐       ┌─────────────────┐
+      │   web (frontend)│── X ─▶│      db         │
+      └─────────────────┘       └─────────────────┘
+               │                         ▲
+               │ (разрешено: HTTP/80)    │ (разрешено: TCP/5432)
+               ▼                         │
+      ┌─────────────────┐                │
+      │   api (backend) │────────────────┘
+      └─────────────────┘
+```
+*Диаграмма 1. Трехуровневая архитектура с запретом прямого доступа.*
+
+В этой архитектуре скомпрометированный frontend-сервер (например, из-за уязвимости в веб-сервере) не сможет установить соединение с базой данных, поскольку на сетевом уровне `web` → `db` не разрешен.
 
 ---
 
@@ -74,57 +116,82 @@ kubectl -n kube-system get pods -l k8s-app=calico-node -o wide 2>/dev/null \
 
 ### Теория для изучения перед частью
 
-- По умолчанию связность **разрешена** (default-allow). NetworkPolicy переводит
-  выбранные поды в **allow-list**: что не разрешено явно — запрещено.
-- **`policyTypes`**: `Ingress` (входящий), `Egress` (исходящий). Важно: чтобы под
-  A достучался до B, нужны ОБЕ стороны — egress у A к B И ingress у B от A.
-- **Селекторы источников/целей:** `podSelector` (по labels подов),
-  `namespaceSelector` (по labels namespace), `ipBlock` (CIDR).
-- **Политики аддитивны (OR):** несколько политик на один под — их разрешения
-  складываются. Запрета «явного» нет — есть отсутствие разрешения.
-- **Enforcement делает CNI**, а не сам Kubernetes. Без поддерживающего CNI объект
-  есть, а фильтрации нет.
+- По умолчанию связность **разрешена** (default-allow). NetworkPolicy переводит выбранные поды в **allow-list**: что не разрешено явно — запрещено.
+- **`policyTypes`**: Определяет, к какому типу трафика применяется политика: `Ingress` (входящий), `Egress` (исходящий) или оба. Важно: чтобы под A достучался до B, нужны ОБЕ стороны — egress у A к B И ingress у B от A. Если хотя бы одна сторона запрещает проход пакетов, соединение не будет установлено.
+- **Селекторы источников/целей:** В манифестах мы описываем, кого куда пускать:
+  - `podSelector` (по labels подов в текущем namespace),
+  - `namespaceSelector` (по labels самих namespace),
+  - `ipBlock` (строгие CIDR подсети, полезны для внешних ресурсов).
+- **Политики аддитивны (OR):** Если на один под действуют несколько политик, их разрешения складываются (работают как логическое ИЛИ). Запрета «явного» в NetworkPolicy нет — есть только отсутствие разрешения, которое превращается в блокировку при наличии политики.
+- **Enforcement делает CNI**, а не сам Kubernetes. Само API K8s просто хранит объекты. Без поддерживающего CNI объект сохраняется в etcd, но фильтрации нет.
 
-- **Что CNI делает «под капотом» (Calico).** NetworkPolicy — это лишь ОБЪЕКТ в API.
-  `calico-node` (DaemonSet на каждой ноде) ВОТЧИТ их и транслирует в правила
-  пакетного фильтра на ноде: `iptables`/`ipset` (стандартный dataplane) или
-  **eBPF**-программы (Calico-eBPF / Cilium). `default-deny` = правило «DROP всё, что
-  не разрешено явным allow». Пакет от пода проходит через эти правила ДО выхода с
-  ноды — поэтому блок реальный, а не «в apiserver».
+#### Как CNI (Calico) применяет правила на узле
 
-- **Семантика пустого селектора (частая путаница):**
+`calico-node` (DaemonSet на каждой ноде) подписывается на события изменения NetworkPolicy через API Server. Когда объект создается, агент `felix` (компонент Calico) транслирует эти правила в правила пакетного фильтра Linux на самой ноде:
+- **В режиме iptables**: создаются цепочки `cali-pi-*` (policy ingress) и `cali-po-*` (policy egress).
+- **В режиме eBPF**: правила загружаются напрямую в ядро, минуя netfilter, что сильно повышает производительность.
+
+`default-deny` — это просто правило «DROP всё, что не разрешено явным allow» в конце цепочки. Пакет от пода блокируется или разрешается прямо на виртуальном интерфейсе (veth) до маршрутизации, поэтому фильтрация абсолютно реальная.
+
+#### Семантика пустого селектора (частая путаница)
 
 | Запись | Значит |
 |--------|--------|
 | `podSelector: {}` | ВСЕ поды namespace (база для default-deny) |
-| `podSelector:` отсутствует в `from` | (в правиле) — не ограничивать по подам |
-| `from: []` (пустой список) | НИКОГО не пускать (пустой allow) |
-| `from:` отсутствует при `policyTypes:[Ingress]` | весь ingress ЗАПРЕЩЁН |
+| `podSelector:` отсутствует в `from` | Внутри правила — не ограничивать источник по подам, пускать всех разрешенных селектором namespace |
+| `from: []` (пустой список) | НИКОГО не пускать (пустой allow-list) |
+| `from:` отсутствует при `policyTypes:[Ingress]` | весь входящий трафик ЗАПРЕЩЁН |
 
-| CNI | Enforcement | Dataplane |
+| CNI | Enforcement | Dataplane (Технология на ноде) |
 |-----|-------------|-----------|
 | Calico | ✅ (наш кластер) | iptables/ipset или eBPF |
-| Cilium | ✅ | eBPF (+ L7/FQDN) |
-| GKE Dataplane V2 | ✅ | eBPF (Cilium) |
+| Cilium | ✅ | eBPF (+ L7/FQDN на уровне прокси) |
+| GKE Dataplane V2 | ✅ | eBPF (основан на Cilium) |
 | Flannel / голый kind | ❌ объект есть, трафик НЕ режется | — |
-
----
-
-**Цель:** убедиться, что default-deny реально закрывает трафик.
 
 ---
 
 ### 1.1 default-deny действительно режет
 
+**Цель:** развернуть тестовое приложение и убедиться, что default-deny реально закрывает трафик.
+
+Сначала развернем приложение без политик. Для этого создадим файл с манифестами, если его нет (или используем существующий в `manifests/app.yaml`).
+
 ```bash
+# Разворачиваем 3 яруса приложения (web, api, db)
 kubectl -n lab apply -f manifests/app.yaml
 kubectl -n lab rollout status deploy/web --timeout=120s
+kubectl -n lab rollout status deploy/api --timeout=120s
+kubectl -n lab rollout status deploy/db --timeout=120s
 
-# ДО политик: любой под ходит куда угодно
+# ДО включения политик: любой под ходит куда угодно
+# Запустим тестовый под web и постучимся в db (должно работать)
 kubectl -n lab run t --image=busybox:1.36 --restart=Never -i --rm --labels app=web -- \
   wget -qO- --timeout=4 http://db | grep -i title
-# <title>Welcome to nginx!</title>   <- web достучался до db (пока всё открыто)
 
+# Вывод: <title>Welcome to nginx!</title>   <- web достучался до db (пока всё открыто)
+```
+
+Теперь создадим политику Default Deny, которая блокирует весь входящий и исходящий трафик в неймспейсе:
+
+```yaml
+# 00-default-deny.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: lab
+spec:
+  podSelector: {} # Применяется ко ВСЕМ подам в namespace 'lab'
+  policyTypes:
+  - Ingress
+  - Egress
+  # Секции ingress и egress отсутствуют, что означает "ничего не разрешено"
+```
+
+Применим эту политику:
+
+```bash
 # Включаем default-deny
 kubectl -n lab apply -f manifests/netpol/00-default-deny.yaml
 sleep 6
@@ -132,13 +199,16 @@ sleep 6
 # ПОСЛЕ: тот же запрос блокируется (на Calico — реально)
 kubectl -n lab run t --image=busybox:1.36 --restart=Never -i --rm --labels app=web -- \
   wget -qO- --timeout=6 http://db 2>&1 | tail -1
-# wget: download timed out  (или под завершается с Error) <- ЗАБЛОКИРОВАНО
+
+# Вывод: wget: download timed out  (или под завершается с Error) <- ЗАБЛОКИРОВАНО
 ```
 
-**Контрольные вопросы:**
-1. Что разрешено по умолчанию и что меняет default-deny?
-2. Почему для связи A→B нужны и egress у A, и ingress у B?
-3. Кто реально применяет NetworkPolicy — Kubernetes или CNI?
+Мы доказали, что CNI применяет правила.
+
+**Контрольные вопросы к части 1:**
+1. Что разрешено по умолчанию в новом namespace и что меняет применение политики default-deny?
+2. Почему для успешной связи A→B нужны и egress у A, и ingress у B? Что произойдет, если A разрешено отправлять пакеты, но B запрещено принимать?
+3. Кто реально применяет NetworkPolicy — Kube API Server, Kubelet или CNI? Как это доказать?
 
 ---
 
@@ -146,53 +216,136 @@ kubectl -n lab run t --image=busybox:1.36 --restart=Never -i --rm --labels app=w
 
 ### Теория для изучения перед частью
 
-- Классическая 3-уровневая сегментация: **web** принимает извне и ходит в
-  **api**; **api** ходит в **db**; **db** не принимает ни от кого, кроме api.
-- Порядок включения политик: `default-deny` → `allow-dns` (иначе сломается
-  резолв) → правила по уровням.
-- Цель — **least privilege на сети**: скомпрометированный web не дотянется до db
-  напрямую.
-
----
-
-**Цель:** собрать сегментацию и проверить матрицу связности.
-
-**Ресурсы:** `manifests/app.yaml` (web/api/db) + `netpol/00..04`.
-
----
+- Классическая 3-уровневая сегментация подразумевает строгий путь движения трафика:
+  - **web** принимает трафик извне (или от Ingress) и ходит в **api**.
+  - **api** ходит в **db**.
+  - **db** не принимает ни от кого трафик, кроме **api**.
+- Порядок включения политик критичен: `default-deny` → `allow-dns` (иначе сломается резолв имён) → конкретные правила по уровням.
+- Главная цель — **least privilege на сети (Принцип наименьших привилегий)**: скомпрометированный уровень не должен дотянуться до бэкенд-ресурсов напрямую.
 
 ### 2.1 Развернуть сегментацию
 
+Давайте рассмотрим манифесты политик, которые нам нужны для работы приложения:
+
+**Политика для `web` (исходящий трафик к API):**
+```yaml
+# 02-web-egress.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-egress
+  namespace: lab
+spec:
+  podSelector:
+    matchLabels:
+      app: web
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: api
+    ports:
+    - protocol: TCP
+      port: 80
+```
+
+**Политика для `api` (входящий от web, исходящий к db):**
+```yaml
+# 03-api-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-policy
+  namespace: lab
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: web
+    ports:
+    - protocol: TCP
+      port: 80
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: db
+    ports:
+    - protocol: TCP
+      port: 80
+```
+
+**Политика для `db` (только входящий от api):**
+```yaml
+# 04-db-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-policy
+  namespace: lab
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api
+    ports:
+    - protocol: TCP
+      port: 80
+```
+
+Применим все политики разом:
+
 ```bash
-kubectl -n lab apply -f manifests/netpol/    # все 5 политик (00..04)
+kubectl -n lab apply -f manifests/netpol/    # применяем все политики 00..04
 kubectl -n lab get netpol
-# default-deny / allow-dns / web-egress / api-policy / db-policy
+# Ожидаемый вывод: default-deny / allow-dns / web-egress / api-policy / db-policy
 ```
 
 ### 2.2 Тест матрицы связности
 
+Для тестирования напишем bash-функцию `probe`, которая будет запускать временный под с нужным `label`, имитируя определенный ярус, и пытаться достучаться до другого.
+
 ```bash
 # Хелпер: запрос из пода с заданным label (имитируем уровень)
-probe() { kubectl -n lab run p-$RANDOM --labels app=$1 --image=busybox:1.36 \
-  --restart=Never -i --rm --timeout=40s -- wget -qO- --timeout=5 http://$2 2>&1 | tail -1; }
+probe() { 
+  kubectl -n lab run p-$RANDOM --labels app=$1 --image=busybox:1.36 \
+  --restart=Never -i --rm --timeout=40s -- wget -qO- --timeout=5 http://$2 2>&1 | tail -1; 
+}
 
-probe web api   # OK  (web-egress -> api, api-policy ingress <- web)
-probe web db    # БЛОК (у web нет egress к db; db принимает только api)
-probe api db    # OK  (api-policy egress -> db, db-policy ingress <- api)
+# Тестируем:
+probe web api   # Ожидание: OK. (web-egress разрешает -> api, api-policy ingress разрешает <- web)
+probe web db    # Ожидание: БЛОК. (у web нет egress к db; db принимает только api)
+probe api db    # Ожидание: OK. (api-policy egress разрешает -> db, db-policy ingress разрешает <- api)
 ```
+
+**Матрица сегментации после применения политик:**
 
 | Из \ В | api | db |
 |--------|-----|----|
-| **web** | ✅ разрешено | 🔒 заблокировано |
-| **api** | — | ✅ разрешено |
+| **web** | ✅ разрешено | 🔒 заблокировано (timeout) |
+| **api** | 🔒 заблокировано | ✅ разрешено |
 
-> Скомпрометированный web физически не дотянется до db — это и есть ценность
-> микросегментации.
+> Скомпрометированный `web` физически не дотянется до `db` — это и есть практическая ценность микросегментации. 
 
-**Контрольные вопросы:**
-1. Почему web→db блокируется, хотя web→api работает?
-2. Какие две политики вместе разрешают путь api→db?
-3. Как изменить правила, чтобы добавить кэш `cache`, доступный только api?
+**Контрольные вопросы к части 2:**
+1. Почему `web→db` блокируется, хотя `web→api` работает корректно?
+2. Какие две политики (на стороне источника и цели) вместе разрешают путь `api→db`?
+3. Как изменить правила, чтобы добавить в кластер кеш (например, Redis под именем `cache`), доступный только для чтения/записи со стороны `api`? Опишите логику политик.
 
 ---
 
@@ -200,44 +353,70 @@ probe api db    # OK  (api-policy egress -> db, db-policy ingress <- api)
 
 ### Теория для изучения перед частью
 
-- `default-deny` закрывает egress тоже — поэтому **DNS ломается первым**: резолв
-  имён идёт к CoreDNS (`kube-system`, `:53`), а это egress.
-- Правило: после `default-deny` ВСЕГДА первым добавляют `allow-dns`.
-- Egress-политики позволяют ограничить и выход в интернет (разрешить только
-  нужные адреса через `ipBlock`).
-
-- **Корректный allow-dns (UDP И TCP :53).** DNS обычно по UDP, но крупные ответы и
-  zone-transfer — по TCP, поэтому открывают ОБА протокола. На Kubespray резолвер —
-  `nodelocaldns` на link-local `169.254.25.10`, а НЕ под CoreDNS напрямую (см. наш
-  `01-allow-dns.yaml`): egress :53 нужен к `ipBlock 169.254.25.10/32` И к поду
-  `k8s-app=kube-dns` (для кластеров без nodelocaldns).
-- **Egress к ВНЕШНИМ ресурсам.** Прод-приложение часто ходит во внешнюю БД (RDS),
-  платёжный API, S3 — это НЕ in-cluster поды, podSelector тут не подходит. Открывают
-  egress к их CIDR через `ipBlock` (или, в Cilium/Calico, по FQDN — L7-расширение
-  поверх стандартного NetworkPolicy):
-  ```yaml
-  egress:
-  - to: [{ ipBlock: { cidr: 52.0.0.0/11 } }]   # напр. диапазон облачного RDS
-    ports: [{ protocol: TCP, port: 5432 }]
-  ```
-
----
+- При применении `default-deny` с `policyTypes: [Ingress, Egress]`, закрывается также и исходящий трафик. Первое, что при этом "отваливается" — это **DNS-разрешение имён**.
+- Почему? Резолв имен (например, когда `web` пытается найти IP для `http://api`) идет в `kube-system` на порт 53 (обычно к подам `CoreDNS` или `nodelocaldns`). Это исходящий (egress) трафик.
+- Золотое правило: после `default-deny` ВСЕГДА первым делом добавляют `allow-dns`. Без него ни один под не сможет обратиться к другим сервисам по их имени.
+- **Особенности DNS (UDP и TCP):** DNS обычно работает по UDP, но для крупных ответов (truncated responses) или zone-transfer используется TCP. Поэтому политика должна открывать **оба** протокола.
+- На кластерах с `NodeLocal DNSCache` (как Kubespray) локальный кэширующий DNS сервер висит на link-local адресе (обычно `169.254.25.10`). К нему нельзя достучаться через `podSelector`, так как это IP узла. Требуется использовать `ipBlock`.
 
 ### 3.1 Почему allow-dns обязателен
 
-```bash
-# Без allow-dns (только default-deny) резолв имён не работает:
-kubectl -n lab delete netpol allow-dns 2>/dev/null
-kubectl -n lab run t --image=busybox:1.36 --restart=Never -i --rm -- nslookup api 2>&1 | tail -2
-# *** Can't find api: ...  / bad address      <- DNS отрезан
+Проведем эксперимент, удалив разрешение на DNS:
 
-kubectl -n lab apply -f manifests/netpol/01-allow-dns.yaml   # вернуть
+```bash
+# Удаляем allow-dns политику
+kubectl -n lab delete netpol allow-dns 2>/dev/null
+
+# Пытаемся обратиться к api из пода t (имитация web). Имя "api" не зарезолвится!
+kubectl -n lab run t --image=busybox:1.36 --restart=Never -i --rm -- nslookup api 2>&1 | tail -2
+# Вывод: *** Can't find api: No answer / bad address      <- DNS отрезан
+
+# Возвращаем политику на место
+kubectl -n lab apply -f manifests/netpol/01-allow-dns.yaml
 ```
 
-**Контрольные вопросы:**
-1. Почему DNS «отваливается» первым при default-deny?
-2. Где живёт CoreDNS и какой это тип трафика (ingress/egress) для пода-клиента?
-3. Как egress-политикой ограничить выход подов в интернет?
+Давайте заглянем внутрь правильного `allow-dns` для кластера с CoreDNS и NodeLocalDNS:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: lab
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  # Правило для обращения к CoreDNS в неймспейсе kube-system
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Дополнительное правило для NodeLocal DNSCache (Kubespray использует его)
+  - to:
+    - ipBlock:
+        cidr: 169.254.25.10/32
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+```
+
+**Контрольные вопросы к части 3:**
+1. Почему разрешение DNS-запросов ломается в первую очередь при включении default-deny?
+2. Где живет CoreDNS (в каком namespace) и какой это тип трафика (ingress или egress) для пода-клиента?
+3. В чем разница между UDP:53 и TCP:53 для DNS? Почему нужно открывать оба порта?
+4. Как с помощью egress-политики (`ipBlock`) ограничить выход подов во внешний интернет, разрешив, например, только доступ к внешнему платежному шлюзу (API)?
 
 ---
 
@@ -245,112 +424,136 @@ kubectl -n lab apply -f manifests/netpol/01-allow-dns.yaml   # вернуть
 
 ### Теория для изучения перед частью
 
-- **namespaceSelector** разрешает трафик из ДРУГОГО namespace (например, из
-  `monitoring` к метрикам). Комбинируется с podSelector.
-- **ipBlock** оперирует CIDR: разрешить подсеть с исключениями (`except`) —
-  полезно для доступа к внешним адресам/балансировщикам.
+- **`namespaceSelector`** разрешает трафик от/к подам, находящимся в ДРУГОМ namespace (например, чтобы пустить Prometheus из неймспейса `monitoring` для сбора метрик с `api`). Он может комбинироваться с `podSelector`.
+- **`ipBlock`** работает на уровне IP-подсетей (CIDR). Это необходимо, если цель или источник находится ВНЕ кластера Kubernetes (внешняя БД RDS, внешнее API, или балансировщик нагрузки облака). Можно использовать параметр `except` для исключения конкретных адресов из более широкой подсети.
 
-**⚠️ AND vs OR — САМАЯ частая ошибка (разница в ОДНОМ дефисе):**
+### 4.1 Ловушка AND vs OR
+
+Самая частая ошибка при написании манифестов NetworkPolicy — путаница между логическим И (AND) и логическим ИЛИ (OR). Эта разница определяется всего лишь одним знаком дефиса `-` (элементом массива в YAML).
+
+**Задача:** Разрешить доступ к приложению только подам `app=prometheus`, которые находятся строго в неймспейсе `monitoring`.
 
 ```yaml
-# (1) AND — под app=prometheus И ОДНОВРЕМЕННО в ns monitoring.
-#     namespaceSelector и podSelector в ОДНОМ элементе списка (нет дефиса между ними):
+# ВАРИАНТ 1: ОШИБКА (Логическое ИЛИ - OR)
+# Доступ получит ЛЮБОЙ под в неймспейсе monitoring + ЛЮБОЙ под с app=prometheus во ВСЕХ неймспейсах.
 from:
 - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: monitoring } }
-  podSelector:       { matchLabels: { app: prometheus } }
+- podSelector:       { matchLabels: { app: prometheus } } # <-- Дефис создает второй независимый элемент
 
-# (2) OR — из ЛЮБОГО пода ns monitoring, ИЛИ из пода app=prometheus в ЛЮБОМ ns.
-#     ДВА отдельных элемента списка (каждый со своим дефисом):
+# ВАРИАНТ 2: ПРАВИЛЬНО (Логическое И - AND)
+# Доступ получит только под app=prometheus из неймспейса monitoring.
 from:
 - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: monitoring } }
-- podSelector:       { matchLabels: { app: prometheus } }
+  podSelector:       { matchLabels: { app: prometheus } } # <-- Нет дефиса, условие комбинируется с предыдущим
 ```
 
-> Один лишний/пропущенный `-` меняет смысл с «строго prometheus-из-monitoring» на
-> «вообще весь monitoring + любой prometheus». Это дыра в безопасности №1 при
-> написании политик. Правило: элементы СПИСКА `from`/`to` — это **OR**; селекторы
-> ВНУТРИ одного элемента — **AND**.
+> **Важно:** Один лишний или пропущенный `-` меняет смысл с «строго prometheus-из-monitoring» на «вообще весь monitoring + любой prometheus». Это **дыра в безопасности №1** при написании политик. Правило: элементы СПИСКА `from`/`to` (каждый с дефисом) — это **OR**; селекторы ВНУТРИ одного элемента (без дефиса перед ключом) — **AND**.
 
-- **`ipBlock`-нюансы:** (а) в одном элементе `ipBlock` НЕЛЬЗЯ совмещать с
-  pod/namespaceSelector (ipBlock — отдельный вид источника); (б) для in-cluster
-  трафика podSelector надёжнее ipBlock (Pod IP эфемерны); (в) `ipBlock` нужен для
-  ВНЕШНИХ адресов (RDS, SaaS-API, link-local nodelocaldns `169.254.25.10/32` для DNS).
+#### Работа с внешними ресурсами (ipBlock)
+
+**Нюансы `ipBlock`:**
+1. В одном элементе `from` или `to` НЕЛЬЗЯ совмещать `ipBlock` с `podSelector` или `namespaceSelector`. Это взаимоисключающие конструкции (ipBlock — для адресов вне K8s, селекторы — для подов).
+2. Для внутрикластерного трафика ВСЕГДА используйте `podSelector` и `namespaceSelector`. IP-адреса подов эфемерны и могут измениться после перезапуска.
+3. `ipBlock` нужен для внешних адресов. Пример — выход в интернет, кроме внутренней сети компании:
 
 ```yaml
-# Пример: пустить ingress к api ещё и из namespace monitoring (Prometheus):
-ingress:
-- from:
-  - namespaceSelector:
-      matchLabels: { kubernetes.io/metadata.name: monitoring }
-    podSelector:
-      matchLabels: { app: prometheus }
-  ports: [{ protocol: TCP, port: 80 }]
-
-# Пример: egress в подсеть, кроме одного диапазона:
+# Пример: egress во весь интернет, кроме внутренней сети 10.0.0.0/8:
 egress:
 - to:
   - ipBlock:
-      cidr: 10.0.0.0/8
-      except: ["10.10.0.0/24"]
+      cidr: 0.0.0.0/0
+      except: ["10.0.0.0/8"]
 ```
 
-**Контрольные вопросы:**
-1. Чем `namespaceSelector` отличается от `podSelector` и когда нужен?
-2. Зачем `ipBlock.except` и приведите кейс?
-3. Как разрешить доступ к api из namespace `monitoring`, не открывая его всем?
+**Контрольные вопросы к части 4:**
+1. Чем `namespaceSelector` отличается от `podSelector` и в каких сценариях они применяются совместно?
+2. Зачем нужен параметр `ipBlock.except`? Приведите пример использования в продакшене.
+3. Как правильно (с точки зрения YAML синтаксиса) разрешить входящий доступ к `api` из неймспейса `monitoring`, не открывая его при этом всем остальным неймспейсам?
 
 ---
 
-## Troubleshooting — частые проблемы
+## Troubleshooting — частые проблемы и инциденты
+
+При настройке NetworkPolicy проблемы возникают очень часто. Отладка усложняется тем, что `kubectl` не покажет ошибки — соединение просто "повиснет" на таймауте.
 
 ### Инцидент 1: default-deny сломал весь namespace (нет allow-dns)
 
-Оформлен в `broken/scenario-01/`. Суть: включили `default-deny` без `allow-dns`
-→ во всех подах перестали резолвиться имена (`bad address`). Лечение —
-`allow-dns` первым правилом. (Полный разбор — в `broken/scenario-01/README.md`.)
+**Симптомы:** После развертывания `default-deny` поды внутри namespace внезапно начали выдавать ошибки соединения типа `bad address`, `Name or service not known`, `Failed to resolve`. При обращении по IP (а не по имени) связь работает (если разрешена).
+**Причина:** Вы заблокировали Egress (исходящий трафик), и поды не могут отправить запросы к CoreDNS для разрешения доменных имен.
+**Решение:** Обязательно добавлять политику `allow-dns` в каждый namespace, где включен default-deny.
 
 ### Инцидент 2: забыли egress-сторону
 
+**Симптомы:** Под A пытается подключиться к поду B. Ingress политика на поде B разрешает входящий трафик от пода A. Но соединение все равно завершается с `Connection timed out`.
+**Причина:** Egress (исходящий трафик) на стороне пода A по-прежнему блокируется. Для успешного обмена пакетами нужно взаимное согласие — разрешение "на выход" у клиента и разрешение "на вход" у сервера.
+
 ```bash
-# Удалим web-egress -> web перестанет ходить к api, ХОТЯ api-policy ingress это
-# разрешает: нет egress-разрешения у источника.
+# Демонстрация проблемы:
+# Удалим разрешение на выход от web к api
 kubectl -n lab delete netpol web-egress
+# Пытаемся подключиться к api (там ingress разрешен, но у web нет egress)
 kubectl -n lab run t --labels app=web --image=busybox:1.36 --restart=Never -i --rm -- \
   wget -qO- --timeout=5 http://api 2>&1 | tail -1
-# timed out  <- нужна ОБЕ стороны
-kubectl -n lab apply -f manifests/netpol/02-web.yaml
+# Вывод: wget: download timed out  <- нужна ОБЕ стороны
+# Восстанавливаем
+kubectl -n lab apply -f manifests/netpol/02-web-egress.yaml
 ```
 
-### Инцидент 3: «политика не работает»
+### Инцидент 3: «политика не работает» (CNI без enforcement)
+
+**Симптомы:** Вы написали строгую политику default-deny. Объект `NetworkPolicy` отображается через `kubectl get netpol`. Но поды свободно ходят друг к другу. Трафик не режется.
+**Причина:** В кластере используется базовый CNI-плагин (например, `Flannel`), который не умеет применять NetworkPolicy. API Server просто хранит объекты, но никто не конфигурирует датаплейн. Либо вы работаете в managed-сервисе облака (например AWS EKS или GCP GKE) без включенной опции расширенной сети (Calico/Dataplane V2).
+**Решение:** Проверить CNI-компоненты. Убедиться, что работают поды Calico или Cilium.
 
 ```bash
-# Если запрещённый путь ВСЁ РАВНО проходит — почти всегда CNI без enforcement.
 kubectl -n kube-system get pods | grep -iE "calico|cilium" || \
-  echo "нет calico/cilium -> политики декоративны (managed GKE без Dataplane V2 / kind)"
+  echo "В кластере нет поддерживающего CNI! Политики декоративны."
 ```
 
 ### Инцидент 4: Ошибка AND vs OR в селекторах
 
-Симптом: вы хотели разрешить доступ только подам `app=prometheus` из неймспейса `monitoring`, но в итоге доступ получил вообще любой под в кластере, у которого есть лейбл `app=prometheus`, а также все поды из неймспейса `monitoring`.
-Причина: вы использовали два элемента списка (с дефисами) вместо одного.
-```yaml
-# НЕПРАВИЛЬНО (OR)
-- namespaceSelector: { matchLabels: { name: monitoring } }
-- podSelector: { matchLabels: { app: prometheus } }
+**Симптомы:** В политике прописано строгое ограничение доступа. Вы хотели открыть доступ к БД только для пода `api` из неймспейса `prod`. Но по логам БД вы видите, что к ней стучатся поды `api` из неймспейса `dev` и `test`, а также вообще ВСЕ поды из неймспейса `prod`. Вы получили утечку данных.
+**Причина:** Ошибочное использование дефиса `-` при комбинировании `namespaceSelector` и `podSelector`. Вы создали логическое ИЛИ (два независимых правила), вместо логического И (комбинации условий).
+**Решение:** Проверить синтаксис YAML в секции `from`/`to`. Убрать дефис у `podSelector`, чтобы он стал дочерним элементом словаря `namespaceSelector` в списке.
 
-# ПРАВИЛЬНО (AND)
-- namespaceSelector: { matchLabels: { name: monitoring } }
-  podSelector: { matchLabels: { app: prometheus } }
+### Инцидент 5: Ingress Controller не может достучаться до подов
+
+**Симптомы:** Приложение внутри кластера работает нормально, `web` и `api` общаются. Но при попытке зайти на сайт снаружи, пользователь видит `504 Gateway Timeout` или `502 Bad Gateway` от балансировщика нагрузки или Ingress Controller (например, NGINX Ingress).
+**Причина:** Включен `default-deny` на `web` поды, но вы забыли добавить Ingress правило, разрешающее трафик **от самого Ingress Controller**. Nginx Ingress отправляет пакеты из своего неймспейса (например, `ingress-nginx`), и эти пакеты отбрасываются политикой пода `web`.
+**Решение:** Создать `NetworkPolicy` на поде `web`, разрешающую входящий трафик от неймспейса `ingress-nginx` (используя `namespaceSelector`).
+
+### Инцидент 6: Блокировка эфемерных портов при строгом Egress
+
+**Симптомы:** Ваше приложение делает внешние API-запросы. Вы написали Egress политику, которая разрешает исходящий трафик к IP внешнего API на порт `443`. Но ответы от API почему-то не приходят или соединение рвется.
+**Причина:** В Kubernetes NetworkPolicy управляет **установкой соединений (connection tracking - conntrack)**. Политики являются `stateful` (запоминают состояние). Если разрешен Egress к `443` порту, ответный трафик пускается автоматически, вам НЕ нужно явно разрешать Ingress с внешнего IP на эфемерные порты (32768-60999).
+Если соединение рвется — проблема не в эфемерных портах, а возможно в том, что `except` подсети указаны неверно, или трафик блокируется на уровне облачной инфраструктуры (Security Groups).
+
+---
+
+## Инструменты отладки (Debugging Dataplane)
+
+Если вы зашли в тупик, вы можете спуститься на уровень узла (Node) и проверить, как CNI транслировал вашу политику.
+
+**Для Calico:**
+Утилита `calicoctl` позволяет посмотреть сгенерированные профили безопасности (Profiles/Endpoints) для конкретного пода.
+Кроме того, если Calico работает в режиме iptables, можно зайти на ноду по SSH и просмотреть правила `iptables`:
+```bash
+# Посмотреть цепочки iptables для интерфейса конкретного пода
+iptables-save | grep cali-po
 ```
 
-**Контрольные вопросы:**
-1. Симптом «после default-deny всё сломалось» — первая гипотеза и фикс?
-2. Путь разрешён ingress'ом цели, но не идёт — что проверить у источника?
-3. Запрещённый путь проходит — где причина и как подтвердить?
+**Для Cilium:**
+Cilium предлагает мощную утилиту `hubble` и `cilium monitor`, которая показывает потоки пакетов в реальном времени и явно указывает, какая политика отбросила (DROP) конкретный пакет.
+```bash
+# Если в кластере Cilium:
+cilium monitor --type drop
+```
 
 ---
 
 ## Проверка модуля
+
+Для автоматизированной проверки вашей работы (наличие запущенных подов и корректных политик) запустите скрипт проверки:
 
 ```bash
 kubectl -n lab apply -f manifests/app.yaml
@@ -360,82 +563,97 @@ kubectl -n lab rollout status deploy/api --timeout=120s
 kubectl -n lab rollout status deploy/db --timeout=120s
 
 bash verify/verify.sh
+# Ожидаемый вывод скрипта:
 # [OK] CNI with NetworkPolicy enforcement detected (calico/cilium)
 # [OK] module 15 verified
 ```
 
-`verify.sh` проверяет: namespace `lab` → готовность `web`/`api`/`db` → наличие
-всех пяти политик → и предупреждает, если CNI не умеет enforcement (тогда
-сегментация декоративна).
+`verify.sh` проверяет: 
+- наличие namespace `lab`
+- готовность `web`/`api`/`db`
+- наличие всех пяти политик (default-deny, allow-dns, и 3 политики по уровням)
+- предупреждает, если CNI не умеет enforcement (тогда сегментация декоративна).
 
 ---
 
 ## Финальная карта (матрица сегментации)
 
-| Источник | → api:80 | → db:80 | DNS:53 |
-|----------|----------|---------|--------|
-| `web` | ✅ (web-egress + api ingress) | 🔒 | ✅ allow-dns |
-| `api` | — | ✅ (api egress + db ingress) | ✅ allow-dns |
-| прочие поды ns | 🔒 | 🔒 | ✅ allow-dns |
+После успешного выполнения лабораторной работы ваша сеть в неймспейсе `lab` должна вести себя следующим образом:
 
-Политики: `default-deny` (база) + `allow-dns` + `web-egress` + `api-policy` +
-`db-policy`.
+| Источник \ Цель | → `api:80` | → `db:80` | → `DNS:53` (kube-dns) | → Внешний интернет |
+|----------|----------|---------|--------|--------|
+| `web` | ✅ (web-egress + api-policy) | 🔒 (нет маршрута) | ✅ (allow-dns) | 🔒 (нет egress) |
+| `api` | 🔒 (нет маршрута) | ✅ (api-policy + db-policy) | ✅ (allow-dns) | 🔒 (нет egress) |
+| `db`  | 🔒 (нет маршрута) | 🔒 (нет маршрута) | ✅ (allow-dns) | 🔒 (нет egress) |
+| `прочие поды` | 🔒 (блок Ingress) | 🔒 (блок Ingress) | ✅ (allow-dns) | 🔒 (блок Egress) |
+
+Суммарно применено 5 политик: `00-default-deny` (база) + `01-allow-dns` + `02-web-egress` + `03-api-policy` + `04-db-policy`.
 
 ---
 
 ## Контрольные вопросы
 
-1. Объясните allow-list модель NetworkPolicy и роль `default-deny`. Что делает CNI (Calico/Cilium) на уровне ноды, чтобы трафик реально блокировался?
-2. Почему для успешного соединения от пода A к поду B необходимо наличие соответствующих политик `egress` у пода A и `ingress` у пода B одновременно?
-3. В чём принципиальная разница между объединением `namespaceSelector` и `podSelector` в одном элементе списка (AND) и в разных (OR)? Почему ошибка в одном символе дефиса может привести к серьезной бреши в безопасности?
-4. Почему `allow-dns` является критическим правилом при включении `default-deny`, и в каких случаях для DNS требуется разрешать TCP-трафик на порт 53, а не только UDP?
+1. Объясните allow-list модель NetworkPolicy и концепцию Zero Trust. Какую роль играет политика `default-deny`? Что делает CNI плагин (Calico/Cilium) на уровне узла (Node), чтобы трафик реально блокировался?
+2. Почему для успешного двустороннего соединения от пода A к поду B необходимо наличие соответствующих политик `egress` у пода A и `ingress` у пода B одновременно? Что произойдет, если одна из политик будет удалена?
+3. В чём принципиальная разница между объединением `namespaceSelector` и `podSelector` в одном элементе списка (с дефисом и без)? Почему ошибка в одном символе дефиса может привести к серьезной утечке данных (компрометации всего неймспейса)?
+4. Почему политика `allow-dns` является критической при включении `default-deny`? В каких случаях для DNS требуется разрешать TCP-трафик на порт 53, а не только UDP?
+5. Как Ingress Controller доставляет трафик к вашим сервисам? Какие дополнительные `NetworkPolicy` потребуются для пода `web`, чтобы пользователи смогли зайти на ваш сайт извне кластера?
+6. Почему `NetworkPolicy` считается stateful? Нужно ли открывать входящие эфемерные порты (high ports) для получения ответов на разрешенные исходящие запросы (egress)?
 
 ---
 
 ## Практические задания (отработка)
 
-> Делайте на живом кластере; проверяйте себя командами и `verify/verify.sh`.
+> Делайте эти задания на живом кластере; проверяйте себя с помощью хелпера `probe` и скрипта `verify/verify.sh`.
 
-1. Постройте матрицу связности web→api→db и подтвердите, что web→db заблокировано, а web→api/api→db — нет.
-2. Уберите `allow-dns` и покажите, что резолв ломается под default-deny; верните.
-3. Добавьте egress-ограничение для api (только к db:5432) и проверьте, что прочий egress режется.
-4. Введите четвёртый ярус и пропишите для него минимально необходимые политики.
-5. Проверьте, что под из ЧУЖОГО namespace не достучится до api (namespaceSelector).
+1. **Создание матрицы с нуля:** Удалите все политики из `lab`. Постройте матрицу связности `web→api→db` с чистого листа (написав манифесты самостоятельно) и подтвердите, что `web→db` заблокировано, а пути `web→api` и `api→db` — открыты.
+2. **Эксперимент с DNS:** Уберите политику `allow-dns` и покажите с помощью команды `nslookup api`, что разрешение имён ломается под default-deny; затем верните политику и проверьте работоспособность.
+3. **Строгий Egress:** Добавьте строгое egress-ограничение для пода `api` (разрешите выход только к поду `db` на порт 80). Убедитесь, что `api` больше не может сделать `wget http://external-site.com`.
+4. **Четвертый ярус (Cache):** Введите четвёртый ярус (создайте деплоймент `cache` с образом Redis) и пропишите для него минимально необходимые политики так, чтобы ТОЛЬКО под `api` мог обращаться к `cache` по порту 6379, а `cache` не имел исходящего доступа никуда, кроме DNS.
+5. **Межнеймспейсное взаимодействие:** Создайте неймспейс `monitoring` и под в нем (с меткой `app=prometheus`). Измените политику `api-policy` так, чтобы разрешить входящий (ingress) трафик к поду `api` на порт 80 от подов `app=prometheus` из неймспейса `monitoring`, используя `namespaceSelector`. Докажите связность, запустив тестовый под в неймспейсе `monitoring`.
+6. **Отладка Ingress (дополнительно):** Симулируйте работу внешнего балансировщика. Создайте под в неймспейсе `ingress-nginx` и напишите политику, разрешающую ему доступ к подам `web` в неймспейсе `lab`.
 
 ---
 
 ## Шпаргалка
 
 ```bash
-# === Применение / обзор ===
+# === Применение / обзор объектов NetworkPolicy ===
 kubectl -n lab apply -f manifests/netpol/
 kubectl -n lab get netpol
 kubectl -n lab describe netpol api-policy
 
-# === Тестирование (probe-поды с label источника) ===
+# === Тестирование связности (probe-поды с подменой label) ===
+# Тест подключения от web к db (Ожидаем блокировку / таймаут)
 kubectl -n lab run p --labels app=web --image=busybox:1.36 --restart=Never -i --rm -- \
-  wget -qO- --timeout=5 http://db        # ожидаем БЛОК
+  wget -qO- --timeout=5 http://db
 
-# === enforcement есть? ===
+# === Проверка наличия CNI с поддержкой enforcement ===
+# Должны быть поды calico-node или cilium в статусе Running
 kubectl -n kube-system get pods | grep -iE "calico|cilium"
 
-# === Уборка ===
+# === Отладка Calico (если calicoctl установлен) ===
+# calicoctl get networkpolicies -A
+# calicoctl get globalnetworkpolicies
+
+# === Уборка лаборатории ===
 bash verify/cleanup.sh
 ```
 
 ---
 
-
 ## Чему вы научились
 
-В этом модуле вы научились:
-- Реализации микросегментации через NetworkPolicy
-- Концепции Zero-Trust в кластере (default-deny)
-- Разрешению специфичного Ingress/Egress трафика
+В этом модуле вы глубоко погрузились в сетевую безопасность Kubernetes и научились:
+- Практической реализации микросегментации через NetworkPolicy.
+- Пониманию и применению концепции Zero-Trust в кластере (режимы default-allow и default-deny).
+- Тонкостям настройки Ingress и Egress трафика, включая обязательность разрешений для DNS.
+- Пониманию разницы между логическими И / ИЛИ (AND vs OR) при написании селекторов `namespaceSelector` и `podSelector`.
+- Основам troubleshooting сетевых блокировок, включая отладку сбоев Egress-трафика и взаимодействия с Ingress-контроллерами.
 
 ## Уборка
 
-Для очистки ресурсов лаборатории выполните скрипт:
+Для очистки ресурсов лаборатории выполните предоставляемый скрипт уборки. Он удалит неймспейс `lab` и все созданные в рамках задания объекты.
 
 ```bash
 bash verify/cleanup.sh
