@@ -67,7 +67,7 @@ sudo ./01-chroot/run.sh
 | 11 | [11-capstone](./11-capstone) | «Свой Docker» из ~150 строк bash | ✅ |
 | 12 | [12-rootless](./12-rootless) | Контейнер без root (user-ns) | ✅ |
 | 13 | [13-oci-runc](./13-oci-runc) | Запуск через эталонный `runc` | ✅ |
-| 14 | [14-ebpf](./14-ebpf) | Наблюдаемость изоляции через eBPF | 🔸 |
+| 14 | [14-ebpf](./14-ebpf) | Наблюдаемость изоляции через eBPF | ✅ |
 
 ## ✅ QA и верификация
 
