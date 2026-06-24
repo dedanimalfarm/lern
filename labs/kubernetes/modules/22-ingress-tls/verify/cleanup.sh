@@ -6,23 +6,13 @@ echo "=== Running module 22 cleanup ==="
 echo "[INFO] Deleting lab namespace..."
 kubectl delete ns lab --ignore-not-found
 
-echo "[INFO] Deleting ClusterIssuers..."
+# Удаляем ТОЛЬКО ресурс, созданный модулем (ClusterIssuer). ingress-nginx и
+# cert-manager — PERSISTENT-аддоны стенда (ставятся scripts/cluster/up.sh --addons,
+# общие для модулей 04/09/22/25 и capstone). Их НЕЛЬЗЯ сносить в cleanup модуля:
+# раньше этот скрипт удалял ns ingress-nginx + cert-manager (+ CRD), из-за чего
+# после прогона m22 все зависящие модули падали («controller not found»,
+# «resource type clusterissuer»), а полный sweep давал каскад ложных FAIL.
+echo "[INFO] Deleting module-owned ClusterIssuer..."
 kubectl delete clusterissuer selfsigned-issuer --ignore-not-found
 
-echo "[INFO] Deleting ingress-nginx..."
-kubectl delete ns ingress-nginx --ignore-not-found
-kubectl delete clusterrole ingress-nginx --ignore-not-found
-kubectl delete clusterrolebinding ingress-nginx --ignore-not-found
-kubectl delete validatingwebhookconfiguration ingress-nginx-admission --ignore-not-found
-
-echo "[INFO] Deleting cert-manager..."
-kubectl delete ns cert-manager --ignore-not-found
-kubectl delete clusterrole,clusterrolebinding -l app=cert-manager --ignore-not-found
-kubectl delete clusterrole,clusterrolebinding -l app.kubernetes.io/instance=cert-manager --ignore-not-found
-kubectl delete mutatingwebhookconfiguration cert-manager-webhook --ignore-not-found
-kubectl delete validatingwebhookconfiguration cert-manager-webhook --ignore-not-found
-
-echo "[INFO] Deleting cert-manager CRDs..."
-kubectl get crd -o name | grep 'cert-manager.io' | xargs -r kubectl delete || true
-
-echo "[OK] Cleanup complete."
+echo "[OK] Cleanup complete (persistent-аддоны ingress-nginx/cert-manager сохранены)."
