@@ -719,3 +719,7 @@ kubectl -n lab delete -k manifests/
 # helm uninstall kps -n monitoring
 # kubectl delete ns monitoring
 ```
+
+
+## Решения (Solutions)
+В данном модуле добавлены подробные решения для сломанных сценариев в папке `solutions/`. Пожалуйста, изучите их для лучшего понимания.

@@ -778,3 +778,7 @@ kubectl delete ns lab-restricted --ignore-not-found
 # Проверка, что VAP очищены
 kubectl get validatingadmissionpolicy
 ```
+
+
+## Решения (Solutions)
+В данном модуле добавлены подробные решения для сломанных сценариев в папке `solutions/`. Пожалуйста, изучите их для лучшего понимания.
