@@ -71,8 +71,8 @@ kubectl -n lab delete job,cronjob --all --ignore-not-found 2>/dev/null
 
 # Версия кластера: podFailurePolicy GA с 1.31, Indexed GA с 1.24, CronJob timeZone
 # с 1.27 — на нашем 1.36 всё доступно штатно.
-kubectl version -o json | grep -m1 gitVersion
-# "gitVersion": "v1.36.1"
+kubectl version -o json | grep -A3 '"serverVersion"' | grep gitVersion
+# "gitVersion": "v1.36.1"   <- именно СЕРВЕР; grep -m1 дал бы версию КЛИЕНТА kubectl
 ```
 
 ---

@@ -100,8 +100,9 @@ kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n lab delete job,pod --all --ignore-not-found 2>/dev/null
 
 # Проверяем версию сервера (убеждаемся, что фичи доступны)
-kubectl version -o json | grep -m1 gitVersion
+kubectl version -o json | grep -A3 '"serverVersion"' | grep gitVersion
 # Ожидаемый вывод: "v1.36.1" или любая версия >= 1.33
+# (grep -m1 показал бы версию КЛИЕНТА kubectl, а не сервера)
 
 # Настраиваем удобный алиас
 alias k='kubectl -n lab'

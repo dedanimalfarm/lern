@@ -52,8 +52,9 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 # Создадим namespace для лабораторной
 kubectl get ns lab >/dev/null 2>&1 || kubectl create ns lab
 
-# Проверим версию кластера
-kubectl version -o json 2>/dev/null | grep -i gitVersion | head -1
+# Проверим версию кластера (СЕРВЕРА); grep по первому gitVersion дал бы клиента
+kubectl version -o json 2>/dev/null | grep -A3 '"serverVersion"' | grep gitVersion
+# "gitVersion": "v1.36.1"
 ```
 
 ## Стартовая проверка

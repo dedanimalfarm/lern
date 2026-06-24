@@ -63,8 +63,9 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl get ns lab >/dev/null 2>&1 || kubectl create ns lab
 kubectl delete ns lab-restricted --ignore-not-found 2>/dev/null
 
-# Проверяем версию (должна быть >= 1.30 для VAP)
-kubectl version -o json 2>/dev/null | grep -i gitVersion | head -1
+# Проверяем версию СЕРВЕРА (должна быть >= 1.30 для VAP)
+kubectl version -o json 2>/dev/null | grep -A3 '"serverVersion"' | grep gitVersion
+# "gitVersion": "v1.36.1"   <- grep по КЛИЕНТУ (-m1/head -1) ввёл бы в заблуждение
 ```
 
 ## Стартовая проверка

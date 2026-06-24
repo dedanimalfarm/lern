@@ -76,8 +76,8 @@ kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-repo-server
 
 # kustomize встроен в kubectl (через подкоманду kustomize или флаг -k),
 # но иногда полезно иметь standalone kustomize CLI для advanced-фич.
-# Проверим версию kustomize, встроенную в ваш kubectl:
-kubectl version -o json | grep -m1 gitVersion   # Желательно v1.36.1 или выше
+# Проверим версию кластера (сервера); grep -m1 дал бы версию КЛИЕНТА kubectl:
+kubectl version -o json | grep -A3 '"serverVersion"' | grep gitVersion   # сервер: желательно v1.36.1+
 ```
 
 **Почему `argocd-repo-server` так важен?** 
