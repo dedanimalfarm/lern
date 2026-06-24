@@ -109,6 +109,23 @@ kubectl get cs || true # componentstatuses может быть deprecated, но 
 
 Механизм, который **применяет** эти стандарты в кластере, называется **Pod Security Admission (PSA)**.
 
+**Схема: профили PSS, режимы PSA и место PSA в цепочке admission:**
+
+```text
+   Строгость профиля:  privileged ──► baseline ──► restricted
+                       (без огранич.) (нет hostNet/ (non-root, drop ALL caps,
+                                       hostPath/priv) seccomp, runAsNonRoot …)
+
+   Профиль × режим задаются метками на Namespace:
+     pod-security.kubernetes.io/enforce: restricted  → нарушение = ОТКАЗ в создании
+     pod-security.kubernetes.io/audit:   restricted  → запись в audit-log, под создаётся
+     pod-security.kubernetes.io/warn:    restricted  → предупреждение клиенту, под создаётся
+
+   Путь запроса:
+     kubectl ─► authn ─► authz(RBAC) ─► mutating webhooks ─► PSA ─► etcd
+                                                             ▲ только валидация (ДА/НЕТ), без мутации
+```
+
 ### 1.3 PSA vs PSP — почему PSP убрали и что взамен
 
 Если вы работали с кластерами версий 1.15-1.20, вы помните **PodSecurityPolicy (PSP)**. PSP был отдельным API-ресурсом (CRD-подобным), который делал то же самое. Однако PSP был **официально удален в версии 1.25**.

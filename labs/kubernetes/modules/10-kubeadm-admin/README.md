@@ -263,6 +263,20 @@ kubectl get nodes "$NODE"
 > Откуда возьмётся первый `kube-apiserver`, если поды запускает `kubelet` по команде от `apiserver`?
 > Решение: **static pods**. Kubelet поднимает основные компоненты ПРЯМО из файлов на диске. Это позволяет control-plane "загрузить сам себя". Когда apiserver стартует, kubelet создает для него read-only запись (mirror pod) в API для удобства мониторинга.
 
+**Схема: как control-plane «загружает сам себя» через static pods:**
+
+```text
+   /etc/kubernetes/manifests/*.yaml            (файлы на диске)
+            │
+            │  kubelet периодически сканирует каталог
+            ▼
+   kubelet НАПРЯМУЮ запускает контейнеры        (scheduler и apiserver НЕ нужны)
+            │   etcd · kube-apiserver · kube-controller-manager · kube-scheduler
+            ▼
+   apiserver поднялся → kubelet создаёт mirror pods (read-only) в API:
+            etcd-cp-1 · kube-apiserver-cp-1 · …   (видны в kubectl get pod -n kube-system)
+```
+
 ### 2.1 Анатомия static pods
 
 Зайдите по SSH на control-plane ноду и выполните:

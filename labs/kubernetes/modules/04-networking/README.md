@@ -115,6 +115,21 @@ kubectl -n kube-system get pods | grep -E "calico|cilium|netd|dataplane" || \
   ноде), `LoadBalancer` (внешний облачный балансировщик), `ExternalName`
   (CNAME на внешний DNS).
 
+**Схема: путь запроса к ClusterIP-сервису:**
+
+```text
+   Pod-клиент
+      │  curl my-svc:80      (DNS: my-svc → ClusterIP 10.96.0.10)
+      ▼
+   ClusterIP 10.96.0.10:80   ← виртуальный IP, не пингуется
+      │  kube-proxy: DNAT (iptables/IPVS) на один адрес из Endpoints
+      ▼
+   Endpoints/EndpointSlice: [10.244.1.5:8080, 10.244.2.7:8080]
+      │  только поды, прошедшие readinessProbe и подходящие под selector
+      ▼
+   Pod-backend (слушает targetPort 8080)
+```
+
 **kube-proxy: iptables vs IPVS (важно для масштаба):**
 
 > **Для любознательных / продвинутая теория.** Этот блок (и разбор `ndots:5`

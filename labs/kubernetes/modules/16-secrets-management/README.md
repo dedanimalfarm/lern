@@ -634,6 +634,19 @@ kubectl -n lab get secret pg-dynamic-creds -o jsonpath='{.data.username}' | base
 | **External Secrets (ESO)** | внешний менеджер (Vault/Cloud) | ✓ (ссылка) | авто (по refresh) | Enterprise с облачными провайдерами, синк из AWS SM / Azure Key Vault. |
 | **Vault Dynamic (VSO)** | НЕ хранится (генерируется on-demand) | ✓ | авто (по TTL) | БД, облака. Максимальная безопасность (Zero Trust), короткоживущие креды. |
 
+**Схема: где живёт секрет и кто его расшифровывает:**
+
+```text
+ Sealed Secrets:   SealedSecret (в git, RSA-шифр) ──► контроллер ──► Secret (etcd) ──► Pod
+                   расшифровать может ТОЛЬКО контроллер ЭТОГО кластера (private key)
+
+ External Secrets: внешний менеджер (Vault/AWS SM) ──► ESO (по refreshInterval) ──► Secret (etcd) ──► Pod
+                   в git хранится лишь ССЫЛКА (ExternalSecret), не само значение
+
+ Vault Dynamic:    Pod/VSO ──запрос──► Vault ──генерирует НОВЫЕ креды на TTL──► Secret (etcd) ──► Pod
+                   секрет не лежит заранее: создаётся on-demand и истекает по TTL
+```
+
 ---
 
 ## Troubleshooting — частые проблемы и боевые инциденты
