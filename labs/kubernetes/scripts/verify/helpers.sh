@@ -88,9 +88,16 @@ require_pod_phase() {
   local ns="$1"
   local label="$2"
   local expected="$3"
-  local phase
-  phase=$(kubectl -n "$ns" get pod -l "$label" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true)
-  [[ "$phase" == "$expected" ]] || fail "pod with label $label phase='$phase', expected='$expected'"
+  local timeout="${4:-60}"   # секунд; даём поду подняться (pull образа на холодной ноде)
+  local phase=""
+  # Поллим фазу: одиночная проверка ловила гонку — verify в run-module.sh бежит
+  # через ~5с после apply, а под с первым pull образа ещё Pending → ложный FAIL.
+  for _ in $(seq 1 "$timeout"); do
+    phase=$(kubectl -n "$ns" get pod -l "$label" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true)
+    [[ "$phase" == "$expected" ]] && return 0
+    sleep 1
+  done
+  fail "pod with label $label phase='$phase', expected='$expected' (ждали ${timeout}s)"
 }
 
 require_pod_condition() {
