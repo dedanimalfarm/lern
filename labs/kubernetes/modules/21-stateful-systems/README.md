@@ -82,9 +82,9 @@ kubectl get nodes
 
 ```text
 NAME           STATUS   ROLES           AGE   VERSION
-k8s-node-1     Ready    control-plane   10d   v1.28.0
-k8s-node-2     Ready    <none>          10d   v1.28.0
-k8s-node-3     Ready    <none>          10d   v1.28.0
+k8s-node-1     Ready    control-plane   10d   v1.36.1
+k8s-node-2     Ready    <none>          10d   v1.36.1
+k8s-node-3     Ready    <none>          10d   v1.36.1
 ```
 
 ```bash

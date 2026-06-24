@@ -102,8 +102,10 @@ kubectl cluster-info
 
 # Сколько нод и какие они
 kubectl get nodes -o wide
-# NAME                STATUS   ROLES           AGE   VERSION   INTERNAL-IP   OS-IMAGE             CONTAINER-RUNTIME
-# kind-control-plane  Ready    control-plane   5d    v1.29.2   172.18.0.2    Debian GNU/Linux 12  containerd://1.7.x
+# NAME       STATUS   ROLES           AGE   VERSION   INTERNAL-IP   OS-IMAGE           CONTAINER-RUNTIME
+# k8s-cp-1   Ready    control-plane   30d   v1.36.1   10.0.0.10     Ubuntu 22.04 LTS   containerd://1.7.x
+# k8s-w-1    Ready    <none>          30d   v1.36.1   10.0.0.11     Ubuntu 22.04 LTS   containerd://1.7.x
+# k8s-w-2    Ready    <none>          30d   v1.36.1   10.0.0.12     Ubuntu 22.04 LTS   containerd://1.7.x
 
 # Все «системные» поды кластера — это и есть control-plane + сетевой слой
 kubectl -n kube-system get pods

@@ -97,8 +97,8 @@ alias k='kubectl'
 ```bash
 kubectl get nodes -o wide
 # NAME     STATUS   ROLES           AGE   VERSION   INTERNAL-IP   ...
-# cp-1     Ready    control-plane   10d   v1.28.x   10.0.0.10     ...
-# node-1   Ready    <none>          10d   v1.28.x   10.0.0.11     ...
+# cp-1     Ready    control-plane   10d   v1.36.1   10.0.0.10     ...
+# node-1   Ready    <none>          10d   v1.36.1   10.0.0.11     ...
 
 # Проверка системных подов
 kubectl get pods -n kube-system
@@ -514,7 +514,7 @@ sudo ETCDCTL_API=3 etcdctl snapshot restore "$BACKUP_FILE" \
 ### Теория для изучения перед частью
 
 Kubernetes выпускает минорные релизы трижды в год. Поддержка версии длится около 14 месяцев.
-Обновление кластера kubeadm производится строго на **одну минорную версию вверх** (например, `v1.28.x -> v1.29.x`). Перепрыгивать нельзя!
+Обновление кластера kubeadm производится строго на **одну минорную версию вверх** (например, `v1.35.x -> v1.36.x`). Перепрыгивать нельзя!
 
 Процесс обновления (High Level):
 1. Обновить пакет `kubeadm` на control-plane ноде.
@@ -529,11 +529,11 @@ Kubernetes выпускает минорные релизы трижды в го
 ```bash
 # Ищем доступные версии:
 apt update
-apt-cache madison kubeadm | grep 1.29
+apt-cache madison kubeadm | grep 1.36
 
 # Устанавливаем конкретную версию kubeadm
 sudo apt-mark unhold kubeadm
-sudo apt-get update && sudo apt-get install -y kubeadm=1.29.0-1.1
+sudo apt-get update && sudo apt-get install -y kubeadm=1.36.1-1.1
 sudo apt-mark hold kubeadm
 ```
 
@@ -548,13 +548,13 @@ sudo kubeadm upgrade plan
 
 Применяем обновление:
 ```bash
-sudo kubeadm upgrade apply v1.29.0
+sudo kubeadm upgrade apply v1.36.1
 ```
 
 После завершения `kubeadm upgrade apply` обновляем `kubelet` и `kubectl`:
 ```bash
 sudo apt-mark unhold kubelet kubectl
-sudo apt-get install -y kubelet=1.29.0-1.1 kubectl=1.29.0-1.1
+sudo apt-get install -y kubelet=1.36.1-1.1 kubectl=1.36.1-1.1
 sudo apt-mark hold kubelet kubectl
 
 # Обязательно рестарт сервиса
@@ -569,7 +569,7 @@ sudo systemctl restart kubelet
 2. Идем на worker:
 ```bash
 sudo apt-mark unhold kubeadm
-sudo apt-get install -y kubeadm=1.29.0-1.1
+sudo apt-get install -y kubeadm=1.36.1-1.1
 sudo apt-mark hold kubeadm
 
 # Обновляем конфигурацию ноды
@@ -577,7 +577,7 @@ sudo kubeadm upgrade node
 
 # Обновляем kubelet
 sudo apt-mark unhold kubelet
-sudo apt-get install -y kubelet=1.29.0-1.1
+sudo apt-get install -y kubelet=1.36.1-1.1
 sudo apt-mark hold kubelet
 sudo systemctl daemon-reload
 sudo systemctl restart kubelet
@@ -586,7 +586,7 @@ sudo systemctl restart kubelet
 
 **Контрольные вопросы:**
 1. Какова правильная последовательность обновления компонентов (kubeadm, kubelet, kubectl) на control-plane?
-2. Почему нельзя обновлять кластер с версии 1.27 сразу до 1.29?
+2. Почему нельзя обновлять кластер с версии 1.34 сразу до 1.36?
 3. Что автоматически делает `kubeadm upgrade apply` с сертификатами PKI?
 
 ---

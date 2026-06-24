@@ -79,7 +79,7 @@ kubectl get nodes -o wide
 
 ```
 NAME     STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION     CONTAINER-RUNTIME
-k8s-cp   Ready    control-plane   10d   v1.27.1   10.0.0.10     <none>        Ubuntu 22.04.2 LTS   5.15.0-72-generic  containerd://1.7.0
+k8s-cp   Ready    control-plane   10d   v1.36.1   10.0.0.10     <none>        Ubuntu 22.04.2 LTS   5.15.0-72-generic  containerd://1.7.0
 ```
 
 Установите операторы, необходимые для модуля. Эти скрипты устанавливают соответствующие Helm-чарты. (Ставятся по одному разу на кластер):

@@ -90,9 +90,9 @@ kubectl get nodes -o wide
 
 ```
 NAME       STATUS   ROLES           AGE    VERSION   INTERNAL-IP      OS-IMAGE             KERNEL-VERSION
-k8s-cp-1   Ready    control-plane   120d   v1.28.2   192.168.121.21   Ubuntu 22.04.3 LTS   5.15.0-88-generic
-node1      Ready    <none>          120d   v1.28.2   192.168.121.22   Ubuntu 22.04.3 LTS   5.15.0-88-generic
-node2      Ready    <none>          120d   v1.28.2   192.168.121.23   Ubuntu 22.04.3 LTS   5.15.0-88-generic
+k8s-cp-1   Ready    control-plane   120d   v1.36.1   192.168.121.21   Ubuntu 22.04.3 LTS   5.15.0-88-generic
+node1      Ready    <none>          120d   v1.36.1   192.168.121.22   Ubuntu 22.04.3 LTS   5.15.0-88-generic
+node2      Ready    <none>          120d   v1.36.1   192.168.121.23   Ubuntu 22.04.3 LTS   5.15.0-88-generic
 ```
 
 Обратите внимание на роли узлов (`ROLES`). На кластерах, развернутых через Kubespray (или kubeadm), Control Plane узел (`k8s-cp-1`) обычно имеет `taint`, который запрещает запуск обычных подов. Это важно для понимания дальнейших экспериментов с `topologySpreadConstraints`.
@@ -421,7 +421,7 @@ kubectl get node "$NODE"
 ```
 ```
 NAME    STATUS                     ROLES    AGE    VERSION
-node1   Ready,SchedulingDisabled   <none>   120d   v1.28.2
+node1   Ready,SchedulingDisabled   <none>   120d   v1.36.1
 ```
 
 ### 4.2 Выселение рабочих нагрузок (drain)
