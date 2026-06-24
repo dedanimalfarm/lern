@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-app
+  namespace: argocd
+spec:
+  project: labs
+  source:
+    repoURL: https://github.com/dedanimalfarm/lern.git
+    targetRevision: main
+    path: labs/kubernetes/modules/09-helm-gitops/charts/wrong-path
+    helm:
+      releaseName: demo-app
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: lab

@@ -648,3 +648,7 @@ kubectl -n lab delete -k manifests/
 kubectl -n lab delete pod load --ignore-not-found
 kubectl -n lab delete deploy,svc,hpa,vpa --all --ignore-not-found
 ```
+
+
+## Решения (Solutions)
+В данном модуле добавлены подробные решения для сломанных сценариев в папке `solutions/`. Пожалуйста, изучите их для лучшего понимания.

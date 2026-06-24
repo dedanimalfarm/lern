@@ -685,3 +685,7 @@ kubectl -n lab get backup                       # Разовые бэкапы
 # === Масштабирование ===
 kubectl -n lab patch cluster my-db --type='merge' -p '{"spec":{"instances":3}}'
 ```
+
+
+## Решения (Solutions)
+В данном модуле добавлены подробные решения для сломанных сценариев в папке `solutions/`. Пожалуйста, изучите их для лучшего понимания.

@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../manifests/app.yaml
+- ../../manifests/loki.yaml
+- ../../manifests/datasource.yaml
+- ../../manifests/promtail.yaml
+patches:
+- target:
+    kind: ConfigMap
+    name: promtail-config
+  patch: |-
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: promtail-config
+    data:
+      promtail.yaml: |
+        server:
+          http_listen_port: 9080
+          grpc_listen_port: 0
+        clients:
+        - url: http://loki.default.svc.cluster.local:3100/loki/api/v1/push
+        positions:
+          filename: /tmp/positions.yaml
+        scrape_configs:
+        - job_name: kubernetes-pods
+          kubernetes_sd_configs:
+          - role: pod
+          relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: __host__
+          - action: replace
+            source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod

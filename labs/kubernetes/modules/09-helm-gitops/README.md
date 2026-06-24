@@ -691,3 +691,7 @@ helm uninstall demo-app -n lab 2>/dev/null || true
 kubectl -n argocd delete application demo-app --ignore-not-found 2>/dev/null || true
 kubectl delete ns lab --ignore-not-found 2>/dev/null || true
 ```
+
+
+## Решения (Solutions)
+В данном модуле добавлены подробные решения для сломанных сценариев в папке `solutions/`. Пожалуйста, изучите их для лучшего понимания.

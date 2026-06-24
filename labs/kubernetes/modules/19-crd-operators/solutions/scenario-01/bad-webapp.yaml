@@ -1,0 +1,10 @@
+# НЕВАЛИДНЫЙ Custom Resource: replicas=99 (> maximum 10) и нет обязательного
+# поля image. apiserver отклонит его по схеме CRD ещё на admission.
+apiVersion: lab.example.com/v1
+kind: WebApp
+metadata:
+  name: bad-webapp
+  namespace: lab
+spec:
+  replicas: 99
+  host: bad.local

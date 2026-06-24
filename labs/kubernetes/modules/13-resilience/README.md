@@ -641,3 +641,7 @@ kubectl -n lab delete -k manifests/
 bash verify/cleanup.sh
 ```
 
+
+
+## Решения (Solutions)
+В данном модуле добавлены подробные решения для сломанных сценариев в папке `solutions/`. Пожалуйста, изучите их для лучшего понимания.

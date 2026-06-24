@@ -648,3 +648,7 @@ pkill -f "kopf run" || true
 kubectl -n lab delete -f manifests/webapp.yaml --ignore-not-found
 kubectl delete crd webapps.lab.example.com --ignore-not-found
 ```
+
+
+## Решения (Solutions)
+В данном модуле добавлены подробные решения для сломанных сценариев в папке `solutions/`. Пожалуйста, изучите их для лучшего понимания.

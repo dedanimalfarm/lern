@@ -754,3 +754,7 @@ kubectl create secret tls my-tls-secret --cert=path/to/cert.pem --key=path/to/ke
 # Узнать статус внешнего секрета ESO
 kubectl describe externalsecret <es_name>
 ```
+
+
+## Решения (Solutions)
+В данном модуле добавлены подробные решения для сломанных сценариев в папке `solutions/`. Пожалуйста, изучите их для лучшего понимания.
