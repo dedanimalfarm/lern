@@ -393,7 +393,7 @@ done
 # Окружение lab-prod: web   3   nginx:1.27.3-alpine
 ```
 
-> 💡 `web-<env>` — это абсолютно обычные Argo Application'ы (их видно в UI, их можно проверять через CLI). Но "хозяином" (у них есть ownerReference) для них выступает ApplicationSet. Если вы попытаетесь изменить поле в `web-dev` напрямую, ApplicationSet-контроллер тут же перезапишет его обратно, исходя из своего шаблона.
+> `web-<env>` — это абсолютно обычные Argo Application'ы (их видно в UI, их можно проверять через CLI). Но "хозяином" (у них есть ownerReference) для них выступает ApplicationSet. Если вы попытаетесь изменить поле в `web-dev` напрямую, ApplicationSet-контроллер тут же перезапишет его обратно, исходя из своего шаблона.
 
 ### 2.2 Альтернатива: ApplicationSet с Git Generator
 
@@ -811,4 +811,4 @@ kubectl -n argocd delete appproject labs-gitops --ignore-not-found
 kubectl delete ns lab-dev lab-staging lab-prod --ignore-not-found
 ```
 
-> 🚀 **Дальше по ROADMAP:** Следующий шаг — **Progressive Delivery** (Прогрессивная доставка). Вы изучите `Argo Rollouts`, научитесь делать Canary и Blue-Green развертывания без простоев, а также настраивать автоматический анализ метрик (Prometheus) для принятия решения о продвижении или автоматическом откате (rollback) релиза. Это следующий слой зрелости над базовой GitOps-доставкой!
+> **Дальше по ROADMAP:** Следующий шаг — **Progressive Delivery** (Прогрессивная доставка). Вы изучите `Argo Rollouts`, научитесь делать Canary и Blue-Green развертывания без простоев, а также настраивать автоматический анализ метрик (Prometheus) для принятия решения о продвижении или автоматическом откате (rollback) релиза. Это следующий слой зрелости над базовой GitOps-доставкой!

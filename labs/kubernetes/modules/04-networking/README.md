@@ -117,7 +117,7 @@ kubectl -n kube-system get pods | grep -E "calico|cilium|netd|dataplane" || \
 
 **kube-proxy: iptables vs IPVS (важно для масштаба):**
 
-> 💡 **Для любознательных / продвинутая теория.** Этот блок (и разбор `ndots:5`
+> **Для любознательных / продвинутая теория.** Этот блок (и разбор `ndots:5`
 > ниже) важен для production-масштаба, но НЕ обязателен для понимания базовой
 > работы Service. Если вы только знакомитесь с сетью — пробегите глазами и вернитесь
 > позже; на прохождение модуля это не влияет.
@@ -449,7 +449,7 @@ kubectl -n lab run t --image=busybox:1.36 --restart=Never -i --rm -- \
 # + allow-app-ingress И allow-app-egress           -> <title>Welcome to nginx!</title>.
 ```
 
-> ✅ **Проверено на нашем Kubespray-кластере (Calico), вживую:**
+> ✓ **Проверено на нашем Kubespray-кластере (Calico), вживую:**
 > - до `default-deny` — `<title>Welcome to nginx!</title>`;
 > - после `default-deny` (+`allow-dns`) — DNS резолвится (`net-demo` → ClusterIP),
 >   но `wget` к net-demo **виснет** (`download timed out`);

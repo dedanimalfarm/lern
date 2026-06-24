@@ -760,7 +760,7 @@ kubectl -n lab apply -f /tmp/job-image.yaml
 kubectl -n lab get pods -l job-name=job-image
 # STATUS: ImagePullBackOff
 ```
-**Критический архитектурный факт:** Ошибка скачивания образа (ImagePullBackOff) или ошибка запуска (CreateContainerConfigError) **НЕ УВЕЛИЧИВАЮТ** счётчик `backoffLimit`! Pod технически так и не запустился, он не сделал `exit > 0`. Следовательно, этот Job будет висеть в состоянии Pending/ImagePullBackOff бесконечно!
+**Архитектурный факт.** Ошибка скачивания образа (ImagePullBackOff) или запуска контейнера (CreateContainerConfigError) **не увеличивает** счётчик `backoffLimit`: контейнер технически не стартовал и не сделал `exit > 0`. Поэтому такой Job не упирается в `backoffLimit` и остаётся в состоянии Pending/ImagePullBackOff неограниченно долго.
 
 **Решение:** Опечатки в манифестах лечатся удалением Job и созданием заново. И еще раз — всегда добавлять `activeDeadlineSeconds`, который убьет Job даже в статусе ImagePullBackOff.
 ```bash

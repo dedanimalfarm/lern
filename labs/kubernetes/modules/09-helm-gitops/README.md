@@ -396,7 +396,7 @@ kubectl -n argocd get application demo-app \
 # sync=Synced health=Healthy rev=<sha>...   <- Synced = совпало с Git; Healthy = все ресурсы здоровы
 ```
 
-> ✅ **Прогнано на нашем Kubespray-кластере (Argo CD v3.4.3):** Application `demo-app`
+> ✓ **Прогнано на нашем Kubespray-кластере (Argo CD v3.4.3):** Application `demo-app`
 > → **Synced** с ревизии `main`; в ns `lab` появились Deployment/Service/ConfigMap/Ingress
 > прямо из Git. Приложение реально отвечает: `wget -qO- http://demo-app/` →
 > `<title>Welcome to nginx!</title>`. С установленным ingress-nginx Ingress

@@ -141,7 +141,7 @@ ssh -i /root/.ssh/kubespray ubuntu@"$CP" 'sudo ETCDCTL_API=3 etcdctl \
   get /registry/secrets/lab/etcd-probe | strings | grep -iE "SuperSecret|k8s:enc"'
 ```
 
-> ✅ **Прогнано на нашем Kubespray:** в выводе виден `"password":"U3VwZXJTZWNyZXQxMjM="` (base64)
+> ✓ **Прогнано на нашем Kubespray:** в выводе виден `"password":"U3VwZXJTZWNyZXQxMjM="` (base64)
 > и даже строка `SuperSecret123` открытым текстом — **БЕЗ префикса `k8s:enc:`**.
 > Это означает, что encryption-at-rest НЕ включён (`--encryption-provider-config` в apiserver не задан).
 > Вывод: на этом кластере secrets в etcd — plaintext. Защита базируется только на строгом RBAC-доступе к ресурсам `secrets`.
@@ -262,7 +262,7 @@ kubectl -n lab get secret app-creds -o jsonpath='{.data.password}' | base64 -d; 
 # Ожидаемый вывод: S3cr3tP@ss
 ```
 
-> ✅ **Прогнано:** `kubeseal` дал `SealedSecret` с `encryptedData` (RSA-шифр,
+> ✓ **Прогнано:** `kubeseal` дал `SealedSecret` с `encryptedData` (RSA-шифр,
 > безопасно для git); после `apply` контроллер успешно создал `Secret/app-creds` с
 > восстановленным `S3cr3tP@ss`.
 
@@ -375,7 +375,7 @@ kubectl -n lab get secret db-from-eso -o jsonpath='{.data.password}' | base64 -d
 # Ожидаемый вывод: new-strong-pass
 ```
 
-> ✅ **Прогнано:** В проде вместо `fake` используется провайдер Vault/AWS/GCP: секрет физически живёт там. ESO синхронит и обновляет его. Ваше приложение просто монтирует обычный `Secret/db-from-eso` как volume или env, не зная ничего про ESO или AWS.
+> ✓ **Прогнано:** В проде вместо `fake` используется провайдер Vault/AWS/GCP: секрет физически живёт там. ESO синхронит и обновляет его. Ваше приложение просто монтирует обычный `Secret/db-from-eso` как volume или env, не зная ничего про ESO или AWS.
 
 Очистим ресурсы:
 ```bash
@@ -617,7 +617,7 @@ kubectl -n lab get secret pg-dynamic-creds -o jsonpath='{.data.username}' | base
 # v-kubernet-dynrole-XXXX   <- Vault-сгенерированный postgres-юзер, попал в Secret через VSO
 ```
 
-> ✅ **Прогнано:** VSO залогинился в Vault, запросил динамический секрет и положил его в `Secret/pg-dynamic-creds`.
+> ✓ **Прогнано:** VSO залогинился в Vault, запросил динамический секрет и положил его в `Secret/pg-dynamic-creds`.
 > Так как мы установили TTL роли в 1 минуту (1m), VSO будет автоматически перевыпускать секрет (ротировать) до истечения срока действия. Если вы посмотрите на этот же секрет через ~45-60 секунд, вы увидите, что username изменился — оператор прозрачно обновил k8s Secret! Приложение, монтирующее Secret как volume, может отследить inotify-эвенты на изменение файла и подгрузить новый пароль.
 
 ---
@@ -628,11 +628,11 @@ kubectl -n lab get secret pg-dynamic-creds -o jsonpath='{.data.username}' | base
 
 | Подход | Где живёт секрет | Git-safe? | Ротация | Идеальный Use-case |
 |--------|------------------|-----------|---------|-------------------|
-| **Обычный Secret** | etcd (base64) | ❌ нет | нет | Никогда не коммитить. Только для локальной разработки. |
+| **Обычный Secret** | etcd (base64) | ✗ нет | нет | Никогда не коммитить. Только для локальной разработки. |
 | **Encryption-at-rest** | etcd (шифр) | — | нет | Базовая защита кластера. Включается админами (ops) всегда для prod. |
-| **Sealed Secrets** | git (шифр) + Secret | ✅ да | вручную | Инди-проекты, GitOps-репозитории, где нет отдельного Vault/AWS. |
-| **External Secrets (ESO)** | внешний менеджер (Vault/Cloud) | ✅ (ссылка) | авто (по refresh) | Enterprise с облачными провайдерами, синк из AWS SM / Azure Key Vault. |
-| **Vault Dynamic (VSO)** | НЕ хранится (генерируется on-demand) | ✅ | авто (по TTL) | БД, облака. Максимальная безопасность (Zero Trust), короткоживущие креды. |
+| **Sealed Secrets** | git (шифр) + Secret | ✓ да | вручную | Инди-проекты, GitOps-репозитории, где нет отдельного Vault/AWS. |
+| **External Secrets (ESO)** | внешний менеджер (Vault/Cloud) | ✓ (ссылка) | авто (по refresh) | Enterprise с облачными провайдерами, синк из AWS SM / Azure Key Vault. |
+| **Vault Dynamic (VSO)** | НЕ хранится (генерируется on-demand) | ✓ | авто (по TTL) | БД, облака. Максимальная безопасность (Zero Trust), короткоживущие креды. |
 
 ---
 

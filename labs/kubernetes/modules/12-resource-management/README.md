@@ -598,10 +598,10 @@ bash verify/verify.sh
 
 Ожидаемый вывод:
 ```text
-✅ [OK] QoS classes and LimitRange applied correctly
-✅ [OK] PriorityClasses verified
-✅ [OK] ResourceQuotas configured
-✅ [OK] Module 12 verified
+✓ [OK] QoS classes and LimitRange applied correctly
+✓ [OK] PriorityClasses verified
+✓ [OK] ResourceQuotas configured
+✓ [OK] Module 12 verified
 ```
 
 ---

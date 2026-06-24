@@ -146,10 +146,10 @@ kubectl -n kube-system get pods -l k8s-app=calico-node -o wide 2>/dev/null \
 
 | CNI | Enforcement | Dataplane (Технология на ноде) |
 |-----|-------------|-----------|
-| Calico | ✅ (наш кластер) | iptables/ipset или eBPF |
-| Cilium | ✅ | eBPF (+ L7/FQDN на уровне прокси) |
-| GKE Dataplane V2 | ✅ | eBPF (основан на Cilium) |
-| Flannel / голый kind | ❌ объект есть, трафик НЕ режется | — |
+| Calico | ✓ (наш кластер) | iptables/ipset или eBPF |
+| Cilium | ✓ | eBPF (+ L7/FQDN на уровне прокси) |
+| GKE Dataplane V2 | ✓ | eBPF (основан на Cilium) |
+| Flannel / голый kind | ✗ объект есть, трафик НЕ режется | — |
 
 ---
 
@@ -339,8 +339,8 @@ probe api db    # Ожидание: OK. (api-policy egress разрешает ->
 
 | Из \ В | api | db |
 |--------|-----|----|
-| **web** | ✅ разрешено | 🔒 заблокировано (timeout) |
-| **api** | 🔒 заблокировано | ✅ разрешено |
+| **web** | ✓ разрешено | ✗ заблокировано (timeout) |
+| **api** | ✗ заблокировано | ✓ разрешено |
 
 > Скомпрометированный `web` физически не дотянется до `db` — это и есть практическая ценность микросегментации. 
 
@@ -584,10 +584,10 @@ bash verify/verify.sh
 
 | Источник \ Цель | → `api:80` | → `db:80` | → `DNS:53` (kube-dns) | → Внешний интернет |
 |----------|----------|---------|--------|--------|
-| `web` | ✅ (web-egress + api-policy) | 🔒 (нет маршрута) | ✅ (allow-dns) | 🔒 (нет egress) |
-| `api` | 🔒 (нет маршрута) | ✅ (api-policy + db-policy) | ✅ (allow-dns) | 🔒 (нет egress) |
-| `db`  | 🔒 (нет маршрута) | 🔒 (нет маршрута) | ✅ (allow-dns) | 🔒 (нет egress) |
-| `прочие поды` | 🔒 (блок Ingress) | 🔒 (блок Ingress) | ✅ (allow-dns) | 🔒 (блок Egress) |
+| `web` | ✓ (web-egress + api-policy) | ✗ (нет маршрута) | ✓ (allow-dns) | ✗ (нет egress) |
+| `api` | ✗ (нет маршрута) | ✓ (api-policy + db-policy) | ✓ (allow-dns) | ✗ (нет egress) |
+| `db`  | ✗ (нет маршрута) | ✗ (нет маршрута) | ✓ (allow-dns) | ✗ (нет egress) |
+| `прочие поды` | ✗ (блок Ingress) | ✗ (блок Ingress) | ✓ (allow-dns) | ✗ (блок Egress) |
 
 Суммарно применено 5 политик: `00-default-deny` (база) + `01-allow-dns` + `02-web-egress` + `03-api-policy` + `04-db-policy`.
 
