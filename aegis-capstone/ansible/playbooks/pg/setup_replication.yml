@@ -1,0 +1,10 @@
+---
+# Запуск роли 09-pg-replication на master (app_nodes) и slave (db_nodes).
+# Master: создание replicator user в docker-PG.
+# Slave: pg_basebackup + старт в standby. Guard'нут от повторного wipe data dir.
+- name: PG streaming replication setup
+  hosts: app_nodes:db_nodes
+  become: no
+  any_errors_fatal: yes
+  roles:
+    - 09-pg-replication
