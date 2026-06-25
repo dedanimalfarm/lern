@@ -1,0 +1,154 @@
+---
+# Planned cutover, фаза 2: переключение app-сервисов на новый master.
+# Pre-conditions:
+#   - cutover-promote.yml успешно прошёл
+#   - az-db = новый master (pg_is_in_recovery = false)
+#   - app-writers и producer остановлены
+#   - старый docker postgres на az-app остановлен
+#
+# После прогона:
+#   - docker-compose.yml на az-app пропатчен (POSTGRES_HOST → WG IP slave'a)
+#   - depends_on: postgres убран у app-сервисов
+#   - app-сервисы пересозданы, пишут на новый master
+#   - producer запущен, pipeline снова течёт
+
+- name: Cutover phase 2 — repoint app services to new master
+  hosts: app_nodes
+  become: no
+  gather_facts: yes
+  vars:
+    slave_wg_ip: "10.100.0.{{ groups['azure_nodes'].index(groups['db_nodes'][0]) + 10 }}"
+    pg_app_user: aegis
+    pg_app_db: aegis
+    pg_app_password: aegis_dev_only
+    compose_path: /opt/aegis-app/docker-compose.yml
+    # Имя + порт /health для каждого сервиса (порты из docker-compose.yml).
+    app_services:
+      - { name: ledger-api, port: 8081 }
+      - { name: normalizer, port: 8082 }
+      - { name: matcher,    port: 8083 }
+      - { name: tx-writer,  port: 8085 }
+  environment:
+    PGPASSWORD: "{{ pg_app_password }}"
+
+  tasks:
+
+    # 1. Бекап compose'а перед правкой — для отката.
+    - name: 1. Backup docker-compose.yml
+      copy:
+        src: "{{ compose_path }}"
+        dest: "{{ compose_path }}.pre-cutover-{{ ansible_facts['date_time']['iso8601'] }}"
+        remote_src: yes
+
+    # 2. POSTGRES_HOST=postgres → POSTGRES_HOST={{ slave_wg_ip }}.
+    # Модуль replace идемпотентен — повторный прогон не упадёт.
+    - name: 2. Repoint POSTGRES_HOST → new master WG IP
+      replace:
+        path: "{{ compose_path }}"
+        regexp: 'POSTGRES_HOST=postgres'
+        replace: 'POSTGRES_HOST={{ slave_wg_ip }}'
+
+    - name: 2c. Check — POSTGRES_HOST replaced
+      shell: grep -c 'POSTGRES_HOST={{ slave_wg_ip }}' {{ compose_path }}
+      register: host_count
+      failed_when: (host_count.stdout | int) < 2
+      changed_when: false
+
+    # 3. Убираем целиком блок:
+    #   depends_on:
+    #     postgres: { condition: service_healthy }
+    # У ledger-api и tx-writer postgres — единственный депенденси, после удаления
+    # postgres-строки пустой `depends_on:` ломает compose validation (must be array).
+    # Снимаем сразу обе строки. Многострочный regex — replace работает в MULTILINE.
+    - name: "3. Remove depends_on + postgres entry"
+      replace:
+        path: "{{ compose_path }}"
+        regexp: '^\s*depends_on:\s*\n\s*postgres:\s*\{\s*condition:\s*service_healthy\s*\}\s*\n'
+        replace: ''
+
+    - name: 3c. Check — compose validates after edits
+      shell: cd /opt/aegis-app && docker compose config --quiet
+      changed_when: false
+
+    # 4. Recreate app-сервисов с новой env.
+    # --force-recreate — поднять с новыми environment (не из кэша контейнера).
+    # --no-deps — не тянуть postgres-сервис (он остался в compose, но запускать его не надо).
+    - name: 4. Recreate app services with new POSTGRES_HOST
+      shell: cd /opt/aegis-app && docker compose up -d --force-recreate --no-deps {{ app_services | map(attribute='name') | join(' ') }}
+
+    - name: 4c. Check — все app-сервисы реально Up
+      shell: docker inspect -f '{% raw %}{{.State.Status}}{% endraw %}' {{ item.name }}
+      register: app_status
+      failed_when: app_status.stdout | trim != 'running'
+      changed_when: false
+      loop: "{{ app_services }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # 5. Health-чек — каждый сервис должен ответить /health 200.
+    # retries+until даёт время на старт (asyncpg-коннект может строиться 1-2с).
+    - name: 5. Health check apps
+      uri:
+        url: "http://127.0.0.1:{{ item.port }}/health"
+        status_code: 200
+      loop: "{{ app_services }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: health
+      retries: 15
+      delay: 2
+      until: health.status == 200
+
+    # 6. Start producer обратно — pipeline снова льёт.
+    - name: 6. Start producer
+      shell: docker start producer
+
+    # 7. Дать pipeline время прокачать события.
+    - name: 7. Пауза 5с на прокачку
+      pause:
+        seconds: 5
+
+    # 8. Smoke — COUNT(*) на новом master должен расти.
+    - name: 8a. Initial transactions count
+      shell: psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT COUNT(*) FROM transactions;"
+      register: tx_before
+      changed_when: false
+
+    - name: 8b. Пауза 5с
+      pause:
+        seconds: 5
+
+    - name: 8c. Repeat count
+      shell: psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT COUNT(*) FROM transactions;"
+      register: tx_after
+      changed_when: false
+
+    - name: 8d. Assert — counter вырос (pipeline пишет на новый master)
+      assert:
+        that:
+          - (tx_after.stdout | trim | int) > (tx_before.stdout | trim | int)
+        fail_msg: "transactions не выросли: before={{ tx_before.stdout | trim }} after={{ tx_after.stdout | trim }}. Pipeline не пишет."
+        success_msg: "Pipeline жив: {{ tx_before.stdout | trim }} → {{ tx_after.stdout | trim }} за 5с."
+
+    # 9. Cleanup — старый docker postgres больше не нужен. Удаляем контейнер и volume.
+    # Данные на az-db, реплика жила корректно, terminal LSN совпал → старый pgdata
+    # это копия того что уже на новом master'е.
+    - name: 9a. Remove old docker postgres container
+      shell: docker rm postgres
+      register: rm_postgres
+      changed_when: "'postgres' in rm_postgres.stdout"
+
+    - name: 9b. Remove pgdata volume
+      shell: docker volume rm aegis-app_pgdata
+      register: rm_volume
+      failed_when:
+        - rm_volume.rc != 0
+        - "'No such volume' not in rm_volume.stderr"
+      changed_when: rm_volume.rc == 0
+
+    - name: Cutover complete
+      debug:
+        msg:
+          - "Cutover done. Apps пишут на az-db ({{ slave_wg_ip }})."
+          - "Старый postgres-контейнер и volume удалены."
+          - "Backup compose: {{ compose_path }}.pre-cutover-*"

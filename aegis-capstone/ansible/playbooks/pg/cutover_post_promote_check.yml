@@ -1,0 +1,59 @@
+---
+# Промежуточные проверки между cutover_promote.yml и cutover_repoint.yml.
+# Запуск: ansible-playbook -i inventory/hosts.ini playbooks/pg/cutover_check.yml
+# Если всё зелёное → запускай cutover_repoint.yml.
+
+- name: Post-promote sanity checks
+  hosts: app_nodes
+  become: no
+  gather_facts: no
+  vars:
+    slave_wg_ip: "10.100.0.{{ groups['azure_nodes'].index(groups['db_nodes'][0]) + 10 }}"
+    pg_app_user: aegis
+    pg_app_db: aegis
+    pg_app_password: aegis_dev_only
+  environment:
+    PGPASSWORD: "{{ pg_app_password }}"
+
+  tasks:
+    # 1. Новый master не в recovery.
+    - name: 1. New master is primary (pg_is_in_recovery = f)
+      shell: psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_is_in_recovery();"
+      register: rec
+      changed_when: false
+      failed_when: rec.stdout | trim != 'f'
+
+    # 2. Timeline инкрементнулся (был 1, должен быть 2+).
+    - name: 2. Timeline incremented (>= 2)
+      shell: psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT timeline_id FROM pg_control_checkpoint();"
+      register: tl
+      changed_when: false
+      failed_when: (tl.stdout | trim | int) < 2
+
+    # 3. Смоук-запись из promote'a видна.
+    - name: 3. Smoke marker present
+      shell: psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -c "SELECT id, ts FROM _cutover_smoke ORDER BY id DESC LIMIT 3;"
+      register: smoke
+      changed_when: false
+
+    # 4. Старый master и app-writers/producer реально стоят.
+    - name: 4. Old containers Exited
+      shell: docker ps -a --format '{% raw %}{{.Names}} {{.State}}{% endraw %}' | grep -E '^(postgres|tx-writer|ledger-api|matcher|normalizer|producer) '
+      register: ctrs
+      changed_when: false
+      failed_when: "'running' in ctrs.stdout"
+
+    # 5. WG до нового master'а работает.
+    - name: 5. WG reachable
+      shell: nc -zvw 3 {{ slave_wg_ip }} 5432
+      changed_when: false
+
+    - name: Summary
+      debug:
+        msg:
+          - "1. recovery_state: {{ rec.stdout | trim }}"
+          - "2. timeline:       {{ tl.stdout | trim }}"
+          - "3. smoke:          {{ smoke.stdout_lines | select | list }}"
+          - "4. containers:     OK (все Exited)"
+          - "5. WG:             OK"
+          - "→ можно запускать cutover_repoint.yml"
