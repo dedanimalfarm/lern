@@ -10,12 +10,16 @@ services:
     container_name: postgres
     restart: unless-stopped
     networks: [aegis-net]
+    command: ["postgres", "-c", "wal_level=replica", "-c", "max_wal_senders=10", "-c", "wal_keep_size=1GB", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+    ports:
+      - "10.100.0.10:5432:5432"
     environment:
       - POSTGRES_USER=aegis
       - POSTGRES_PASSWORD=aegis_dev_only
       - POSTGRES_DB=aegis
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./db-config/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aegis -d aegis"]
       interval: 10s
@@ -173,6 +177,61 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  producer:
+    build: ./app/producer
+    image: aegis/producer:0.1.0
+    container_name: producer
+    restart: unless-stopped
+    networks: [aegis-net]
+    ports:
+      - "8084:80"
+    environment:
+      - SERVICE_NAME=producer
+      - VERSION=0.1.0
+      - KAFKA_BOOTSTRAP_SERVERS=10.100.0.12:9092
+      - KAFKA_TOPIC=raw-feeds
+      - RATE_PER_SEC=10
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/health', timeout=3).status==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  tx-writer:
+    build: ./app/tx-writer
+    image: aegis/tx-writer:0.1.0
+    container_name: tx-writer
+    restart: unless-stopped
+    networks: [aegis-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports:
+      - "8085:80"
+    environment:
+      - SERVICE_NAME=tx-writer
+      - VERSION=0.1.0
+      - KAFKA_BOOTSTRAP_SERVERS=10.100.0.12:9092
+      - KAFKA_TOPIC=raw-feeds
+      - KAFKA_GROUP_ID=tx-writer
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=aegis
+      - POSTGRES_PASSWORD=aegis_dev_only
+      - POSTGRES_DB=aegis
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/health', timeout=3).status==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }

@@ -1,0 +1,55 @@
+---
+# Зачем: Раскатать docker-compose стек микросервисов на az-app.
+# Почему так: Push с controller'а через synchronize заменяет ручной rsync из runbook'а.
+#   Идемпотентно, видно в playbook output, не привязано к remote git.
+
+# Зачем: Подготовить каталог для деплоя.
+# Почему так: /opt — стандартное место для third-party приложений; chown на ansible_user, чтобы
+#   synchronize мог писать без sudo escalation на каждую таску.
+#   become: yes — каталог мог быть создан другой ролью (05-app-sandbox) с другим владельцем.
+- name: Создание директории /opt/aegis-app
+  file:
+    path: /opt/aegis-app
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  become: yes
+
+# Зачем: Синкнуть исходный код микросервисов на az-app.
+# Почему так: synchronize = обёртка над rsync, выполняется на controller'е (delegate_to). --delete
+#   удаляет на сервере файлы, которых нет локально, превращая remote-каталог в зеркало.
+- name: Синхронизация app/ → /opt/aegis-app/app/
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../app/"
+    dest: /opt/aegis-app/app/
+    delete: yes
+    rsync_opts:
+      - "--exclude=__pycache__"
+      - "--exclude=.pytest_cache"
+      - "--exclude=*.pyc"
+
+- name: Синхронизация db-config → /opt/aegis-app/db-config
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../db-config/"
+    dest: /opt/aegis-app/db-config
+    delete: yes
+
+# Зачем: Положить compose-файл рядом с кодом.
+# Почему так: docker compose ищет docker-compose.yml в текущем рабочем каталоге.
+- name: Копирование docker-compose.yml
+  copy:
+    src: "{{ playbook_dir }}/../docker-compose.yml"
+    dest: /opt/aegis-app/docker-compose.yml
+    mode: '0644'
+
+# Зачем: Поднять/обновить контейнеры.
+# Почему так: docker_compose_v2 идемпотентно сравнивает желаемое состояние с running контейнерами,
+#   пересобирает образы при изменении кода (build: yes), стартует только нужное.
+- name: Запуск docker compose up
+  community.docker.docker_compose_v2:
+    project_src: /opt/aegis-app
+    state: present
+    build: always
+    pull: missing
+  become: yes

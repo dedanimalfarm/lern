@@ -28,9 +28,20 @@
 # Почему так: Ставится только на `db_nodes` для аппаратной изоляции от приложения.
 - name: Setup Database Tier
   block:
+    - name: Добавление GPG ключа PGDG
+      get_url:
+        url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        dest: /etc/apt/trusted.gpg.d/pgdg.asc
+
+    - name: Добавление репозитория PGDG
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/trusted.gpg.d/pgdg.asc] http://apt.postgresql.org/pub/repos/apt jammy-pgdg main"
+        state: present
+        filename: pgdg
+
     - name: Установка PostgreSQL, Redis и psycopg2
       apt:
-        name: [postgresql, redis-server, python3-psycopg2]
+        name: [postgresql-16, redis-server, python3-psycopg2]
         state: present
         update_cache: yes
 
