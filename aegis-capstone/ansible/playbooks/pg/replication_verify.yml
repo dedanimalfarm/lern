@@ -1,0 +1,147 @@
+---
+# Sanity-check streaming replication master (az-app, docker postgres) → slave (az-db, native PG).
+# Запуск: ansible-playbook -i inventory/hosts.ini verify_replication.yml
+# Зачем: одной командой увидеть lag, LSN-расхождение и доказать что INSERT долетает.
+
+- name: Verify PG streaming replication
+  hosts: app_nodes
+  become: no
+  gather_facts: no
+  vars:
+    slave_wg_ip: "10.100.0.{{ groups['azure_nodes'].index(groups['db_nodes'][0]) + 10 }}"
+    pg_app_user: aegis
+    pg_app_db: aegis
+    pg_app_password: aegis_dev_only
+
+  tasks:
+
+    # 1. Состояние стрима с точки зрения master'a.
+    - name: 1. pg_stat_replication на master
+      shell: |
+        docker exec postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -x -c \
+          "SELECT client_addr, state, sync_state, write_lag, flush_lag, replay_lag,
+                  pg_wal_lsn_diff(sent_lsn, replay_lsn) AS lag_bytes
+           FROM pg_stat_replication;"
+      register: stat_repl
+      changed_when: false
+
+    - name: 1. Вывод pg_stat_replication
+      debug:
+        var: stat_repl.stdout_lines
+
+    - name: 1. Assert — есть хотя бы один streaming-клиент
+      assert:
+        that:
+          - "'streaming' in stat_repl.stdout"
+        fail_msg: "Нет streaming-клиента в pg_stat_replication. Slave отвалился."
+
+    # 2. LSN на master и slave — расхождение в байтах.
+    - name: 2. current_wal_lsn на master
+      shell: docker exec postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_current_wal_lsn();"
+      register: master_lsn
+      changed_when: false
+
+    - name: 2. last_wal_replay_lsn на slave (через WG)
+      shell: PGPASSWORD={{ pg_app_password }} psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_last_wal_replay_lsn();"
+      register: slave_lsn
+      changed_when: false
+
+    - name: 2. lag в байтах (master_lsn - slave_lsn)
+      shell: docker exec postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_wal_lsn_diff('{{ master_lsn.stdout | trim }}', '{{ slave_lsn.stdout | trim }}');"
+      register: lsn_diff
+      changed_when: false
+
+    - name: 2. LSN summary
+      debug:
+        msg:
+          - "master_lsn: {{ master_lsn.stdout | trim }}"
+          - "slave_lsn:  {{ slave_lsn.stdout | trim }}"
+          - "lag_bytes:  {{ lsn_diff.stdout | trim }}"
+
+    # 3. Read-only check: любой INSERT на slave должен упасть.
+    # Используем существующую таблицу transactions — на standby любая запись = ошибка.
+    - name: 3. INSERT на slave (должен упасть)
+      shell: |
+        PGPASSWORD={{ pg_app_password }} psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -c \
+          "INSERT INTO transactions DEFAULT VALUES;"
+      register: slave_write
+      failed_when: slave_write.rc == 0
+      changed_when: false
+
+    - name: 3. Assert — slave read-only
+      assert:
+        that:
+          - "'read-only' in slave_write.stderr or 'cannot execute' in slave_write.stderr"
+        fail_msg: "Slave принял INSERT — он НЕ в recovery. КРИТИЧНО."
+        success_msg: "Slave корректно отказал в записи (read-only)."
+
+    # 5. Снапшот row-count'ов master↔slave с остановкой producer'а на время чека.
+    # Block гарантирует что producer запустится обратно даже если внутри что-то упадёт.
+    - block:
+        - name: 5. Stop producer
+          shell: docker stop producer
+
+        # Quiescence: LSN не меняется между двумя замерами с интервалом 1с →
+        # consumer'ы (normalizer/matcher/tx-writer) допили kafka-очередь.
+        - name: 5. Ждём quiescence (LSN стабилен)
+          shell: |
+            prev=$(docker exec postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_current_wal_lsn();")
+            for i in $(seq 1 20); do
+              sleep 1
+              cur=$(docker exec postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_current_wal_lsn();")
+              if [ "$cur" = "$prev" ]; then echo "STABLE at $cur"; exit 0; fi
+              prev=$cur
+            done
+            echo "NOT STABLE after 20s: $cur"; exit 1
+          register: quiescence
+          changed_when: false
+
+        - name: 5. SQL для row-count непустых user-таблиц
+          shell: |
+            docker exec postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc \
+              "SELECT string_agg(format('SELECT %L AS tbl, COUNT(*) AS rows FROM %I.%I', relname, schemaname, relname), ' UNION ALL ') || ' ORDER BY tbl' FROM pg_stat_user_tables WHERE schemaname = 'public' AND n_live_tup > 0;"
+          register: count_query
+          changed_when: false
+
+        - name: 5. COUNT на master + LSN
+          shell: |
+            docker exec -i postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -tAF'|' <<SQL
+            SELECT 'LSN|' || pg_current_wal_lsn();
+            {{ count_query.stdout | trim }};
+            SQL
+          register: master_snapshot
+          changed_when: false
+
+        - name: 5. Парсинг LSN и counts
+          set_fact:
+            master_lsn: "{{ (master_snapshot.stdout_lines | select('search', '^LSN') | first).split('|')[1] }}"
+            master_counts_lines: "{{ master_snapshot.stdout_lines | select('search', '\\|') | reject('search', '^LSN') | list }}"
+
+        - name: "5. Ожидание slave replay до LSN={{ master_lsn }}"
+          shell: |
+            PGPASSWORD={{ pg_app_password }} psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc \
+              "SELECT pg_wal_lsn_diff('{{ master_lsn }}', pg_last_wal_replay_lsn());"
+          register: lsn_lag
+          until: (lsn_lag.stdout | trim | int) <= 0
+          retries: 30
+          delay: 1
+          changed_when: false
+
+        - name: 5. COUNT на slave
+          shell: |
+            PGPASSWORD={{ pg_app_password }} psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAF'|' \
+              -c "{{ count_query.stdout | trim }};"
+          register: slave_snapshot
+          changed_when: false
+
+        - name: "5. Row counts at LSN={{ master_lsn }}"
+          debug:
+            msg:
+              - "MASTER:"
+              - "{{ master_counts_lines }}"
+              - "SLAVE:"
+              - "{{ slave_snapshot.stdout_lines | select('search', '\\|') | list }}"
+
+      always:
+        - name: 5. Start producer (always)
+          shell: docker start producer
