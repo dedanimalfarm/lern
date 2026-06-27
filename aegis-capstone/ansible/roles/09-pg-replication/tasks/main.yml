@@ -1,0 +1,115 @@
+---
+# Роль 09-pg-replication: настройка streaming replication compose-PG (master) → az-db PG (slave).
+# Зачем: Создать PG-роль `replicator` с REPLICATION-атрибутом для streaming replication.
+# Почему так: Slave при pg_basebackup и WAL streaming аутентифицируется как `replicator`.
+#   Идемпотентность через DO $$ ... IF NOT EXISTS ... $$ — повторный прогон не упадёт.
+
+# Зачем: Вычислить overlay-IP master'а из SSOT (groups['azure_nodes'] + индекс).
+# Почему так: Та же формула, что в роли 05-overlay-network (CLAUDE.md: IP по индексу с .10).
+#   Не зависит от set_fact из роли 05 — роль 09 может запускаться независимо.
+- name: Вычисление overlay-IP master'а (app_nodes[0])
+  set_fact:
+    master_wg_ip: "10.100.0.{{ groups['azure_nodes'].index(groups['app_nodes'][0]) + 10 }}"
+    pg_data_dir: "/var/lib/postgresql/{{ pg_version }}/main"
+
+- name: Создание replicator user на master
+  shell: |
+    docker exec postgres psql -U aegis -d aegis -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='replicator') THEN CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '{{ replication_pg_password }}'; END IF; END \$\$;"
+  register: replicator_create
+  changed_when: "'CREATE ROLE' in replicator_create.stdout"
+  failed_when: replicator_create.rc != 0
+  when: "'app_nodes' in group_names"
+  no_log: yes
+
+# Зачем: Проверить, не настроен ли slave уже как standby.
+# Почему так: Дальнейшие таски деструктивны (очистка data dir). Без guard'а повторный
+#   прогон роли снёс бы работающий slave с данными.
+- name: Guard — проверка наличия standby.signal на slave
+  stat:
+    path: "{{ pg_data_dir }}/standby.signal"
+  register: standby_signal
+  become: yes
+  when: "'db_nodes' in group_names"
+
+# Зачем: Остановить PG перед очисткой data dir.
+# Почему так: Нельзя удалять файлы под running PG-процессом.
+- name: Остановка PG на slave
+  systemd:
+    name: postgresql
+    state: stopped
+  become: yes
+  when:
+    - "'db_nodes' in group_names"
+    - not (standby_signal.stat.exists | default(false))
+
+# Зачем: Очистить data dir перед pg_basebackup.
+# Почему так: pg_basebackup пишет в пустую директорию. Существующий пустой кластер на az-db
+#   будет полностью заменён копией с master'а.
+- name: Удаление старого data dir
+  file:
+    path: "{{ pg_data_dir }}"
+    state: absent
+  become: yes
+  when:
+    - "'db_nodes' in group_names"
+    - not (standby_signal.stat.exists | default(false))
+
+- name: Создание пустого data dir с правильными правами
+  file:
+    path: "{{ pg_data_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0700'
+  become: yes
+  when:
+    - "'db_nodes' in group_names"
+    - not (standby_signal.stat.exists | default(false))
+
+# Зачем: Скопировать data dir с master'а и сконфигурировать standby-режим.
+# Почему так: pg_basebackup с -R создаёт standby.signal и primary_conninfo автоматически.
+#   PGPASSWORD через environment безопаснее чем в команде (не в ps).
+- name: pg_basebackup с master'а
+  command: "pg_basebackup -h {{ master_wg_ip }} -p 5432 -U replicator -D {{ pg_data_dir }} -P -R"
+  become: yes
+  become_user: postgres
+  environment:
+    PGPASSWORD: "{{ replication_pg_password }}"
+  register: basebackup_result
+  failed_when: basebackup_result.rc != 0
+  no_log: yes
+  when:
+    - "'db_nodes' in group_names"
+    - not (standby_signal.stat.exists | default(false))
+
+# Зачем: Убедиться что standby.signal создан pg_basebackup'ом перед стартом PG.
+# Почему так: Без файла PG стартанёт как master, а не slave — расхождение данных.
+- name: Проверка наличия standby.signal после basebackup
+  stat:
+    path: "{{ pg_data_dir }}/standby.signal"
+  register: standby_signal_post
+  become: yes
+  when:
+    - "'db_nodes' in group_names"
+    - not (standby_signal.stat.exists | default(false))
+
+- name: Assert — standby.signal создан
+  assert:
+    that:
+      - standby_signal_post.stat.exists
+    fail_msg: "pg_basebackup не создал standby.signal. PG стартанёт как master — НЕ запускаем."
+  when:
+    - "'db_nodes' in group_names"
+    - not (standby_signal.stat.exists | default(false))
+
+# Зачем: Запустить PG в standby-режиме после basebackup'а.
+# Почему так: PG увидит standby.signal → recovery mode → подключится к master'у по primary_conninfo →
+#   начнёт streaming WAL.
+- name: Запуск PG на slave
+  # Без guard'а standby_signal — идемпотентно: если уже started, systemd-модуль no-op.
+  systemd:
+    name: postgresql
+    state: started
+    enabled: yes
+  become: yes
+  when: "'db_nodes' in group_names"

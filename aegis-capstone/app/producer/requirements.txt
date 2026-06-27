@@ -1,0 +1,4 @@
+fastapi==0.115.4
+uvicorn[standard]==0.32.0
+aiokafka==0.11.0
+prometheus-client==0.21.0

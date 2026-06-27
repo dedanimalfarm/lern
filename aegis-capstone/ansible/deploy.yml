@@ -1,0 +1,10 @@
+---
+# ---------------------------------------------------------------------------
+# Aegis: deploy микросервисов на az-app через docker-compose.
+# Запускать отдельно от site.yml (инфра-конфиг), это application-layer операция.
+# ---------------------------------------------------------------------------
+- name: App deploy (microservices via docker compose)
+  hosts: app_nodes
+  become: no
+  roles:
+    - 08-app-deploy

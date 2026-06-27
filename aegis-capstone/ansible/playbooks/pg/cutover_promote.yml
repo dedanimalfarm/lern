@@ -1,0 +1,108 @@
+---
+# Planned cutover, фаза 1: promote slave → master.
+# После прогона:
+#   - producer и app-writers остановлены
+#   - старый docker postgres на az-app остановлен (но контейнер ещё жив, можно вернуть)
+#   - az-db в роли primary (pg_is_in_recovery = false)
+#   - clients (ledger-api/tx-writer/...) ещё смотрят на старый адрес → НЕ работают
+# Дальше: cutover-repoint.yml для переключения клиентов.
+#
+# Откат если что-то пошло не так:
+#   docker start postgres tx-writer ledger-api matcher normalizer producer  на az-app
+#   (но если pg_promote уже отработал, старый master будет с расхождением — лучше basebackup заново)
+
+- name: Cutover phase 1 — promote slave to master
+  hosts: app_nodes
+  become: yes
+  gather_facts: no
+  vars:
+    slave_wg_ip: "10.100.0.{{ groups['azure_nodes'].index(groups['db_nodes'][0]) + 10 }}"
+    pg_app_user: aegis
+    pg_app_db: aegis
+    pg_app_password: aegis_dev_only
+    # Сервисы которые пишут в PG — стопаем перед promote чтоб не было in-flight INSERT'ов.
+    pg_writer_services:
+      - tx-writer
+      - ledger-api
+      - matcher
+      - normalizer
+  # Все shell-таски наследуют PGPASSWORD — psql сам подхватывает из env.
+  # Не светится в ps/argv (как было бы при -W) и не нужно повторять в каждой команде.
+  environment:
+    PGPASSWORD: "{{ pg_app_password }}"
+
+  tasks:
+    # 1. Stop producer — обрезаем источник нагрузки.
+    - name: 1. Stop producer
+      shell: docker stop producer
+
+    # 2. Wait quiescence — LSN на master стабилен → consumer'ы допили kafka.
+    - name: 2. Wait quiescence (LSN stable for N seconds)
+      shell: |
+        prev=$(docker exec postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_current_wal_lsn();")
+        for i in $(seq 1 20); do
+          sleep 1
+          cur=$(docker exec postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_current_wal_lsn();")
+          if [ "$cur" = "$prev" ]; then echo "STABLE at $cur"; exit 0; fi
+          prev=$cur
+        done
+        echo "NOT STABLE after 20s: $cur"; exit 1
+      register: quiescence
+      changed_when: false
+
+    # 3. Stop app-writers — после quiescence новых записей не будет, но на всякий.
+    # join(' ') нужен потому что docker stop хочет space-separated, а ansible подставит
+    # питоновский repr списка ([u'tx-writer', ...]) если не привести.
+    - name: 3. Stop app writer services
+      shell: docker stop {{ pg_writer_services | join(' ') }}
+
+    # 4. Capture финальный LSN на master.
+    - name: 4. Capture final master LSN
+      shell: docker exec postgres psql -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_current_wal_lsn();"
+      register: final_lsn
+      changed_when: false
+
+    # 5. Wait slave догнал final_lsn до байта.
+    # pg_wal_lsn_diff('master_lsn_str', pg_last_wal_replay_lsn()) — кавычки обязательны,
+    # LSN это тип pg_lsn, передаём его как литерал-строку.
+    - name: 5. Wait slave replay caught up
+      shell: psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_wal_lsn_diff('{{ final_lsn.stdout | trim }}', pg_last_wal_replay_lsn());"
+      register: lag
+      until: (lag.stdout | trim | int) <= 0
+      retries: 60
+      delay: 1
+      changed_when: false
+
+    # 6. Stop docker postgres на az-app — старый master выключен.
+    - name: 6. Stop old master (docker postgres)
+      shell: docker stop postgres
+
+    # 7. Promote slave: pg_promote(wait=true, wait_seconds=60).
+    # Возвращает 't' если успешно promot'ился, 'f' если не успел за 60с.
+    - name: 7. Promote slave to primary
+      shell: psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_promote(true, 60);"
+      register: promote_result
+      failed_when: promote_result.stdout | trim != 't'
+      changed_when: true
+
+    # 8. Verify: новый master НЕ в recovery.
+    # pg_is_in_recovery() — со скобками, это функция, а не identifier.
+    - name: 8. Verify new master is primary
+      shell: psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc "SELECT pg_is_in_recovery();"
+      register: recovery_state
+      failed_when: recovery_state.stdout | trim != 'f'
+      changed_when: false
+
+    # 9. Smoke на новом master — INSERT в маркер-таблицу, должен пройти.
+    # CREATE IF NOT EXISTS делает таску идемпотентной (повторный прогон не свалит).
+    - name: 9. Write smoke test on new master
+      shell: |
+        psql -h {{ slave_wg_ip }} -U {{ pg_app_user }} -d {{ pg_app_db }} -tAc \
+          "CREATE TABLE IF NOT EXISTS _cutover_smoke (id serial, ts timestamptz default now()); INSERT INTO _cutover_smoke DEFAULT VALUES RETURNING id;"
+      register: smoke
+      failed_when: smoke.rc != 0
+      changed_when: true
+
+    - name: Promote done
+      debug:
+        msg: "Slave promoted. Run cutover-repoint.yml дальше для переключения клиентов."
