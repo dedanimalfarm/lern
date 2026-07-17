@@ -823,18 +823,25 @@ kubectl -n lab rollout status deploy/kb-web --timeout=120s
 **Воспроизведение:**
 
 ```bash
-# Одноразовый под, чья команда сразу завершается с ошибкой
-kubectl -n lab run crasher --image=busybox:1.36 --restart=Never -- \
+# Под, чья команда сразу завершается с ошибкой. ВАЖНО: restartPolicy оставляем
+# по умолчанию (Always) — CrashLoopBackOff возможен ТОЛЬКО когда kubelet
+# перезапускает упавший контейнер. С --restart=Never под упал бы один раз и
+# навсегда остался в статусе Error (RESTARTS 0), а `logs --previous` вернул бы
+# ошибку «previous terminated container not found»: предыдущего запуска нет.
+kubectl -n lab run crasher --image=busybox:1.36 -- \
   sh -c 'echo "boot..."; sleep 2; echo "fatal: config missing" >&2; exit 1'
-sleep 15
+sleep 30
 ```
 
 **Диагностика:**
 
 ```bash
 kubectl -n lab get pod crasher
-# crasher   0/1   CrashLoopBackOff   2 (10s ago)   25s
-#                  ^ kubelet ждёт всё дольше между рестартами (back-off)
+# crasher   0/1   Error              2 (16s ago)    25s    <- только что упал
+# crasher   0/1   CrashLoopBackOff   5 (103s ago)   4m54s  <- пауза между рестартами
+#   Статус ЧЕРЕДУЕТСЯ: Error (контейнер только что завершился) <->
+#   CrashLoopBackOff (kubelet выжидает back-off, пауза растёт с каждым падением).
+#   Признак цикла — растущий счётчик RESTARTS, а не конкретное слово в STATUS.
 
 # Логи ТЕКУЩего запуска могут быть пусты — нужен предыдущий, упавший:
 kubectl -n lab logs crasher --previous
@@ -844,6 +851,10 @@ kubectl -n lab logs crasher --previous
 # Подтверждение в describe: последний контейнер вышел с кодом 1
 kubectl -n lab describe pod crasher | grep -A3 "Last State"
 # Last State: Terminated  Reason: Error  Exit Code: 1
+
+# Событие back-off в хвосте describe (или в get events):
+kubectl -n lab describe pod crasher | grep BackOff
+# Warning  BackOff  33s (x6 over 4m49s)  kubelet  Back-off restarting failed container crasher ...
 ```
 
 **Решение:**
