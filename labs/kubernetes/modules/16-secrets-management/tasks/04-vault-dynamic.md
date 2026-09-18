@@ -15,7 +15,7 @@ kubectl -n lab apply -f manifests/vault/rbac.yaml -f manifests/vault/vso-secrets
 sleep 10
 kubectl -n lab get vaultdynamicsecret pg-dynamic
 U1=$(kubectl -n lab get secret pg-dynamic-creds -o jsonpath='{.data.username}' | base64 -d); echo "$U1"
-sleep 60
+sleep 130
 U2=$(kubectl -n lab get secret pg-dynamic-creds -o jsonpath='{.data.username}' | base64 -d); echo "$U2"
 kubectl -n lab exec deploy/pg -- psql -U postgres -tAc "select usename from pg_user where usename like 'v-%';"
 ```
@@ -23,7 +23,7 @@ kubectl -n lab exec deploy/pg -- psql -U postgres -tAc "select usename from pg_u
 ## Ожидаемый результат
 - Два `vault read` подряд вернули двух **разных** пользователей `v-kubernet-dynrole-…` —
   Vault создаёт их в PostgreSQL на лету.
-- `Secret/pg-dynamic-creds` появился; через минуту (TTL роли `1m`) `username` в нём
+- `Secret/pg-dynamic-creds` появился; через ~2 минуты (TTL роли `2m`) `username` в нём
   изменился — VSO перевыпустил креды сам, приложение ничего не делало.
 - В `pg_user` видны только живые динамические пользователи: истёкшие Vault отзывает.
 - Вы объяснили, чем это безопаснее статического пароля в Secret (нет долгоживущего секрета,

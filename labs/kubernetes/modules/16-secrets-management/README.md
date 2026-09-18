@@ -296,44 +296,31 @@ Sealed Secrets хорош, но имеет недостатки:
 
 ### 3.1 Настройка SecretStore + ExternalSecret
 
-Создадим директорию и манифест:
+Манифест уже лежит в репозитории — посмотрим его:
 ```bash
-mkdir -p manifests/eso
-
-cat << 'EOF' > manifests/eso/eso-fake.yaml
+cat manifests/eso/eso-fake.yaml
+```
+```yaml
 apiVersion: external-secrets.io/v1
 kind: SecretStore
-metadata:
-  name: fake-store
-  namespace: lab
+metadata: { name: fake-store, namespace: lab }
 spec:
   provider:
-    fake:
+    fake:                            # статичные значения — для демо без реального Vault/cloud
       data:
-        - key: my-database-password
-          version: v1
-          valueMap:
-            password: fake-pass-123
+      - { key: "/db/username", value: "fake-user" }
+      - { key: "/db/password", value: "fake-pass-123" }
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
-metadata:
-  name: db-from-eso
-  namespace: lab
+metadata: { name: db-from-eso, namespace: lab }
 spec:
-  refreshInterval: "10s"           # Как часто проверять обновления в источнике
-  secretStoreRef:
-    name: fake-store               # Ссылка на наш SecretStore
-    kind: SecretStore
-  target:
-    name: db-from-eso              # Имя создаваемого k8s Secret
-    creationPolicy: Owner
+  refreshInterval: 15s               # как часто сверяться с источником
+  secretStoreRef: { name: fake-store, kind: SecretStore }
+  target: { name: db-from-eso }      # сюда ESO положит синхронизированный Secret
   data:
-  - secretKey: password            # Ключ внутри итогового k8s Secret
-    remoteRef:
-      key: my-database-password    # Ключ во внешнем провайдере
-      property: password           # Поле внутри внешнего ключа
-EOF
+  - { secretKey: username, remoteRef: { key: "/db/username" } }
+  - { secretKey: password, remoteRef: { key: "/db/password" } }
 ```
 
 Применим манифесты:
@@ -348,7 +335,7 @@ kubectl -n lab get externalsecret db-from-eso
 
 ```
 NAME          STORE        REFRESH INTERVAL   STATUS         READY
-db-from-eso   fake-store   10s                SecretSynced   True
+db-from-eso   fake-store   15s                SecretSynced   True
 ```
 
 Статус `SecretSynced` означает, что ESO успешно сходил в "провайдер", достал данные и создал Secret.
@@ -360,17 +347,19 @@ kubectl -n lab get secret db-from-eso -o jsonpath='{.data.password}' | base64 -d
 
 ### 3.2 Ротация и refreshInterval
 
-Одно из мощных свойств ESO — это периодическая синхронизация (`refreshInterval: "10s"`).
-Сымитируем изменение пароля администратором во внешнем менеджере (изменим `fake-store`):
+Одно из мощных свойств ESO — периодическая синхронизация (`refreshInterval: 15s`).
+Сымитируем смену пароля администратором во внешнем менеджере (правим второй элемент
+`data` в `fake-store` — это `/db/password`):
 
 ```bash
-kubectl -n lab patch secretstore fake-store --type=merge -p '{"spec":{"provider":{"fake":{"data":[{"key":"my-database-password","version":"v2","valueMap":{"password":"new-strong-pass"}}]}}}}'
+kubectl -n lab patch secretstore fake-store --type=json \
+  -p='[{"op":"replace","path":"/spec/provider/fake/data/1/value","value":"new-strong-pass"}]'
 ```
 
-Теперь ESO через несколько секунд заметит изменение (по таймеру refreshInterval) и обновит k8s Secret:
+Через один интервал ESO заметит изменение и обновит k8s Secret:
 
 ```bash
-sleep 15
+sleep 20
 kubectl -n lab get secret db-from-eso -o jsonpath='{.data.password}' | base64 -d; echo
 # Ожидаемый вывод: new-strong-pass
 ```
@@ -482,47 +471,22 @@ kubectl -n lab rollout status deploy/pg --timeout=120s
 2. Включить Database Engine, подключить его к нашему Postgres.
 3. Создать динамическую роль `dynrole` с SQL-шаблоном `CREATE ROLE...` и TTL=1m.
 
+Скрипт настройки уже в репозитории — `manifests/vault/setup-vault.sh`. Он заходит в под
+Vault и делает четыре вещи (прочитайте его целиком: `cat manifests/vault/setup-vault.sh`):
+
+1. включает `database` secrets engine и описывает подключение `appdb` к нашему PostgreSQL
+   (`pg.lab.svc:5432`, учётка `postgres`);
+2. создаёт роль `database/roles/dynrole` — шаблон `CREATE ROLE "{{name}}" ... VALID UNTIL
+   '{{expiration}}'` с `default_ttl=2m`, `max_ttl=10m`: каждый запрос кредов рождает нового
+   пользователя, который умирает через 2 минуты;
+3. включает `kubernetes` auth и настраивает его на API-сервер кластера;
+4. пишет политику `dynrole-read` (read на `database/creds/dynrole`) и роль
+   `auth/kubernetes/role/dynrole-role`, привязанную к ServiceAccount `lab/vso-auth`, — именно
+   под этим именем VSO будет логиниться в Части 4.3.
+
 ```bash
-cat << 'EOF' > manifests/vault/setup-vault.sh
-VPOD=$(kubectl -n lab get pod -l app=vault -o jsonpath='{.items[0].metadata.name}')
-
-kubectl -n lab exec "$VPOD" -- sh -c '
-VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root
-
-# Включаем Kubernetes Auth
-vault auth enable kubernetes
-vault write auth/kubernetes/config \
-  kubernetes_host="https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT"
-
-# Политика для VSO: разрешаем чтение динамических кредов
-vault policy write vso-policy - << EOP
-path "database/creds/dynrole" { capabilities = ["read"] }
-EOP
-
-# Привязываем ServiceAccount vso-auth к роли и политике
-vault write auth/kubernetes/role/vso-role \
-  bound_service_account_names=vso-auth \
-  bound_service_account_namespaces=lab \
-  policies=vso-policy \
-  ttl=1h
-
-# Настраиваем Database Engine
-vault secrets enable database
-vault write database/config/my-pg \
-  plugin_name=postgresql-database-plugin \
-  allowed_roles="dynrole" \
-  connection_url="postgresql://postgres:rootpass@pg.lab.svc.cluster.local:5432/postgres?sslmode=disable"
-
-# Создаем роль для генерации кредов с коротким TTL (1 минута)
-vault write database/roles/dynrole \
-  db_name=my-pg \
-  creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '\''{{password}}'\'' VALID UNTIL '\''{{expiration}}'\''; GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{name}}\";" \
-  default_ttl="1m" \
-  max_ttl="5m"
-'
-EOF
-
 bash manifests/vault/setup-vault.sh
+# Vault настроен: database/roles/dynrole + kubernetes auth (role dynrole-role)
 ```
 
 Чтобы Vault Auth через Kubernetes работал, нам нужно дать ServiceAccount'у VSO права `system:auth-delegator`, чтобы он мог вызывать TokenReview API для проверки токенов.
@@ -573,41 +537,34 @@ kubectl -n lab exec "$VPOD" -- sh -c 'VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOK
 Теперь создадим CRD Vault Secrets Operator, чтобы он взял на себя работу по извлечению этих кредов в k8s Secret.
 
 ```bash
-cat << 'EOF' > manifests/vault/vso-secrets.yaml
+cat manifests/vault/vso-secrets.yaml
+```
+```yaml
 apiVersion: secrets.hashicorp.com/v1beta1
 kind: VaultConnection
-metadata:
-  name: default
-  namespace: lab
-spec:
-  address: http://vault.lab.svc.cluster.local:8200
+metadata: { name: vault-conn, namespace: lab }
+spec: { address: http://vault.lab.svc:8200 }
 ---
 apiVersion: secrets.hashicorp.com/v1beta1
 kind: VaultAuth
-metadata:
-  name: default
-  namespace: lab
+metadata: { name: vault-auth, namespace: lab }
 spec:
+  vaultConnectionRef: vault-conn
   method: kubernetes
   mount: kubernetes
-  kubernetes:
-    role: vso-role
-    serviceAccount: vso-auth
+  kubernetes: { role: dynrole-role, serviceAccount: vso-auth }   # роль из setup-vault.sh
 ---
 apiVersion: secrets.hashicorp.com/v1beta1
 kind: VaultDynamicSecret
-metadata:
-  name: pg-dynamic-creds
-  namespace: lab
+metadata: { name: pg-dynamic, namespace: lab }
 spec:
-  vaultAuthRef: default
-  path: database/creds/dynrole      # Путь в Vault
-  destination:
-    name: pg-dynamic-creds          # Имя создаваемого k8s Secret
-    create: true
-EOF
-
-kubectl -n lab apply -f manifests/vault/vso-secrets.yaml
+  vaultAuthRef: vault-auth
+  mount: database                    # secrets engine
+  path: creds/dynrole                # роль внутри него -> database/creds/dynrole
+  destination: { name: pg-dynamic-creds, create: true }   # имя создаваемого k8s Secret
+```
+```bash
+kubectl -n lab apply -f manifests/vault/rbac.yaml -f manifests/vault/vso-secrets.yaml
 ```
 
 Подождем пару секунд и проверим:
@@ -618,7 +575,7 @@ kubectl -n lab get secret pg-dynamic-creds -o jsonpath='{.data.username}' | base
 ```
 
 > ✓ **Прогнано:** VSO залогинился в Vault, запросил динамический секрет и положил его в `Secret/pg-dynamic-creds`.
-> Так как мы установили TTL роли в 1 минуту (1m), VSO будет автоматически перевыпускать секрет (ротировать) до истечения срока действия. Если вы посмотрите на этот же секрет через ~45-60 секунд, вы увидите, что username изменился — оператор прозрачно обновил k8s Secret! Приложение, монтирующее Secret как volume, может отследить inotify-эвенты на изменение файла и подгрузить новый пароль.
+> Так как TTL роли — 2 минуты (`default_ttl=2m`), VSO будет автоматически перевыпускать секрет (ротировать) до истечения срока действия. Если вы посмотрите на этот же секрет через ~2 минуты, вы увидите, что username изменился — оператор прозрачно обновил k8s Secret! Приложение, монтирующее Secret как volume, может отследить inotify-эвенты на изменение файла и подгрузить новый пароль.
 
 ---
 
