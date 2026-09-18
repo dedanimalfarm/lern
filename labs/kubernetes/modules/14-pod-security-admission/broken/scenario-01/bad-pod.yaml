@@ -6,5 +6,5 @@ metadata:
 spec:
   containers:
   - name: app
-    image: nginx:latest
+    image: nginx:1.27-alpine
     # Нет securityContext! Работает от root, не сбрасывает caps.
