@@ -21,6 +21,7 @@ for b in dns-failure.yaml scheduling-pending.yaml sync-fail.yaml cert-expiry/set
   [[ -f "$PROJ/broken/$b" ]] || fail "missing broken scenario: $b"
 done
 [[ -x "$PROJ/triage/incident-triage.sh" || -f "$PROJ/triage/incident-triage.sh" ]] || fail "missing triage tool"
+[[ -x "$PROJ/chaos/random-incident.sh" ]] || fail "missing chaos tool: chaos/random-incident.sh"
 ok "новые сценарии (dns/scheduling/sync/cert) + триаж-инструмент на месте"
 
 # Verify broken pods are in expected failure states (if deployed)
