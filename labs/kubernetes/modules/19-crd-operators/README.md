@@ -86,27 +86,12 @@ kubectl get nodes
 
 Чтобы API-сервер Kubernetes начал понимать новый тип объектов (Custom Resource), его нужно зарегистрировать. Это делается с помощью объекта `CustomResourceDefinition`.
 
-```text
-       [ Пользователь / CI-CD ]
-                  │
-          (kubectl apply)
-                  │
-                  ▼
-    +---------------------------+
-    |  Kubernetes API Server    |
-    |                           |
-    |  [Встроенные ресурсы]     |
-    |   - Pod, Deployment...    |
-    |                           |
-    |  [Пользовательские API]   |
-    |   - WebApp (наш CRD)      | <--- Мы регистрируем этот тип!
-    |   - Prometheus (внешний)  |
-    +---------------------------+
-         │                 │
-    Сохранение в etcd   Отправка событий (watch)
-         │                 │
-         ▼                 ▼
-     [ etcd ]         [ Контроллеры / Операторы ]
+```mermaid
+flowchart TD
+    U["Пользователь / CI-CD<br/>kubectl apply"] --> API["kube-apiserver<br/>встроенные типы: Pod, Deployment, …<br/>пользовательские (CRD): WebApp — наш, Prometheus — внешний"]
+    CRD["CustomResourceDefinition<br/>регистрирует тип WebApp"] -. "мы регистрируем этот тип" .-> API
+    API -- "сохранение" --> etcd[("etcd")]
+    API -- "события (watch)" --> ctl["контроллеры / операторы"]
 ```
 
 Идентификация любого ресурса в Kubernetes состоит из трёх элементов (GVK):
@@ -494,20 +479,13 @@ kubectl -n lab get wa my-webapp
 
 При работе с CRD/Операторами проблемы делятся на три слоя абстракции:
 
-```text
-Где проблема?
-  ├─ 1. CR не СОЗДАЁТСЯ (kubectl apply падает)
-  │     ├─ Ошибка "Invalid value" / "Required value"  -> Проблема в СХЕМЕ (openAPIV3Schema/CEL).
-  │     └─ Ошибка "no matches for kind WebApp"        -> CRD не применён или неверная group/version.
-  │
-  ├─ 2. CR создан, но НИЧЕГО НЕ ПРОИСХОДИТ (дочерние ресурсы не появляются)
-  │     ├─ Контроллер не запущен.
-  │     ├─ Ошибки RBAC у контроллера (нет прав создать Deployment). -> Читать логи пода оператора.
-  │     └─ Ошибка в логике оператора (паника в коде).
-  │
-  └─ 3. CR не УДАЛЯЕТСЯ (завис в Terminating)
-        └─ Не снят finalizer (оператор мертв или внешняя система API недоступна).
-```
+
+| Слой | Симптом | Причина |
+|---|---|---|
+| 1. CR не создаётся (`kubectl apply` падает) | `Invalid value` / `Required value` | схема: `openAPIV3Schema` / CEL |
+| | `no matches for kind WebApp` | CRD не применён или неверные group/version |
+| 2. CR создан, ничего не происходит | дочерних ресурсов нет | контроллер не запущен; RBAC контроллера (нет прав создать Deployment) — читать логи пода оператора; ошибка/паника в логике |
+| 3. CR не удаляется | висит в `Terminating` | не снят finalizer: оператор мёртв или внешняя система недоступна |
 
 ### Инцидент 1: CR отклонён валидатором (Invalid value / Required)
 

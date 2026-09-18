@@ -81,6 +81,8 @@ export KUBECONFIG=/root/.kube/kubespray.conf
 kubectl version
 # Client Version: v1.32.3
 # Server Version: v1.36.1   <- версия кластера (kubelet нод)
+#    Клиент 1.32 против сервера 1.36 — за пределами поддерживаемого skew kubectl (±1 minor):
+#    базовые команды работают, но новых полей/подкоманд может не быть — обновите kubectl.
 kubectl cluster-info
 
 # 2) Для Части 1 (drain/PDB) достаточно любого кластера с >=1 нодой.
@@ -124,15 +126,15 @@ kubectl get pods -n kube-system
 
 **Жизненный цикл `drain` (почему это безопаснее, чем просто удалить ноду/поды):**
 
-```text
-kubectl drain NODE:
-   1. cordon -> нода получает taint/annotation SchedulingDisabled.
-   2. на КАЖДЫЙ под вызывается Eviction API (а не грубый delete!):
-        ├─ DaemonSet-под?      -> пропустить (если передан флаг --ignore-daemonsets).
-        ├─ нарушит PDB?        -> ОТКАЗ -> drain ЖДЁТ и повторяет попытку.
-        └─ PDB позволяет?      -> graceful остановка: SIGTERM -> terminationGracePeriodSeconds -> SIGKILL.
-   3. контроллер (Deployment/StatefulSet) видит удаление пода и планирует его на ДРУГОЙ ноде.
-   (итог: нода пуста от пользовательских нагрузок -> можно ребутать/обновлять).
+```mermaid
+flowchart TD
+    D["kubectl drain NODE"] --> C["1. cordon — нода помечена SchedulingDisabled"]
+    C --> E["2. на каждый под — Eviction API, не грубый delete"]
+    E -- "DaemonSet-под" --> Skip["пропустить (--ignore-daemonsets)"]
+    E -- "нарушит PDB" --> Wait["ОТКАЗ — drain ждёт и повторяет попытку"] --> E
+    E -- "PDB позволяет" --> G["graceful: SIGTERM → terminationGracePeriodSeconds → SIGKILL"]
+    G --> R["3. контроллер (Deployment/StatefulSet) планирует под на ДРУГОЙ ноде"]
+    R --> Done["нода пуста от пользовательских нагрузок — можно ребутать/обновлять"]
 ```
 
 | Флаг `drain` | Зачем нужен |

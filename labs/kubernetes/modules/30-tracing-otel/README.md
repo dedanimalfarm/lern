@@ -68,7 +68,6 @@
 
 ```bash
 # Экспортируем kubeconfig нашего кластера (для Kubespray). 
-# Если вы используете другой стенд (minikube, kind, managed k8s) — укажите свой путь/контекст.
 export KUBECONFIG=/root/.kube/kubespray.conf
 
 # Создаем namespace lab, если его еще нет. 
@@ -389,22 +388,12 @@ kubectl -n lab exec deploy/frontend -- wget -qO- \
 
 Если визуализировать дерево спанов этого трейса (именно так это выглядит в UI Grafana на таймлайне), мы увидим следующую иерархию:
 
-```text
-[Trace: 82c49c03af9262717d75f64aca12044]   Total Duration: ~242ms
-  │
-  ├── frontend   GET /              [SPAN_KIND_SERVER]    scope=instrumentation.flask
-  │     │                           Атрибуты: http.method=GET, http.status_code=200
-  │     │
-  │     └── frontend   GET          [SPAN_KIND_CLIENT]    scope=instrumentation.requests
-  │           │                     Атрибуты: http.url=http://backend:5001/api/quote
-  │           │                     ↓ (здесь SDK вставил traceparent в HTTP-заголовки)
-  │           │
-  │           └── backend    GET /api/quote   [SPAN_KIND_SERVER]    scope=instrumentation.flask
-  │                 │                         ↑ (здесь SDK прочитал traceparent из заголовков)
-  │                 │
-  │                 └── backend    db-query         [SPAN_KIND_INTERNAL]  scope=backend.manual
-  │                                                 (Это наш ручной спан, созданный в коде backend.py)
-```
+
+- **Trace** `82c49c03af9262717d75f64aca12044`, общая длительность ~242 мс
+  - `frontend GET /` — `SPAN_KIND_SERVER`, scope `instrumentation.flask`; атрибуты `http.method=GET`, `http.status_code=200`
+    - `frontend GET` — `SPAN_KIND_CLIENT`, scope `instrumentation.requests`; `http.url=http://backend:5001/api/quote` — **здесь SDK вставил `traceparent` в HTTP-заголовки**
+      - `backend GET /api/quote` — `SPAN_KIND_SERVER`, scope `instrumentation.flask` — **здесь SDK прочитал `traceparent` из заголовков**
+        - `backend db-query` — `SPAN_KIND_INTERNAL`, scope `backend.manual` — ручной спан, созданный в коде `backend.py`
 
 Каждая вложенность означает, что один спан является родителем (`parent`) для другого. Заметьте, что один логический сетевой запрос состоит из ДВУХ спанов: клиентского (отправитель) и серверного (получатель). Если время клиентского спана 100мс, а серверного 10мс, значит 90мс было потеряно в сети (Network Latency) или в Ingress-контроллере.
 
@@ -517,34 +506,15 @@ curl -s -u "admin:$GPASS" http://localhost:3909/api/datasources | python3 -m jso
 
 Система трейсинга состоит из множества "невидимых" компонентов (SDK в памяти, Collector в другом поде, Backend, Сеть между ними). При сбое вы практически никогда не получите одного явного сообщения об ошибке на весь конвейер. Ошибку нужно искать "с начала трубы", постепенно сужая зону поиска.
 
-```ascii
-Симптом: «Трейсы пропали / не появляются в Tempo»
 
-1. Приложения не Ready? 
-   ├─► Идёт долгий pip install? (startupProbe в нашей лабе может достигать 5 минут).
-   └─► kubectl describe pod / logs - падение на старте (OOM? Синтаксическая ошибка?)
+Симптом: «трейсы пропали / не появляются в Tempo». Идём от начала трубы:
 
-2. В логах самого приложения (stderr) видны ошибки таймаутов OTLP?
-   └─► Приложение не видит Collector. Неверный переменная OTEL_EXPORTER_OTLP_ENDPOINT.
-       Должен быть http://otel-collector:4317. Работает ли DNS Kubernetes?
-
-3. Ошибок в приложении нет, но debug-exporter коллектора МОЛЧИТ?
-   └─► Спаны уходят "в никуда". 
-       - Неправильный Service коллектора или опечатка в порту?
-       - Стоит ли переменная OTEL_TRACES_EXPORTER=none (выключено)?
-
-4. Debug печатает в stdout коллектора, но Tempo пуст?
-   └─► Разрыв конвейера Collector → Tempo. (Смотри "Инцидент 1" ниже).
-       Ищи фразу «Exporting failed» в логах коллектора. Проверь exporter endpoint.
-
-5. Tempo постоянно падает в CrashLoopBackOff?
-   └─► Скорее всего вы используете конфиг от Tempo 2.x на образе 3.0.
-       (Ошибка «field ingester not found»): нужно убрать легаси-блоки из YAML.
-
-6. Вроде всё работает, конвейер цел, но команда search пуста?
-   └─► Вы ищете с помощью старого параметра `?tags=` на Tempo 3.0? Нужен TraceQL `?q=`.
-   └─► Или вы ищете раньше, чем батчи доехали (подождите 10-15 секунд).
-```
+1. **Приложения не Ready?** Долгий `pip install` (startupProbe в лабе — до 5 минут); `kubectl describe pod` / `logs` — падение на старте (OOM? синтаксическая ошибка?).
+2. **В stderr приложения таймауты OTLP?** Приложение не видит Collector: неверный `OTEL_EXPORTER_OTLP_ENDPOINT` (должен быть `http://otel-collector:4317`); работает ли DNS кластера?
+3. **Ошибок нет, но debug-exporter коллектора молчит?** Спаны уходят «в никуда»: не тот Service коллектора или опечатка в порту; не стоит ли `OTEL_TRACES_EXPORTER=none`?
+4. **Debug печатает в stdout коллектора, а Tempo пуст?** Разрыв Collector → Tempo (Инцидент 1 ниже): ищи `Exporting failed` в логах коллектора, проверь endpoint экспортёра.
+5. **Tempo в CrashLoopBackOff?** Конфиг от Tempo 2.x на образе 3.0 (`field ingester not found`) — убрать легаси-блоки из YAML.
+6. **Конвейер цел, а search пуст?** На Tempo 3.0 старый параметр `?tags=` не работает — нужен TraceQL `?q=`; либо ищете раньше, чем доехали батчи (подождите 10–15 с).
 
 ### Инцидент 1: Экспорт в query-порт (Трейсы пропали)
 

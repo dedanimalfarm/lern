@@ -137,36 +137,33 @@ Kustomize предлагает принципиально иной подход 
 ```mermaid
 graph TD
     %% Kustomize Layer
-    subgraph "Слой рендеринга манифестов (Kustomize)"
-        B[base/ <br> Deployment, Service] --> O1[overlays/dev]
-        B --> O2[overlays/staging]
-        B --> O3[overlays/prod]
-        
-        O1 -- kustomize build --> YAML_DEV[Сырой YAML (Dev)]
-        O2 -- kustomize build --> YAML_STG[Сырой YAML (Staging)]
-        O3 -- kustomize build --> YAML_PROD[Сырой YAML (Prod)]
+    subgraph K["Слой рендеринга манифестов: Kustomize"]
+        B["base/<br/>Deployment, Service"] --> O1["overlays/dev"]
+        B --> O2["overlays/staging"]
+        B --> O3["overlays/prod"]
+        O1 -- "kustomize build" --> YAML_DEV["сырой YAML: dev"]
+        O2 -- "kustomize build" --> YAML_STG["сырой YAML: staging"]
+        O3 -- "kustomize build" --> YAML_PROD["сырой YAML: prod"]
     end
 
     %% Argo CD Layer
-    subgraph "Слой оркестрации GitOps (Argo CD)"
-        AS[ApplicationSet <br> 'web-environments']
-        G[List Generator <br> dev, staging, prod] --> AS
-        
-        AS -- Template rendering --> APP1[Application 'web-dev']
-        AS -- Template rendering --> APP2[Application 'web-staging']
-        AS -- Template rendering --> APP3[Application 'web-prod']
+    subgraph A["Слой оркестрации GitOps: Argo CD"]
+        AS["ApplicationSet<br/>web-environments"]
+        G["List Generator<br/>dev, staging, prod"] --> AS
+        AS -- "рендер шаблона" --> APP1["Application web-dev"]
+        AS -- "рендер шаблона" --> APP2["Application web-staging"]
+        AS -- "рендер шаблона" --> APP3["Application web-prod"]
     end
 
     %% Cluster Layer
-    subgraph "Слой кластера (Kubernetes)"
-        APP1 --> |Sync| NS1((Namespace: lab-dev))
-        APP2 --> |Sync| NS2((Namespace: lab-staging))
-        APP3 --> |Sync| NS3((Namespace: lab-prod))
+    subgraph C["Слой кластера: Kubernetes"]
+        APP1 -->|sync| NS1(("Namespace lab-dev"))
+        APP2 -->|sync| NS2(("Namespace lab-staging"))
+        APP3 -->|sync| NS3(("Namespace lab-prod"))
     end
-    
-    YAML_DEV -. Live Diff .-> APP1
-    YAML_STG -. Live Diff .-> APP2
-    YAML_PROD -. Live Diff .-> APP3
+    YAML_DEV -. "live diff" .-> APP1
+    YAML_STG -. "live diff" .-> APP2
+    YAML_PROD -. "live diff" .-> APP3
 ```
 
 **Ключевые принципы архитектуры:**
@@ -543,32 +540,14 @@ spec:
 
 ### Теория: Алгоритм диагностики ApplicationSet/Application
 
-```text
-Окружение НЕ разворачивается или сломалось
-│
-├─ Application вообще НЕ создан ───────► Проблема в ApplicationSet!
-│  │  Команда: kubectl -n argocd describe applicationset <name>
-│  │  Смотреть секцию Events:
-│  │  - Генератор пуст? (Git-генератор не нашел файлы / List пуст)
-│  │  - Ошибка шаблона? (опечатка в {{.field}}, если стоит missingkey=error)
-│  └─ - Синтаксическая ошибка в YAML аппсета.
-│
-├─ Application есть, но статус Unknown/ComparisonError ─► Проблема с Git/Source!
-│  │  Симптом: "path does not exist", "git repo timeout", "unknown variable".
-│  └─ Команда: kubectl -n argocd get app <app> -o jsonpath='{.status.conditions}'
-│
-├─ OutOfSync, постоянно висит, не синхронизируется ─► Проблема с правами / AppProject!
-│  │  Симптом: "project ... is not permitted", "namespace not managed".
-│  └─ Решение: Проверить и исправить настройки в AppProject YAML.
-│
-├─ Synced, но статус Degraded / Missing ─► Проблема с k8s ресурсом!
-│  │  Симптом: CrashLoopBackOff, ImagePullBackOff в подах, не хватает прав RBAC.
-│  └─ Решение: Обычный k8s-траблшутинг (logs, describe pod).
-│
-└─ Namespace не создан ─────────► Ошибка настройки SyncOptions.
-      Включен ли CreateNamespace=true? Добавлен ли Namespace в clusterResourceWhitelist 
-      в политиках безопасности AppProject?
-```
+
+| Симптом | Где проблема | Что смотреть |
+|---|---|---|
+| Application не создан | ApplicationSet | `kubectl -n argocd describe applicationset <name>` → Events: генератор пуст (Git не нашёл файлы / List пуст); ошибка шаблона (`{{.field}}` при `missingkey=error`); синтаксис YAML |
+| Application есть, статус `Unknown` / `ComparisonError` | Git / Source | `path does not exist`, `git repo timeout`, `unknown variable`; `kubectl -n argocd get app <app> -o jsonpath='{.status.conditions}'` |
+| Вечный `OutOfSync` | права / AppProject | `project ... is not permitted`, `namespace not managed` → править AppProject |
+| `Synced`, но `Degraded` / `Missing` | сам k8s-ресурс | CrashLoopBackOff, ImagePullBackOff, RBAC → обычный траблшутинг: `logs`, `describe pod` |
+| Namespace не создан | SyncOptions | `CreateNamespace=true` включён? Namespace есть в `clusterResourceWhitelist` AppProject? |
 
 ### Инцидент 1: ApplicationSet породил битый Application (`path does not exist`)
 

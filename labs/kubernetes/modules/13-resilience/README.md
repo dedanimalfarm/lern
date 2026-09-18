@@ -125,17 +125,14 @@ node2      <none>
 
 **Схема: домены топологии и перекос (`topologyKey: zone`, `maxSkew: 1`):**
 
-```text
-        zone-a            zone-b            zone-c
-   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-   │  [P]  [P]    │  │  [P]  [P]    │  │  [P]         │
-   └──────────────┘  └──────────────┘  └──────────────┘
-        2 пода            2 пода            1 под
 
-   skew = max(2) − min(1) = 1  ≤  maxSkew(1)   →  баланс допустим
-   Следующий под при whenUnsatisfiable=DoNotSchedule сядет ТОЛЬКО в zone-c.
-   Размещение в zone-a/-b дало бы 3 vs 1 → skew=2 > maxSkew → под уйдёт в Pending.
-```
+| zone-a | zone-b | zone-c |
+|:---:|:---:|:---:|
+| 2 пода | 2 пода | 1 под |
+
+skew = max(2) − min(1) = 1 ≤ `maxSkew: 1` → баланс допустим. Следующий под при
+`whenUnsatisfiable: DoNotSchedule` сядет **только** в zone-c: в zone-a/-b было бы 3 против 1 →
+skew = 2 > maxSkew → под уйдёт в `Pending`.
 
 **Таблица: Примеры расчета skew (maxSkew=1, 2 worker-узла):**
 

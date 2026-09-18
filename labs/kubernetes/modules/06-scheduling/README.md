@@ -115,18 +115,12 @@ kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.tai
 
 **Пайплайн планировщика (две фазы):**
 
-```
-Pod (Pending) ──> SCHEDULER
-   │
-   1. FILTER (предикаты): отсеять НЕподходящие ноды
-   │     • хватает requests.cpu/memory?   • проходит nodeSelector/nodeAffinity?
-   │     • taints толерируются?           • свободны hostPort?
-   │     └─> «годные» ноды (feasible)
-   2. SCORE (приоритеты): оценить годные 0..100
-   │     • LeastAllocated (свободнее = выше)  • BalancedAllocation  • вес preferred-affinity
-   3. BIND: лучшая нода -> pod.spec.nodeName -> kubelet запускает контейнеры
-   │
-   └─ если после FILTER годных НЕТ -> Pod остаётся Pending + событие FailedScheduling
+```mermaid
+flowchart TD
+    P["Pod (Pending)"] --> F["1. FILTER — отсеять неподходящие ноды<br/>хватает requests.cpu/memory? проходит nodeSelector/nodeAffinity?<br/>taints толерируются? свободен hostPort?"]
+    F -- "годных нет" --> PEND["Pod остаётся Pending<br/>событие FailedScheduling"]
+    F -- "годные (feasible) ноды" --> S["2. SCORE — оценить годные 0..100<br/>LeastAllocated, BalancedAllocation, вес preferred-affinity"]
+    S --> B["3. BIND — лучшая нода → pod.spec.nodeName → kubelet запускает контейнеры"]
 ```
 
 ```yaml

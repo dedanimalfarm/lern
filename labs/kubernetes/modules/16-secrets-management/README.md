@@ -301,7 +301,7 @@ Sealed Secrets хорош, но имеет недостатки:
 mkdir -p manifests/eso
 
 cat << 'EOF' > manifests/eso/eso-fake.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: SecretStore
 metadata:
   name: fake-store
@@ -315,7 +315,7 @@ spec:
           valueMap:
             password: fake-pass-123
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: db-from-eso
@@ -636,16 +636,12 @@ kubectl -n lab get secret pg-dynamic-creds -o jsonpath='{.data.username}' | base
 
 **Схема: где живёт секрет и кто его расшифровывает:**
 
-```text
- Sealed Secrets:   SealedSecret (в git, RSA-шифр) ──► контроллер ──► Secret (etcd) ──► Pod
-                   расшифровать может ТОЛЬКО контроллер ЭТОГО кластера (private key)
 
- External Secrets: внешний менеджер (Vault/AWS SM) ──► ESO (по refreshInterval) ──► Secret (etcd) ──► Pod
-                   в git хранится лишь ССЫЛКА (ExternalSecret), не само значение
-
- Vault Dynamic:    Pod/VSO ──запрос──► Vault ──генерирует НОВЫЕ креды на TTL──► Secret (etcd) ──► Pod
-                   секрет не лежит заранее: создаётся on-demand и истекает по TTL
-```
+| Подход | Что лежит в git | Путь до Pod | Кто расшифровывает / особенность |
+|---|---|---|---|
+| Sealed Secrets | `SealedSecret` — RSA-шифртекст | контроллер → Secret (etcd) → Pod | только контроллер **этого** кластера (private key) |
+| External Secrets | `ExternalSecret` — ссылка, не значение | ESO по `refreshInterval` тянет из Vault/AWS SM → Secret (etcd) → Pod | значение живёт во внешнем менеджере |
+| Vault dynamic | `VaultDynamicSecret` (VSO) | Vault генерирует **новые** креды на TTL → Secret (etcd) → Pod | секрета заранее нет: создаётся on-demand, истекает по TTL |
 
 ---
 

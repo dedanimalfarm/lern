@@ -127,17 +127,12 @@ kubectl logs <pod_name>
 
 Loki пошёл другим путём: **он вообще не индексирует текст логов.**
 
-```text
-┌─────────────────┐       ┌─────────────┐       ┌─────────────────┐
-│  Pod (app: A)   │       │             │       │   Grafana UI    │
-│  stdout / logs  ├──────►│  Promtail   │       │ (LogQL queries) │
-└─────────────────┘       │ (DaemonSet) │       └─────────┬───────┘
-                          │             │                 │
-┌─────────────────┐       │ - читает    │       ┌─────────▼───────┐
-│  Pod (app: B)   ├──────►│   /var/log  ├──────►│   Loki Server   │
-│  stdout / logs  │       │ - вешает    │ (HTTP)│  (index: labels │
-└─────────────────┘       │   метки     │       │   data: chunks) │
-                          └─────────────┘       └─────────────────┘
+```mermaid
+flowchart LR
+    A["Pod app: A<br/>stdout / logs"] --> P
+    B["Pod app: B<br/>stdout / logs"] --> P
+    P["Promtail (DaemonSet)<br/>читает /var/log/pods, вешает метки"] -- "HTTP push" --> L["Loki<br/>индекс — только метки<br/>данные — chunks"]
+    G["Grafana<br/>LogQL-запросы"] --> L
 ```
 
 ### 1.1 Индексация в Loki: почему он такой быстрый и дешёвый
@@ -467,41 +462,13 @@ sum by (app) (count_over_time({namespace="lab"}[1h]))
 limits_config:
   ingestion_rate_mb: 15
   ingestion_burst_size_mb: 30
-```
 
-### Инцидент 5: "Out of order" при записи логов
-
-**Симптом:** Promtail пишет `entry with timestamp X is older than Y`.
-**Решение:** В конфиге Loki включить `unordered_writes: true`.
-
-### Бонус: общая диагностика пайплайна логов
-
-```text
-Симптом: Логи отсутствуют в Grafana
-│
-├─ Пишет ли приложение логи? ─────► kubectl logs <pod> 
-│
-├─ Есть ли логи на ноде? ─────────► SSH на ноду, ls -l /var/log/pods/
-│
-├─ Видит ли их Promtail? ─────────► kubectl logs ds/promtail | grep <pod_name>
-│
-└─ Доходят ли они до Loki? ───────► Проверяем метрики HTTP 429 в Promtail
-```
-
----
-
-## Практические задания (отработка)
-
-1. **Базовый поиск:** Напишите запрос LogQL: найдите все строки с уровнем `INFO` от `log-generator` за 10 минут, где `id` содержит цифру `7` (парсер `pattern` + фильтр `|~ "7"`).
-2. **Метрика ошибок:** Постройте метрику: средняя длительность запросов (`avg_over_time` + `unwrap duration_ms`) для `payment-api`, сгруппировав по `path`.
-3. **Слом парсинга:** Зайдите внутрь пода `payment-api` и запишите обычный текст прямо в stdout: `echo "not a json" > /proc/1/fd/1`. Убедитесь, что метрические запросы без `__error__=""` начали падать.
-4. **Dashboard:** В Grafana соберите единую панель (Mixed datasource), на которой график `rate` 500-х ошибок из Loki и график `container_cpu_usage_seconds_total` из Prometheus.
-
----
-
-## Проверка модуля
-
-```bash
+| Вопрос (по ходу «трубы») | Проверка |
+|---|---|
+| Пишет ли приложение логи? | `kubectl logs <pod>` |
+| Есть ли логи на ноде? | на ноде: `ls -l /var/log/pods/` |
+| Видит ли их Promtail? | `kubectl logs ds/promtail \| grep <pod_name>` |
+| Доходят ли до Loki? | метрики Promtail — ответы HTTP 429 |
 ./verify/verify.sh
 # Ожидаемый вывод об успешном прохождении:
 # [OK] loki is ready

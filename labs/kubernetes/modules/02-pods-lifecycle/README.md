@@ -59,7 +59,7 @@
 ```bash
 # kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
 export KUBECONFIG=/root/.kube/kubespray.conf
-# 1) Кластер, который реально запускает контейнеры (kind/minikube/k3s/GKE).
+# 1) Кластер стенда — Kubespray (k8s-cp-1, k8s-w-1, k8s-w-2), CNI Calico.
 #    Пробы и OOM требуют настоящего kubelet — нужен реальный запуск контейнеров.
 kubectl version
 
@@ -107,18 +107,16 @@ kubectl -n kube-system get deploy -l k8s-app=kube-dns
 
 **State machine фазы Pod (`.status.phase`):**
 
-```
-           (создан)
-              │
-          ┌── Pending ──────────────────┐  ждёт: scheduling / pull образа / mount тома
-          │      │ контейнер(ы) стартовали
-          │      ▼
-          │   Running ──────┬─────────────┐
-          │      │          │ exit 0       │ exit ≠0 (и restartPolicy исчерпан)
-          │      │ r" Always: рестарт      ▼              ▼
-          │      │  (CrashLoopBackOff)  Succeeded        Failed
-          │      ▼
-          └─ Unknown  (нет связи с kubelet ноды)
+```mermaid
+stateDiagram-v2
+    [*] --> Pending : Pod создан
+    Pending --> Running : контейнеры стартовали
+    Running --> Succeeded : все контейнеры exit 0
+    Running --> Failed : exit ≠ 0 и restartPolicy исчерпан
+    Running --> Running : exit ≠ 0, restartPolicy Always/OnFailure → рестарт (CrashLoopBackOff)
+    Pending --> Unknown : нет связи с kubelet ноды
+    Running --> Unknown : нет связи с kubelet ноды
+    note right of Pending : ждёт scheduling, pull образа, mount тома
 ```
 
 **Pod Conditions** (`.status.conditions` — 4 булевых сигнала от kubelet, ПОРЯДОК созревания):
@@ -262,30 +260,15 @@ spec:
 Один Pod, четыре «момента вмешательства» в жизненный цикл контейнеров. Слева
 направо — время; сверху вниз — параллельные дорожки контейнеров.
 
-```
-   СОЗДАНИЕ POD ─────────────────────────────────────────────► ОСТАНОВКА POD
-   t0          t1        t2            t3                t4            t5
-   │           │         │             │                 │             │
-init-1 (обычный)         │             │                 │             │
-   ├──run──Completed     │             │                 │             │
-   │  (блокирует, пока не завершится)   │                 │             │
-   │           │         │             │                 │             │
-sidecar (init c restartPolicy:Always)  │                 │             │
-   │           ├──Started──────────────┼─────работает────┼───┐         │
-   │           │ (НЕ блокирует: как только Started, идёт дальше)        │
-   │           │         │             │                 │   └─SIGTERM─┤ (стопается
-   │           │         │             │                 │   preStop?  │  ПОСЛЕ app,
-   │           │         │             │                 │             │  обратный
-app-контейнер  │         │             │                 │             │  порядок)
-   │           │         ├─postStart────┤ Running ────────┼──preStop────┤
-   │           │         │ (hook; Pod   │ (Ready после    │ (hook перед │
-   │           │         │  не Running, │  readiness)     │  SIGTERM)   │
-   │           │         │  пока hook    │                │             │
-   │           │         │  не вернётся) │                │  └─SIGTERM──┤
-   │           │         │             │                 │  grace 30s──┤
-   │           │         │             │                 │  └─SIGKILL──┘ (если не
-   v           v         v             v                 v             v   успел)
-```
+
+| Момент | init-1 (обычный init) | sidecar (init + `restartPolicy: Always`) | app-контейнер |
+|---|---|---|---|
+| t0 — Pod создан | стартует; **блокирует** всё, пока не `Completed` | ждёт | ждёт |
+| t1 — init-1 `Completed` | — | стартует; как только `Started`, Pod идёт дальше (**не блокирует**) | ждёт |
+| t2 — sidecar `Started` | — | работает | стартует → `postStart`-hook (Pod не `Running`, пока hook не вернётся) |
+| t3 | — | работает | `Running`; `Ready` — после readiness-пробы |
+| t4 — удаление Pod | — | всё ещё работает | `preStop`-hook → SIGTERM → grace 30 с → SIGKILL, если не успел |
+| t5 — app завершён | — | SIGTERM — **после** app, в обратном порядке | — |
 
 - **Обычный init** (`init-1`) полностью **блокирует**: следующий init и все app-
   контейнеры ждут его `Completed`. Несколько init выполняются строго по очереди.
@@ -408,25 +391,13 @@ kubectl -n lab exec init-wait-dns -c app -- cat /work/status.txt
 Это спасает медленно стартующее приложение от того, чтобы агрессивная liveness
 убила его ещё на прогреве.
 
-```
-   старт контейнера
-        │
-        ▼
-   ┌──────────── startupProbe ────────────┐
-   │ опрашивается каждые periodSeconds,    │   liveness и readiness
-   │ бюджет = failureThreshold × period    │   ВЫКЛЮЧЕНЫ (не опрашиваются)
-   │ ✗✗✗… (приложение ещё греется)         │
-   │ ✓  ← ПЕРВЫЙ успех                     │
-   └───────────────────┬───────────────────┘
-                       │ startup пройден — БОЛЬШЕ не опрашивается
-        ┌──────────────┴───────────────┐
-        ▼                              ▼
-   livenessProbe                  readinessProbe
-   (опрашивается всю жизнь)       (опрашивается всю жизнь)
-        │                              │
-   ✗×failureThreshold            ✗ ⇒ Pod вон из Endpoints (трафик не идёт),
-   ⇒ РЕСТАРТ контейнера          ✓ ⇒ Pod снова в Endpoints. БЕЗ рестарта.
-   (счётчик RESTARTS растёт)     Колеблется свободно по ходу нагрузки.
+```mermaid
+flowchart TD
+    start["старт контейнера"] --> su["startupProbe<br/>каждые periodSeconds, бюджет = failureThreshold × period<br/>liveness и readiness пока ВЫКЛЮЧЕНЫ"]
+    su -- "первый успех — больше не опрашивается" --> live & ready
+    live["livenessProbe<br/>опрашивается всю жизнь"] -- "failureThreshold провалов подряд" --> restart["РЕСТАРТ контейнера<br/>счётчик RESTARTS растёт"]
+    ready["readinessProbe<br/>опрашивается всю жизнь"] -- "провал" --> out["Pod убран из Endpoints — трафик не идёт"]
+    ready -- "успех" --> back["Pod снова в Endpoints — без рестарта"]
 ```
 
 - **startup → liveness/readiness**: строго последовательно. Если `startupProbe`
@@ -663,37 +634,16 @@ kubectl -n lab delete pod sidecar-demo
 
 Начинай с колонки `STATUS` в `kubectl get pod`, дальше — по ветке:
 
-```
-STATUS / READY ?
-│
-├─ Pending ──────────────► describe pod → блок Events:
-│     ├─ "Insufficient cpu/memory"      → нет места: requests великоваты / нет нод (→ м06/м12)
-│     ├─ "node(s) had taint ..."         → taint без toleration (→ м06)
-│     ├─ "didn't match node selector"    → nodeSelector/affinity не находит ноду (→ м06)
-│     └─ "FailedScheduling ... pvc"      → PVC не Bound / нет StorageClass (→ м05)
-│
-├─ ContainerCreating (долго) ──────────► describe pod → Events:
-│     ├─ "failed to pull image"          → реестр/тег/секрет pull (см. ImagePullBackOff)
-│     ├─ "MountVolume ... failed"        → том/секрет/CM не найден или CSI-проблема (→ м05/м07)
-│     └─ "FailedCreatePodSandBox"        → CNI/сеть на ноде (→ м04)
-│
-├─ ImagePullBackOff / ErrImagePull ────► опечатка в image, приватный реестр без
-│                                         imagePullSecrets, или тег не существует
-│
-├─ Running, но READY 0/1 ──────────────► readinessProbe фейлится:
-│     describe pod | grep "Readiness probe failed"  → путь/порт/тайминг пробы ≠ приложение
-│     get endpoints <svc>  → пусто = трафик не идёт (Инцидент 1 ниже)
-│
-├─ CrashLoopBackOff ───────────────────► контейнер стартует и падает по кругу:
-│     logs --previous           → стектрейс/ошибка приложения (exit 1/2)
-│     describe pod              → "Liveness probe failed" = слишком строгая liveness (Инцидент 2)
-│     get pod -o jsonpath ...exitCode → код выхода (таблица ниже)
-│
-├─ OOMKilled ──────────────────────────► лимит памяти < аппетита: поднять limits.memory
-│                                         или чинить утечку (Часть 4; exit 137)
-│
-└─ Error / Completed (не ждали) ───────► смотри exitCode + lastState.terminated.reason
-```
+
+| `STATUS` / `READY` | Куда смотреть | Что там будет → причина и куда идти |
+|---|---|---|
+| `Pending` | `describe pod` → Events | `Insufficient cpu/memory` — нет места: requests великоваты / нет нод (м06, м12); `node(s) had taint` — taint без toleration (м06); `didn't match node selector` — nodeSelector/affinity не находит ноду (м06); `FailedScheduling ... pvc` — PVC не Bound / нет StorageClass (м05) |
+| `ContainerCreating` (долго) | `describe pod` → Events | `failed to pull image` — реестр/тег/pull-секрет (см. ImagePullBackOff); `MountVolume ... failed` — том/Secret/ConfigMap не найден или CSI (м05, м07); `FailedCreatePodSandBox` — CNI/сеть на ноде (м04) |
+| `ImagePullBackOff` / `ErrImagePull` | `describe pod` → Events | опечатка в `image`, приватный реестр без `imagePullSecrets`, тега не существует |
+| `Running`, но `READY 0/1` | `describe pod \| grep "Readiness probe failed"`; `get endpoints <svc>` | readinessProbe фейлится: путь/порт/тайминг пробы ≠ приложение; endpoints пусты = трафик не идёт (Инцидент 1) |
+| `CrashLoopBackOff` | `logs --previous`; `describe pod`; `get pod -o jsonpath=...exitCode` | стектрейс/ошибка приложения (exit 1/2); `Liveness probe failed` = слишком строгая liveness (Инцидент 2); код выхода — таблица ниже |
+| `OOMKilled` | `describe pod` → Last State | лимит памяти меньше аппетита: поднять `limits.memory` или чинить утечку (Часть 4; exit 137) |
+| `Error` / `Completed` (не ждали) | `exitCode`, `lastState.terminated.reason` | читать код выхода и reason |
 
 #### Каталог кодов выхода контейнера
 

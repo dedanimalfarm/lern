@@ -419,54 +419,15 @@ kubectl -n lab patch pod resize-demo --subresource resize --type=json \
 
 ```text
 The Pod "resize-demo" is invalid: spec.containers[0].resources.requests: Invalid value: "500m": must be less than or equal to cpu limit of 300m
-```
 
-### 3.4 Как kubelet обновляет cgroups
-
-Под капотом in-place resize работает следующим образом:
-1. API сервер обновляет `spec.containers[].resources`.
-2. Kubelet замечает изменение спецификации (через watch).
-3. Kubelet проверяет, достаточно ли ресурсов на ноде (если мы увеличиваем requests). Если ресурсов нет, статус resize переходит в `Infeasible`.
-4. Если ресурсы есть, kubelet обращается к Container Runtime (например, containerd через интерфейс CRI `UpdateContainerResources`).
-5. Container Runtime обновляет лимиты непосредственно в файловой системе Linux cgroups (в `/sys/fs/cgroup/cpu.max` или `memory.max`).
-6. Kubelet обновляет статус пода, устанавливая `allocatedResources` равным новым значениям.
-
-### 3.5 Статус subresource resize и фазы применения
-
-Вы можете отслеживать статус применения изменения через поле `status.resize`:
-- `Proposed`: Запрос принят API сервером, ожидается реакция kubelet.
-- `InProgress`: Kubelet принял запрос и применяет его (обновляет cgroups).
-- `Deferred`: Kubelet не может применить изменения прямо сейчас (например, не хватает ресурсов на ноде), но попробует позже.
-- `Infeasible`: Применение невозможно.
-
----
-
-## Часть 4: Troubleshooting — боевые инциденты
-
-### Теория: алгоритм диагностики по симптому
-
-```text
-Симптом
-├─ Job висит `Active`, под `1/2 NotReady` ─► Логгер/сайдкар лежит в `containers[]`
-│     Вместо этого используйте native sidecar: `initContainers` + `restartPolicy: Always`.
-│
-├─ Под завис в `Pending`, событий нет ─────► Проверьте `status.conditions`. Если `reason: SchedulingGated` —
-│     на поде висит gate. Снимите его через `patch pod <name> --type=merge -p '{"spec":{"schedulingGates":[]}}'`.
-│
-├─ In-place resize отбит с ошибкой ────────► Читайте текст ошибки:
-│     "QOS Class may not change"  -> Изменение `requests/limits` переводит под в другой QoS класс.
-│                                    (Например: `Burstable` -> `Guaranteed`). Измените параметры так, чтобы класс сохранился.
-│     "must be <= cpu limit"      -> Вы запрашиваете `requests` больше, чем установлен `limit`. Поднимите сначала `limit`.
-│     "only cpu and memory mutable" -> Вы пытаетесь изменить `ephemeral-storage` или GPU. Это запрещено.
-│
-└─ Под OOMKilled после resize ─────────────► Вы понизили лимит памяти на лету (`NotRequired`), но приложение (напр. JVM) 
-      не освободило память. Для памяти используйте `resizePolicy: RestartContainer`.
-```
-
-### Инцидент 1: Job не завершается (sidecar-антипаттерн)
-
-Если вы видите, что пакетная обработка зависла, первым делом выполните:
-```bash
+| Симптом | Причина | Что делать |
+|---|---|---|
+| Job висит `Active`, под `1/2 NotReady` | логгер/сайдкар лежит в `containers[]` | native sidecar: `initContainers` + `restartPolicy: Always` |
+| Под завис в `Pending`, событий нет | `status.conditions` → `reason: SchedulingGated` | снять gate: `kubectl patch pod <name> --type=merge -p '{"spec":{"schedulingGates":[]}}'` |
+| In-place resize отбит: `QOS Class may not change` | новые requests/limits меняют QoS-класс (например, Burstable → Guaranteed) | подобрать значения так, чтобы класс сохранился |
+| In-place resize отбит: `must be <= cpu limit` | requests больше limit | сначала поднять limit |
+| In-place resize отбит: `only cpu and memory mutable` | попытка изменить ephemeral-storage / GPU | запрещено — только cpu и memory |
+| Под `OOMKilled` после resize | лимит памяти понижен на лету (`NotRequired`), приложение (JVM) память не отдало | для памяти `resizePolicy: RestartContainer` |
 kubectl get pods -l job-name=my-job
 # NAME           READY   STATUS     RESTARTS
 # my-job-abcde   1/2     NotReady   0

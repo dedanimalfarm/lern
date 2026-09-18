@@ -168,9 +168,9 @@ kubectl get crd | grep coreos.com
 ```mermaid
 graph TD
     %% Узлы сбора данных
-    NE[node-exporter<br/>Метрики железа (CPU, RAM)] -->|Scrape /metrics| Prom(Prometheus Server<br/>TSDB & PromQL Engine)
-    KSM[kube-state-metrics<br/>Состояние объектов k8s] -->|Scrape /metrics| Prom
-    App[Ваше приложение<br/>Бизнес-метрики] -->|Scrape /metrics| Prom
+    NE["node-exporter<br/>метрики железа: CPU, RAM"] -->|scrape /metrics| Prom["Prometheus Server<br/>TSDB и движок PromQL"]
+    KSM["kube-state-metrics<br/>состояние объектов k8s"] -->|scrape /metrics| Prom
+    App["ваше приложение<br/>бизнес-метрики"] -->|scrape /metrics| Prom
     
     %% Управление оператором
     SM[ServiceMonitor CRD] -.->|Управляет конфигом скрейпа| PO[Prometheus Operator]
@@ -178,10 +178,10 @@ graph TD
     PO -.->|Перезагружает конфигурацию| Prom
     
     %% Потребление данных
-    Prom -->|Оценка правил & Триггер| Prom
-    Prom -->|Отправка Firing Alerts| AM[Alertmanager]
-    AM -->|Группировка & Маршрутизация| Slack[Slack / Telegram / Email / PagerDuty]
-    Graf[Grafana] -->|Выполнение PromQL запросов| Prom
+    Prom -->|оценка правил, триггер| Prom
+    Prom -->|firing alerts| AM["Alertmanager"]
+    AM -->|группировка и маршрутизация| Slack["Slack / Telegram / Email / PagerDuty"]
+    Graf["Grafana"] -->|PromQL-запросы| Prom
 ```
 
 **Контрольные вопросы (Часть 1):**

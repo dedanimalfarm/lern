@@ -16,7 +16,7 @@
   - [3.1 Архитектура VPA (Теория)](#31-архитектура-vpa-теория)
   - [3.2 Почему HPA и VPA конфликтуют?](#32-почему-hpa-и-vpa-конфликтуют)
   - [3.3 Практика: Наблюдение за рекомендациями VPA](#33-практика-наблюдение-за-рекомендациями-vpa)
-- [Часть 4: Cluster Autoscaler (CA)](#часть-4-cluster-autoscaler-ca)
+- [Часть 4: Cluster Autoscaler (CA) — теория, на стенде не воспроизводится](#часть-4-cluster-autoscaler-ca--теория-на-стенде-не-воспроизводится)
   - [4.1 Как работает CA (Теория)](#41-как-работает-ca-теория)
   - [4.2 Цепочка HPA → CA](#42-цепочка-hpa--ca)
 - [Часть 5: Продвинутое масштабирование (KEDA, Karpenter, DRA)](#часть-5-продвинутое-масштабирование-keda-karpenter-dra)
@@ -62,21 +62,20 @@ kubectl create ns lab --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n lab delete deploy,svc,hpa,pod,vpa --all --ignore-not-found 2>/dev/null
 
 # HPA по CPU/RAM требует metrics-server. 
-# На многих managed кластерах (GKE, EKS) он есть из коробки. Проверим:
+# На стенде его ставит scripts/bootstrap/02-install-metrics-server.sh. Проверим:
 kubectl top nodes >/dev/null 2>&1 && echo "metrics-server: OK" || echo "metrics-server НЕ готов — HPA по ресурсам не отработает"
 ```
 
-> **Важно: Инфраструктура для живого прогона.**
-> Для полноценного выполнения практик нужны рабочие воркер-ноды. Наш учебный Kubespray-кластер может «парковаться» остановкой VM в облаке (`gcloud compute instances stop k8s-cp-1 k8s-w-1 k8s-w-2 --zone us-central1-a`). Чтобы его разбудить — выполните команду `start`, после чего необходимо обновить внешние IP-адреса в kubeconfig и inventory (используйте скрипт `cluster-kubespray/gen-inventory.sh`).
+> **Важно: стенд должен быть поднят.** Практики требуют живых воркер-нод. VM стенда
+> останавливаются и поднимаются только через `scripts/cluster/stop.sh` / `start.sh` —
+> после старта скрипт сам обновляет внешние IP в kubeconfig и inventory.
 
-> **Портируемость (Где работают эти технологии).** 
-> HPA-ядро (объект HPA + scale-up по базовым метрикам CPU/RAM) является встроенным контроллером Kubernetes (входит в `kube-controller-manager`) и работает на ЛЮБОМ кластере, но строго требует установленного поставщика метрик `metrics-server`:
-> - **GKE / AKS / DOKS / k3s** — предустановлен из коробки;
-> - **EKS / kind / kubeadm** — требует ручной установки: `kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml` (для `kind` не забудьте добавить флаг `--kubelet-insecure-tls` в аргументы контейнера `metrics-server`);
-> - **minikube** — активируется аддоном: `minikube addons enable metrics-server`.
->
-> **Cluster Autoscaler** (Часть 4) и **Karpenter** — работают только там, где есть API управления виртуальными машинами (AWS, GCP, Azure, OpenStack). На локальном `kind` или статичном `kubeadm` "железе" ноды сами не появятся — поды просто останутся висеть в статусе `Pending` (хотя HPA честно увеличит параметр `replicas` до предела). 
-> **VPA** ставится отдельно на любом кластере как набор Custom Resource Definitions и операторов.
+> **Что из этого работает на стенде.** HPA — встроенный контроллер (часть
+> `kube-controller-manager`), ему нужен только поставщик метрик `metrics-server`, он на
+> стенде есть. **VPA** — отдельный набор CRD и контроллеров, ставится `verify/prepare.sh`
+> модуля. **Cluster Autoscaler** (Часть 4) и **Karpenter** требуют API облака для создания
+> VM — на нашем Kubespray-кластере из трёх статичных нод их нет: HPA честно поднимет
+> `replicas`, а лишние поды останутся в `Pending`. Часть 4 поэтому теоретическая.
 
 ---
 
@@ -111,23 +110,12 @@ kubectl api-resources | grep horizontalpodautoscaler
 
 #### Архитектурная схема HPA:
 
-```text
-                                +---------------------------+
-                                | kube-controller-manager   |
-                                |   [ HPA Controller ]      |
-                                +---------------------------+
-                                         |         ^
-                       (1) Get Metrics   |         | (2) Usage Data
-                                         v         |
-+-------------------+            +---------------------------+
-| Target Workload   | <--------- |      Metrics API          |
-| (Deployment/STS)  | (4) Scale  | (metrics-server / KEDA)   |
-+-------------------+            +---------------------------+
-       |                                     ^
-       v                                     | (3) Scrape (cAdvisor)
-+-------------------+                        |
-| Pod | Pod | Pod   | -----------------------+
-+-------------------+
+```mermaid
+flowchart TD
+    HPA["kube-controller-manager<br/>HPA Controller"] -- "(1) запрос метрик" --> MAPI["Metrics API<br/>metrics-server / KEDA"]
+    MAPI -- "(2) usage" --> HPA
+    Pods["Pod, Pod, Pod"] -- "(3) scrape cAdvisor" --> MAPI
+    HPA -- "(4) scale" --> W["Target Workload<br/>Deployment / StatefulSet"] --> Pods
 ```
 
 #### Математика HPA:
@@ -187,17 +175,14 @@ HPA спроектирован так, чтобы защищать прилож�
 Временный провал нагрузки (например, на 10 секунд из-за сетевого скачка) не должен убивать реплики, которые тут же снова понадобятся. В окне scale-down HPA запоминает все рекомендации за последние 5 минут и берет **НАИБОЛЬШУЮ** из них. Таким образом, scale-down начнется только если нагрузка стабильно низкая в течение всех 5 минут.
 
 **Визуализация асимметрии на таймлайне:**
-```text
-CPU% │      ┌──────────────┐ нагрузка (резкий скачок и падение)
- 180 │      │              │
-  50 │──────┘              └────────────── цель
-     │
-repl │      ▲ scale-UP за ~15-60с          ▼ scale-DOWN только ПОСЛЕ окна
-   5 │      ┌───────────────────────────┐  стабилизации (default 300с)
-   1 │──────┘                           └──────────── вниз медленно
-     └──────┬──────────────────┬────────┬───────────────────────> t
-          нагрузка↑         нагрузка↓   +окно 300с ожидания
-```
+
+| Момент | CPU относительно цели 50 % | Реплики | Что делает HPA |
+|---|---|---|---|
+| нагрузка резко растёт (до ~180 %) | выше цели | 1 → 5 | scale-up за ~15–60 с: реплики считаются сразу по формуле |
+| нагрузка упала | ниже цели | 5 | ничего — идёт окно стабилизации scale-down (default 300 с) |
+| окно прошло | ниже цели | 5 → 1 | scale-down, медленно и ступенчато |
+
+Асимметрия намеренная: вверх — быстро (нельзя терять трафик), вниз — медленно (нельзя дёргаться на шуме).
 
 В API `autoscaling/v2` появилось поле `behavior`, позволяющее переопределить эту логику (например, сделать scale-down быстрым, или ограничить scale-up, чтобы не убить базу данных шквалом новых коннектов).
 
@@ -275,29 +260,14 @@ kubectl -n lab get hpa hpa-demo -w
 
 **Архитектура VPA состоит из трех отдельных компонентов:**
 
-```text
-    [ Prometheus / Metrics Server ]
-                |
-                v (Usage data)
-       +-----------------+        (writes recommendations)
-       | VPA Recommender | ----------------------------------+
-       +-----------------+                                   |
-                                                             v
-+-------------+      (evicts pods with wrong requests)   [ VPA Object Status ]
-| VPA Updater | <------------------------------------------+ |
-+-------------+                                              |
-       |                                                     |
-       v (Eviction API)                                      |
-+-------------------+      (intercepts new pods)             |
-| Pod (old size)    |      +------------------------+        |
-| -> terminates     |      | VPA Admission Control  | <------+
-+-------------------+      | (Mutating Webhook)     |
-                           +------------------------+
-                                      | (injects new requests)
-                                      v
-                           +-------------------+
-                           | Pod (new size)    |
-                           +-------------------+
+```mermaid
+flowchart TD
+    Met["Prometheus / metrics-server"] -- "usage" --> Rec["VPA Recommender"]
+    Rec -- "пишет рекомендации" --> St["status объекта VPA"]
+    St --> Upd["VPA Updater"]
+    Upd -- "Eviction API: выселяет поды с неверными requests" --> Old["Pod старого размера — terminates"]
+    St --> Adm["VPA Admission Controller<br/>mutating webhook"]
+    Adm -- "перехватывает новый под, подставляет requests" --> New["Pod нового размера"]
 ```
 
 - **Recommender:** Наблюдает за потреблением CPU/RAM подов и рассчитывает идеальные `requests/limits`, записывая их в статус объекта VPA.
@@ -374,7 +344,7 @@ Status:
 
 ---
 
-## Часть 4: Cluster Autoscaler (CA)
+## Часть 4: Cluster Autoscaler (CA) — теория, на стенде не воспроизводится
 
 ### 4.1 Как работает CA (Теория)
 
@@ -467,26 +437,11 @@ cat manifests/dra-resourceclaim.yaml
 
 Самая частая ошибка при работе с HPA — увидеть статус `<unknown>` в колонке TARGETS. Это значит, что HPA не смог получить или вычислить метрику. Процесс диагностики:
 
-```text
-HPA TARGETS = <unknown>/50% ?
-   │
-   ├─ 1) kubectl top pods -n lab
-   │     ├─ Ошибка "Metrics API not available" ──> НЕТ metrics-server → Инцидент 2
-   │     └─ Выводятся числа (CPU/Memory) ──┐
-   │                                       ▼
-   ├─ 2) У пода задан requests.cpu?
-   │     (Проверка: kubectl -n lab get deploy hpa-demo -o jsonpath='{.spec.template.spec.containers[0].resources.requests}')
-   │     ├─ Пусто ──> НЕТ requests.cpu (не от чего считать процент) → Инцидент 1
-   │     └─ Задано ──┐
-   │                 ▼
-   ├─ 3) Поды находятся в статусе Running и Ready?  
-   │     (Метрики берутся ТОЛЬКО с Ready-подов!)
-   │     ├─ Нет ──> Чинить под (CrashLoopBackOff / ErrImagePull) — см. модули 02/08
-   │     └─ Да ──┐
-   │             ▼
-   └─ 4) Под создан только что? 
-         ──> Подожди 15-60с. Kubelet собирает метрики раз в 10с, metrics-server агрегирует раз в 15с.
-```
+
+1. `kubectl top pods -n lab` — ошибка `Metrics API not available` → нет metrics-server → Инцидент 2. Числа есть → шаг 2.
+2. `kubectl -n lab get deploy hpa-demo -o jsonpath='{.spec.template.spec.containers[0].resources.requests}'` — пусто → нет `requests.cpu`, не от чего считать процент → Инцидент 1. Задано → шаг 3.
+3. Поды `Running` и `Ready`? Метрики берутся **только** с Ready-подов. Нет → чинить под (CrashLoopBackOff / ErrImagePull — модули 02, 08). Да → шаг 4.
+4. Под создан только что? Подожди 15–60 с: kubelet собирает метрики раз в 10 с, metrics-server агрегирует раз в 15 с.
 
 ### Инцидент 1: HPA показывает `<unknown>/50%` — нет `requests.cpu`
 

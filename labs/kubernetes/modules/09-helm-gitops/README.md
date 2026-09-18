@@ -279,25 +279,24 @@ GitOps (Pull) работает иначе: в кластере живет аге
 
 **(что реально стоит в ns `argocd`, v3.4.3 — 7 компонентов):**
 
-```text
-            Git (source of truth)
-               │  репо + path + targetRevision
-               ▼
-   ┌──────────── ns argocd ─────────────────────────────────────────┐
-   │  repo-server          → клонирует Git, РЕНДЕРИТ манифесты        │
-   │                         (helm template / kustomize build)       │
-   │                                                                 │
-   │  application-controller→ сравнивает desired(Git) ↔ live(кластер),│ ──┐
-   │                         считает sync/health, делает apply        │   │ kube-apiserver
-   │                                                                 │   ▼
-   │  redis                → кэш отрендеренного/diff и метаданных      │  ns lab (Deployment/Svc/…)
-   │                                                                 │
-   │  server (API/UI)      → отдает UI и REST API для CLI             │
-   │  dex(SSO)             → интеграция с OIDC (GitLab/GitHub)        │
-   │  applicationset       → контроллер генерации Application-ов      │
-   │  notifications        → отправка алертов (Slack/Email)           │
-   └─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    Git["Git — source of truth<br/>repo + path + targetRevision"] --> RS["repo-server<br/>клонирует и рендерит:<br/>helm template / kustomize build"]
+    RS --> AC["application-controller<br/>desired (Git) ↔ live (кластер)<br/>считает sync/health, делает apply"]
+    AC --> K["kube-apiserver → ns lab<br/>Deployment, Service, …"]
+    AC <--> Redis["redis — кэш рендера, diff, метаданных"]
+    UI["server (API/UI) ← CLI, UI<br/>dex — SSO/OIDC"] --> AC
 ```
+
+| Компонент в ns `argocd` | Роль |
+|---|---|
+| `repo-server` | клонирует Git, рендерит манифесты (helm template / kustomize build) |
+| `application-controller` | сравнивает desired (Git) с live (кластер), считает sync/health, применяет |
+| `redis` | кэш отрендеренного, diff и метаданных |
+| `server` | UI и REST API для CLI |
+| `dex` | интеграция SSO/OIDC (GitLab/GitHub) |
+| `applicationset-controller` | генерация Application-ов из шаблонов (модуль 25) |
+| `notifications-controller` | алерты в Slack/Email |
 
 **Sync-loop:** опрос Git каждые ~3 мин (или webhook) → repo-server рендерит →
 controller диффит Git↔кластер. Совпало → `Synced`; разошлось → `OutOfSync` и (при
@@ -446,21 +445,12 @@ kubectl -n lab get deploy demo-app
 
 Не угадывать, а читать sync и health — они указывают РАЗНЫЕ классы проблем:
 
-```text
-kubectl -n argocd get application <app>        # 1) посмотреть SYNC и HEALTH
-        │
-        ├─ SYNC=Unknown / OutOfSync ──> проблема СРАВНЕНИЯ/рендера (Git, не кластер):
-        │     kubectl -n argocd get application <app> -o jsonpath='{.status.conditions}'
-        │     # ComparisonError -> неверный path/repoURL/targetRevision
-        │     # логи рендера:  kubectl -n argocd logs deploy/argocd-repo-server | tail
-        │
-        └─ SYNC=Synced, но HEALTH ≠ Healthy ──> проблема САМОГО РЕСУРСА в кластере:
-              ├─ Degraded     -> ресурс в ошибке: kubectl -n <dest-ns> describe <res>
-              │                   (CrashLoop, ErrImagePull, failed Job …)
-              └─ Progressing  -> какой ресурс «не дозрел»: смотри его условия
-                  # частая причина: Deployment не Available, Ingress без адреса
-                  # логи самого sync: kubectl -n argocd logs sts/argocd-application-controller
-```
+
+| `kubectl -n argocd get application <app>` показывает | Класс проблемы | Что смотреть |
+|---|---|---|
+| SYNC = `Unknown` / `OutOfSync` | сравнение/рендер — Git, не кластер | `-o jsonpath='{.status.conditions}'`: `ComparisonError` = неверный path/repoURL/targetRevision; логи рендера `kubectl -n argocd logs deploy/argocd-repo-server \| tail` |
+| SYNC = `Synced`, HEALTH = `Degraded` | сам ресурс в кластере в ошибке | `kubectl -n <dest-ns> describe <res>` — CrashLoop, ErrImagePull, failed Job |
+| SYNC = `Synced`, HEALTH = `Progressing` | ресурс «не дозрел» | его условия: Deployment не Available, Ingress без адреса; логи sync — `kubectl -n argocd logs sts/argocd-application-controller` |
 
 **Опционально через `argocd` CLI** (если поставлен бинарь и сделан `argocd login`):
 

@@ -105,34 +105,16 @@ Kubernetes изначально проектировался для управл
 
 #### Визуализация конечного автомата Job Controller
 
-```text
-       [ Создание объекта Job ]
-                  │
-                  ▼
-         [ Создание Pod(ов) ] ◄───────────────┐ 
-                  │                           │
-                  ▼                           │ Параллелизм (parallelism)
-         [ Pod выполняет работу ]             │ определяет, сколько Pod'ов 
-                  │                           │ могут находиться в статусе
-        ┌─────────┴─────────┐                 │ Running одновременно.
-        ▼                   ▼                 │
-   [ exit 0 ]          [ exit >0 ]            │
-        │                   │                 │
-        │                   ▼                 │
-        │             [ Pod Failed ]          │
-        │                   │                 │
-        │            (Проверка backoffLimit)  │
-        │                   ├─────(Лимит не исчерпан)─────┘
-        │                   │
-        │                   ▼
-        │            [ Job Failed ] 
-        ▼
-(Счётчик completions++)
-        │
-        ├─(completions < target)────┐
-        │                           │
-        ▼                           │
-  [ Job Complete ] ◄────────────────┘
+```mermaid
+flowchart TD
+    J["Job создан"] --> P["создание Pod-ов<br/>parallelism — сколько Running одновременно"]
+    P --> W["Pod выполняет работу"]
+    W -- "exit 0" --> OK["completions++"]
+    W -- "exit > 0" --> F["Pod Failed"]
+    F -- "backoffLimit не исчерпан" --> P
+    F -- "backoffLimit исчерпан" --> JF["Job Failed"]
+    OK -- "completions < target" --> P
+    OK -- "completions = target" --> JC["Job Complete"]
 ```
 
 Разница между `restartPolicy: Never` и `restartPolicy: OnFailure` архитектурно важна:
@@ -262,20 +244,12 @@ kubectl -n lab get job job-parallel
 
 ### Архитектура статического шардирования (Indexed) vs Динамическая очередь (Work-Queue)
 
-```text
-       INDEXED JOB (Статическое)                 WORK-QUEUE (Динамическое)
-                                          
-[ Под Index=0 ] ─► Читает Блок 0           [ Под A ] ─┐  
-[ Под Index=1 ] ─► Читает Блок 1           [ Под B ] ─┼─► Тянут из RabbitMQ 
-[ Под Index=2 ] ─► Читает Блок 2           [ Под C ] ─┘   до опустошения
-                                           
-+ Не нужна внешняя инфраструктура          + Авто-балансировка (быстрые поды 
-+ Идеально для заранее известных блоков      возьмут больше задач)
-+ Гарантия обработки каждого шарда ровно   + Обработка задач неизвестного 
-  один раз (если скрипт идемпотентен)        объема
-- Если Блок 1 огромный, Под 1 будет        - Нужен брокер сообщений (RabbitMQ)
-  работать дольше всех (перекос)           - Сложная бизнес-логика в коде
-```
+
+| | Indexed Job — статическое шардирование | Work-queue — динамическая очередь |
+|---|---|---|
+| Как распределяется работа | под с индексом *i* читает блок *i* | поды A/B/C тянут задачи из брокера (RabbitMQ), пока очередь не опустеет |
+| Плюсы | не нужна внешняя инфраструктура; блоки известны заранее; каждый шард обрабатывается ровно один раз (если скрипт идемпотентен) | авто-балансировка — быстрые поды берут больше; объём задач может быть неизвестен |
+| Минусы | огромный блок — один под работает дольше всех (перекос) | нужен брокер сообщений; сложнее бизнес-логика в коде |
 
 ---
 
@@ -578,21 +552,13 @@ kubectl -n lab wait --for=condition=complete job/report-manual --timeout=60s
 
 Дерево принятия решений для траблшутинга:
 
-```text
-Job-проблема
-│
-├─ Job есть, подов НЕТ ────────► describe job → suspend:true? completions уже достигнуты?
-│                                 либо ResourceQuota/PSA не дают создать под (смотри Events)
-├─ Поды в Error, Job не Complete ► backoffLimit исчерпан?
-│     describe job → ищи Warning BackoffLimitExceeded;
-│     Смотри логи упавшего пода (logs --previous, если restartPolicy:OnFailure).
-│     Фатальный код ошибки? → настроить podFailurePolicy FailJob (Часть 3)
-├─ Job висит, поды Running вечно ► нет условия выхода из скрипта / activeDeadlineSeconds не задан
-│     → Задать deadline; проверить скрипт (может он ждет ввода из stdin?)
-└─ CronJob не создаёт Job ───────► get cronjob: SUSPEND=True? LAST SCHEDULE давно в прошлом?
-      describe cronjob → "Cannot determine if job needs to be started"
-      = startingDeadlineSeconds истёк / concurrencyPolicy=Forbid и прошлый завис
-```
+
+| Симптом | Проверка | Причина / что делать |
+|---|---|---|
+| Job есть, подов нет | `describe job` | `suspend: true`? completions уже достигнуты? ResourceQuota/PSA не дают создать под — смотри Events |
+| Поды в `Error`, Job не Complete | `describe job` → Warning `BackoffLimitExceeded`; `logs --previous` (при `restartPolicy: OnFailure`) | backoffLimit исчерпан; фатальный код ошибки → `podFailurePolicy: FailJob` (Часть 3) |
+| Job висит, поды `Running` вечно | скрипт в поде | нет условия выхода / не задан `activeDeadlineSeconds`; скрипт ждёт stdin? |
+| CronJob не создаёт Job | `get cronjob`: `SUSPEND`, `LAST SCHEDULE`; `describe cronjob` | `Cannot determine if job needs to be started` = `startingDeadlineSeconds` истёк / `concurrencyPolicy: Forbid` и прошлый Job завис |
 
 Давайте разберем 5 реальных боевых инцидентов и способы их диагностики.
 

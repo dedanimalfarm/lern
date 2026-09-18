@@ -112,32 +112,32 @@ kubectl get cs || true # componentstatuses может быть deprecated, но 
 
 **Схема: профили PSS, режимы PSA и место PSA в цепочке admission:**
 
-```text
-   Строгость профиля:  privileged ──► baseline ──► restricted
-                       (без огранич.) (нет hostNet/ (non-root, drop ALL caps,
-                                       hostPath/priv) seccomp, runAsNonRoot …)
 
-   Профиль × режим задаются метками на Namespace:
-     pod-security.kubernetes.io/enforce: restricted  → нарушение = ОТКАЗ в создании
-     pod-security.kubernetes.io/audit:   restricted  → запись в audit-log, под создаётся
-     pod-security.kubernetes.io/warn:    restricted  → предупреждение клиенту, под создаётся
+| Профиль (по возрастанию строгости) | Что запрещает |
+|---|---|
+| `privileged` | ничего |
+| `baseline` | hostNetwork/hostPID, hostPath, privileged-контейнеры |
+| `restricted` | плюс non-root, drop ALL capabilities, seccomp, `runAsNonRoot` … |
 
-   Путь запроса:
-     kubectl ─► authn ─► authz(RBAC) ─► mutating webhooks ─► PSA ─► etcd
-                                                             ▲ только валидация (ДА/НЕТ), без мутации
+| Метка на Namespace | Что происходит при нарушении |
+|---|---|
+| `pod-security.kubernetes.io/enforce: restricted` | отказ в создании |
+| `pod-security.kubernetes.io/audit: restricted` | запись в audit-log, под создаётся |
+| `pod-security.kubernetes.io/warn: restricted` | предупреждение клиенту, под создаётся |
+
+```mermaid
+flowchart LR
+    k["kubectl"] --> authn["authn"] --> authz["authz — RBAC"] --> mut["mutating webhooks"] --> psa["PSA<br/>только валидация: да/нет, без мутации"] --> etcd[("etcd")]
 ```
 
 ### 1.3 PSA vs PSP — почему PSP убрали и что взамен
 
-Если вы работали с кластерами версий 1.15-1.20, вы помните **PodSecurityPolicy (PSP)**. PSP был отдельным API-ресурсом (CRD-подобным), который делал то же самое. Однако PSP был **официально удален в версии 1.25**.
-
-| Характеристика | PodSecurityPolicy (PSP) - Удален | Pod Security Admission (PSA) - Актуален |
-|---|---|---|
-| Архитектура | Отдельные объекты `PodSecurityPolicy` | Встроенные фиксированные профили в коде k8s |
-| Привязка | Через `RoleBinding`. Политика применялась к `ServiceAccount` пода или пользователю. | Простая метка (label) на уровне `Namespace`. |
-| Проблема дебага | Если подпадало несколько PSP, выбиралась первая по алфавиту. Было абсолютно непредсказуемо. | Детерминированно: работает тот профиль, метка которого стоит на Namespace. |
-| Мутация подов | PSP мог МУТИРОВАТЬ под (автоматически подставлять `runAsUser`). | PSA **ТОЛЬКО ВАЛИДИРУЕТ**. Он ничего не меняет, только отвечает "Да" или "Нет". |
-| Гибкость | Можно было писать свои "сборные солянки" правил. | Фиксированные 3 профиля. Кастомная логика вынесена в VAP (Часть 2). |
+**PodSecurityPolicy (PSP)** — предшественник PSA, удалён в 1.25. Его проблемы: политика
+привязывалась через RBAC к ServiceAccount пода, и при нескольких подходящих PSP бралась
+первая по алфавиту — непредсказуемо; PSP мог *мутировать* под (подставлять `runAsUser`);
+произвольные наборы правил было тяжело аудировать. PSA устроен иначе: три фиксированных
+профиля, привязка меткой на Namespace, детерминированный выбор и **только валидация**
+(«да/нет», объект не меняется). Кастомная логика вынесена в ValidatingAdmissionPolicy (Часть 2).
 
 **Почему PSP убили?**
 Потому что его внедрение на существующем кластере было минным полем. Мутирующее поведение приводило к тому, что разработчик деплоил один манифест, а в кластере оказывалось совершенно другое. Зависимость от RBAC делала аудит политик невозможным для человека без скриптов. PSA решает эту проблему гениально просто: "Один Namespace — Один профиль".
@@ -214,7 +214,7 @@ metadata:
 spec:
   containers:
   - name: app
-    image: nginx:latest
+    image: nginx:1.27-alpine
 EOF
 ```
 
@@ -263,7 +263,7 @@ Kubernetes позволяет комбинировать метки. У PSA ес
 kubectl label ns lab pod-security.kubernetes.io/warn=restricted --overwrite
 
 # Попытаемся запустить там дефолтный Nginx
-kubectl -n lab run warn-pod --image=nginx:latest
+kubectl -n lab run warn-pod --image=nginx:1.27-alpine
 ```
 **ОЖИДАЕМЫЙ ВЫВОД:**
 ```text
@@ -383,7 +383,7 @@ kubectl apply -f manifests/vap-no-latest.yaml
 
 ```bash
 # Под с :latest в lab — ОТКЛОНЁН:
-kubectl -n lab run bad --image=nginx:latest --restart=Never
+kubectl -n lab run bad --image=nginx:1.27-alpine --restart=Never
 # ОЖИДАЕМЫЙ ВЫВОД:
 # Error from server (Forbidden): ... ValidatingAdmissionPolicy 'no-latest-tag' with binding 'no-latest-tag-binding' denied request: ОШИБКА ИБ: Образы с тегом :latest или без тега запрещены!
 
@@ -544,17 +544,12 @@ Kyverno значительно проще в освоении для Kubernetes 
 
 Ключ к решению любых конфликтов политик — понимание того, в каком порядке `kube-apiserver` пропускает объект через плагины. Этот порядок жестко зашит в код k8s:
 
-```text
-1. [AuthN/AuthZ] -> Пользователь имеет права RBAC создать Pod? (Да).
-2. [Mutating Webhooks] -> Опрос ВСЕХ зарегистрированных мутаторов (Kyverno, Istio, Vault).
-   Здесь объект ИЗМЕНЯЕТСЯ. Например, Istio добавляет контейнер 'istio-proxy'.
-3. [Object Schema Validation] -> Объект соответствует OpenAPI схеме? Нет опечаток в полях?
-4. [Validating Admission] -> Параллельный опрос всех валидаторов:
-   ├── PSA (Pod Security Admission)
-   ├── VAP (ValidatingAdmissionPolicy)
-   └── Validating Webhooks (Gatekeeper, Kyverno Validate)
-5. [Сохранение] -> Если ВСЕ сказали "Да", объект пишется в etcd.
-```
+
+1. **AuthN/AuthZ** — есть ли у пользователя RBAC-право создать Pod.
+2. **Mutating webhooks** — опрос всех мутаторов (Kyverno, Istio, Vault); объект **изменяется** — например, Istio добавляет контейнер `istio-proxy`.
+3. **Schema validation** — объект соответствует OpenAPI-схеме, нет опечаток в полях.
+4. **Validating admission** — параллельный опрос валидаторов: PSA, ValidatingAdmissionPolicy, validating webhooks (Gatekeeper, Kyverno validate).
+5. **Сохранение** — если все сказали «да», объект пишется в etcd.
 
 **Золотое правило дебага:** 
 Этап 4 (Валидация, включая PSA и VAP) видит объект **ПОСЛЕ** того, как он прошел этап 2 (Мутация).

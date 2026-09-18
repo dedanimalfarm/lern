@@ -57,9 +57,9 @@
 # 0) kubeconfig (наш self-managed кластер развёрнут через Kubespray):
 export KUBECONFIG=/root/.kube/kubespray.conf
 
-# 1) Кластер, реально запускающий контейнеры (Kubespray/kind/minikube/k3s/GKE).
-#    ВАЖНО для Части 4: enforcement NetworkPolicy есть только при CNI с поддержкой
-#    (наш Kubespray — Calico, режет реально; голый kind/managed GKE — нет).
+# 1) Кластер стенда — Kubespray (k8s-cp-1, k8s-w-1, k8s-w-2).
+#    ВАЖНО для Части 4: enforcement NetworkPolicy делает CNI — у нас Calico, режет
+#    реально (на CNI без поддержки политик объект создаётся, но трафик не режется).
 kubectl version --output=yaml | head -5
 
 # 2) Чистый namespace lab (важно: убрать ресурсы прошлых модулей)

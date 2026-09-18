@@ -135,15 +135,15 @@ ingress-nginx-controller   NodePort   10.233.56.120   <none>        80:30407/TCP
   - `ImplementationSpecific`: поведение зависит от конкретного контроллера.
 - **Аннотация `rewrite-target`**: когда Ingress перенаправляет запрос `/a` на бэкенд, по умолчанию бэкенд видит запрос именно к `/a`. Если ваш бэкенд (например, веб-сервер) ожидает корень `/`, он вернет 404. Чтобы "отрезать" `/a` и передать бэкенду `/`, используется специфичная для NGINX аннотация `nginx.ingress.kubernetes.io/rewrite-target`.
 
-```text
-            ┌──────── ingress-nginx (класс nginx) ────────┐
-HTTP/HTTPS  │  смотрит Host + Path, выбирает backend       │
- ──────────>│  a.lab.local/      -> Service web-a          │──> Pod web-a
-            │  b.lab.local/      -> Service web-b          │──> Pod web-b
-            │  paths.lab.local/a -> web-a, /b -> web-b     │
-            │  (нет совпадения)  -> default backend (404)  │
-            └──────────────────────────────────────────────┘
-```
+
+ingress-nginx (класс `nginx`) смотрит на `Host` + `Path` и выбирает backend:
+
+| Host + Path | Backend |
+|---|---|
+| `a.lab.local/` | Service `web-a` → Pod web-a |
+| `b.lab.local/` | Service `web-b` → Pod web-b |
+| `paths.lab.local/a`, `paths.lab.local/b` | `web-a`, `web-b` |
+| нет совпадения | default backend — 404 |
 
 ---
 
@@ -476,23 +476,13 @@ hello from web-b
 
 Ветвление диагностики обычно выглядит так:
 
-```text
-Проблема с доступом к приложению через Ingress
-│
-├─ Выполняем `kubectl get ingress`
-│     ├─ Поле ADDRESS пустое ? ───► Ошибка в ingressClassName, контроллер не запущен, либо проблема с LoadBalancer.
-│     └─ ADDRESS есть ───► Идем дальше.
-│
-├─ Запрос выдает 404 Not Found ? ──► Контроллер работает, но не видит подходящего правила (host/path).
-│     │                              Проверьте опечатки в host, правильность pathType и наличие rewrite-target.
-│
-├─ Запрос выдает 502/503/504 ? ────► Контроллер нашел правило, но бэкенд недоступен.
-│     │                              Проверьте `kubectl get endpoints <service>` и статус подов приложения.
-│
-└─ Проблема с HTTPS (сертификат невалиден или соединение сброшено) ?
-      ├─ Сертификат самоподписанный? ──► Используйте curl -k для тестов.
-      └─ Сертификат вообще не выпущен? ──► Проверьте `kubectl get certificate` и `kubectl describe certificate`.
-```
+
+| Шаг | Симптом | Причина / что проверить |
+|---|---|---|
+| `kubectl get ingress` | `ADDRESS` пустой | ошибка в `ingressClassName`, контроллер не запущен, проблема с LoadBalancer |
+| запрос | `404 Not Found` | контроллер работает, но правило не подобрано: опечатка в host, `pathType`, отсутствие `rewrite-target` |
+| запрос | `502` / `503` / `504` | правило найдено, бэкенд недоступен: `kubectl get endpoints <service>`, статус подов |
+| HTTPS | сертификат невалиден / соединение сброшено | самоподписанный → `curl -k` для тестов; не выпущен → `kubectl get certificate`, `kubectl describe certificate` |
 
 ### Инцидент 1: Ingress не получает IP-адрес (ADDRESS пуст)
 

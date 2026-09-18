@@ -98,17 +98,14 @@ kubectl -n lab get serviceaccount default
 Как ConfigMap-том обновляется без рестарта пода и почему это **атомарно**.
 kubelet монтирует не файлы напрямую, а двухуровневую конструкцию из симлинков:
 
-```
-/etc/cfg/
-  app.conf  ──симлинк──►  ..data/app.conf
-  ..data    ──симлинк──►  ..2026_06_04_23_06_13.3254397790/   (timestamped каталог)
-                              └── app.conf   (реальный файл, версия v1)
 
-ОБНОВЛЕНИЕ: kubelet создаёт НОВЫЙ каталог ..2026_06_04_23_08_40.../ со всеми
-файлами новой версии, затем ОДНОЙ операцией rename переставляет симлинк
-..data на него. Приложение никогда не видит «полу-записанный» набор файлов —
-переключение всех ключей разом.
-```
+- `/etc/cfg/app.conf` — симлинк на `..data/app.conf`;
+- `/etc/cfg/..data` — симлинк на timestamped-каталог `..2026_06_04_23_06_13.3254397790/`;
+- `..2026_06_04_23_06_13.3254397790/app.conf` — реальный файл (версия v1).
+
+**Обновление:** kubelet создаёт новый каталог `..2026_06_04_23_08_40.../` со всеми файлами новой
+версии, затем одной операцией `rename` переставляет симлинк `..data` на него. Приложение никогда не
+видит «полузаписанный» набор файлов — переключаются все ключи разом.
 
 **Reality (проверено на кластере):**
 ```bash
@@ -244,16 +241,12 @@ kubectl -n lab get secret app-secret-lab -o jsonpath='{.data.PASSWORD}' | base64
 
 **Цепочка авторизации пода (кто на что имеет право):**
 
-```
-Pod (spec.serviceAccountName: pod-reader)
-   │  работает от
-   ▼
-ServiceAccount/pod-reader ──(subject)──> RoleBinding ──(roleRef)──> Role
-                                                                      │
-            ЗАПРОС к API проверяется: subject есть в binding? ◄───────┤
-            роль разрешает verb на resource в apiGroup?               │
-                                                                      ▼
-                                   rules: apiGroups[""] × resources["pods"] × verbs[get,list,watch]
+```mermaid
+flowchart LR
+    Pod["Pod<br/>spec.serviceAccountName: pod-reader"] -- "работает от" --> SA["ServiceAccount/pod-reader"]
+    SA -- "subject" --> RB["RoleBinding"]
+    RB -- "roleRef" --> R["Role<br/>rules: apiGroups [core] × resources [pods] × verbs [get, list, watch]"]
+    Req["запрос к API"] -. "subject есть в binding?<br/>роль разрешает verb на resource в apiGroup?" .-> RB
 ```
 
 **Дефолтные ClusterRole (агрегированные, есть в любом кластере) — не изобретать своё:**
@@ -273,12 +266,12 @@ ServiceAccount/pod-reader ──(subject)──> RoleBinding ──(roleRef)─�
 С k8s 1.22 под получает токен SA не из вечного Secret, а через **projected-том**
 с тремя источниками (kubelet собирает их в `/var/run/secrets/kubernetes.io/serviceaccount/`):
 
-```
-volume kube-api-access-xxxxx (projected):
-  ├─ serviceAccountToken: {expirationSeconds: 3607, path: token}  ← короткоживущий JWT
-  ├─ configMap: kube-root-ca.crt          (path: ca.crt — доверять API-серверу)
-  └─ downwardAPI: metadata.namespace      (path: namespace)
-```
+
+| Источник в projected-томе `kube-api-access-xxxxx` | Файл в `/var/run/secrets/kubernetes.io/serviceaccount/` | Назначение |
+|---|---|---|
+| `serviceAccountToken` (`expirationSeconds: 3607`) | `token` | короткоживущий JWT для запросов к API |
+| `configMap` `kube-root-ca.crt` | `ca.crt` | доверять сертификату API-сервера |
+| `downwardAPI` `metadata.namespace` | `namespace` | namespace пода |
 
 **Reality (проверено на coredns-поде):** источник `serviceAccountToken` с
 `expirationSeconds: 3607` (~1 час). Это **BoundServiceAccountToken**:

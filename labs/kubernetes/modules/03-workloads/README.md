@@ -56,7 +56,7 @@ StatefulSet vs Job» под конкретный сценарий.
 ```bash
 # kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
 export KUBECONFIG=/root/.kube/kubespray.conf
-# 1) Кластер, который реально запускает контейнеры (kind/minikube/k3s/GKE).
+# 1) Кластер стенда — Kubespray (k8s-cp-1, k8s-w-1, k8s-w-2), CNI Calico.
 kubectl version --output=yaml | head -5
 
 # 2) Namespace lab (идемпотентно). ВАЖНО: перед стартом убедитесь, что ns чист
@@ -115,18 +115,17 @@ kubectl api-resources | grep -E "deployments|statefulsets|daemonsets|jobs|cronjo
 
 **Иерархия владения (ownerReferences) и что делает rollout:**
 
+```mermaid
+flowchart TD
+    D["Deployment/workload-demo<br/>ты редактируешь ЭТО"]
+    D -- "ownerReference; по одному RS на версию template" --> RS1["ReplicaSet -hash-v1<br/>replicas=0 — старая версия, держится для отката"]
+    D --> RS2["ReplicaSet -hash-v2<br/>replicas=2"]
+    RS2 --> P1["Pod -hash-v2-xxxxx"]
+    RS2 --> P2["Pod -hash-v2-yyyyy"]
 ```
-Deployment/workload-demo  (ты редактируешь ЭТО)
-   │ владеет (ownerReference), по одному RS на версию template
-   ├── ReplicaSet -<hash-v1>   replicas=0   ◄── старая версия, держится для отката
-   └── ReplicaSet -<hash-v2>   replicas=2
-          │ владеет
-          ├── Pod -<hash-v2>-xxxxx
-          └── Pod -<hash-v2>-yyyyy
 
-rollout v1->v2: НОВЫЙ RS поднимается (+maxSurge), старый ужимается (-maxUnavailable),
-                пока новый не станет полным, старый — 0. undo: просто меняет местами.
-```
+rollout v1→v2: новый RS поднимается (+`maxSurge`), старый ужимается (−`maxUnavailable`),
+пока новый не станет полным, а старый — 0. `undo` просто меняет их местами.
 
 ```yaml
 # стратегия в манифесте Deployment (значения по умолчанию — 25%/25%):
@@ -140,16 +139,15 @@ spec:
 только когда новый под становится `Ready`. Без readiness-пробы Deployment считает
 под готовым сразу при `Running` — и выкатывает следующую порцию вслепую:
 
+```mermaid
+flowchart TD
+    up["поднять новый Pod (maxUnavailable=0)"] --> q{"Pod READY?"}
+    q -- "нет" --> hold["выкат ЖДЁТ — старые поды держат трафик"] --> q
+    q -- "да" --> down["ужать старый Pod"] --> next["следующая порция"] --> up
 ```
-Шаг выката (maxUnavailable=0): поднять новый Pod ─► ждать пока Pod READY ──┐
-                                                                          │
-   READY?  ── нет ──► выкат ЖДЁТ (старые поды держат трафик)              │
-     │ да                                                                 │
-     └──► ужать старый Pod ──► повторить для следующего ◄─────────────────┘
 
-Нет readiness-пробы ⇒ "Ready" = "Running" мгновенно ⇒ выкат катит дальше,
-даже если новый под ещё не прогрелся и отдаёт 503 (битый релиз уедет целиком).
-```
+Нет readiness-пробы ⇒ `Ready` = `Running` мгновенно ⇒ выкат катит дальше, даже если новый
+под ещё не прогрелся и отдаёт 503 — битый релиз уедет целиком.
 
 - **`minReadySeconds`** — под должен продержаться Ready хотя бы N секунд, прежде
   чем счёт пойдёт дальше (защита от «мигнул Ready и упал»).
@@ -270,14 +268,16 @@ kubectl -n lab get deploy workload-demo \
 
 **Cron-выражение (5 полей `schedule`):**
 
-```
-┌─ минута (0-59)
-│ ┌─ час (0-23)
-│ │ ┌─ день месяца (1-31)
-│ │ │ ┌─ месяц (1-12)
-│ │ │ │ ┌─ день недели (0-6, 0=вс)
-* * * * *
-```
+
+| Позиция | Поле | Диапазон |
+|---|---|---|
+| 1 | минута | 0–59 |
+| 2 | час | 0–23 |
+| 3 | день месяца | 1–31 |
+| 4 | месяц | 1–12 |
+| 5 | день недели | 0–6 (0 = воскресенье) |
+
+`* * * * *` — каждую минуту; `0 2 * * *` — ежедневно в 02:00; `*/5 * * * *` — каждые 5 минут.
 
 | schedule | Когда |
 |----------|-------|

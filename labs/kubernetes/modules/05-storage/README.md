@@ -73,8 +73,8 @@ kubectl cluster-info
 kubectl get storageclass
 ```
 
-Если StorageClass'ов нет (вывод `No resources found`) — поставьте локальный
-провижинер. Самый простой для одно-нодового стенда (kind/minikube/bare):
+Если StorageClass'ов нет (вывод `No resources found`) — на стенде не отработал
+`scripts/bootstrap/05-install-storage.sh`; он ставит local-path-provisioner:
 
 ```bash
 # local-path-provisioner от Rancher: динамический hostPath-based StorageClass.
@@ -97,7 +97,7 @@ local-path (default)   rancher.io/local-path   Delete          WaitForFirstConsu
 > - `VOLUMEBINDINGMODE` (`Immediate`/`WaitForFirstConsumer`) — когда PVC перейдёт в `Bound`.
 > - `ALLOWVOLUMEEXPANSION` (`true`/`false`) — можно ли расширить том на лету.
 >
-> У k3s (`local-path`), kind и minikube по умолчанию режим
+> У `local-path` на нашем стенде (как и у других локальных провижинеров) режим по умолчанию
 > **`WaitForFirstConsumer`** — это значит, что одинокий PVC **не привяжется**,
 > пока его не смонтирует Pod. Это не баг, а топологически-осознанное связывание
 > (см. Часть 2.3 и Инцидент 2).
@@ -351,21 +351,14 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metada
 Современный k8s общается с системами хранения через **CSI** (Container Storage
 Interface) — out-of-tree плагины. У CSI-драйвера две части:
 
-```
-        ┌─────────────────── Controller Plugin (Deployment, 1 на кластер) ──────────────────┐
-        │  CSI-драйвер  +  внешние sidecar-контроллеры (поставляет сообщество k8s):          │
-        │   • external-provisioner  — видит новый PVC → зовёт CreateVolume   (создать том)   │
-        │   • external-attacher     → ControllerPublishVolume   (присоединить том к ноде)    │
-        │   • external-resizer      → ControllerExpandVolume    (онлайн-расширение)          │
-        │   • external-snapshotter  → CreateSnapshot            (снапшоты)                    │
-        └───────────────────────────────────────────────────────────────────────────────────┘
-        ┌─────────────────── Node Plugin (DaemonSet, на каждой ноде) ───────────────────────┐
-        │   CSI-драйвер  +  node-driver-registrar  → NodeStageVolume / NodePublishVolume     │
-        │   (форматирует и монтирует том в каталог Pod на конкретной ноде)                   │
-        └───────────────────────────────────────────────────────────────────────────────────┘
-   Объекты-следы: `CSIDriver` (регистрация драйвера), `CSINode` (какие драйверы на ноде),
-                  `VolumeAttachment` (факт attach тома к ноде).
-```
+
+| Часть драйвера | Где работает | Компоненты | CSI-вызовы | За что отвечает |
+|---|---|---|---|---|
+| Controller Plugin | Deployment, один на кластер | CSI-драйвер + sidecar'ы сообщества: `external-provisioner`, `external-attacher`, `external-resizer`, `external-snapshotter` | `CreateVolume`, `ControllerPublishVolume`, `ControllerExpandVolume`, `CreateSnapshot` | увидеть новый PVC и создать том; присоединить том к ноде; расширить онлайн; снапшот |
+| Node Plugin | DaemonSet, на каждой ноде | CSI-драйвер + `node-driver-registrar` | `NodeStageVolume`, `NodePublishVolume` | отформатировать и смонтировать том в каталог Pod на конкретной ноде |
+
+Объекты-следы в API: `CSIDriver` (регистрация драйвера), `CSINode` (какие драйверы есть на ноде),
+`VolumeAttachment` (факт attach тома к ноде).
 
 > **Reality на нашем кластере (Kubespray + local-path):**
 > ```bash
@@ -732,27 +725,13 @@ kubectl -n lab get pvc   -l app=stateful-demo  # data-...-1 и -2 ВСЁ ЕЩЁ 
 Storage-сбой проявляется либо как «PVC не Bound», либо как «Pod застрял на томе».
 Ветвись по тому, что застряло:
 
-```
-Pod не стартует / том не работает
-│
-├─ PVC в Pending ? ──────► kubectl describe pvc <pvc>  → блок Events:
-│     ├─ "storageclass ... not found"          → класса нет/опечатка; PVC иммутабелен → пересоздать (Инцидент 1)
-│     ├─ "waiting for first consumer"          → НЕ ошибка: WaitForFirstConsumer ждёт Pod (Инцидент 2)
-│     ├─ "ProvisioningFailed" (квота/бэкенд)   → провижинер есть, но создать том не смог (квота/право/диск)
-│     └─ нет подходящего Available PV (статика) → проверь матчинг: класс/accessModes/capacity/selector
-│
-├─ PVC Bound, но Pod в ContainerCreating ? ──► kubectl describe pod <pod>  → Events:
-│     ├─ "FailedAttachVolume / Multi-Attach"   → RWO-том уже на другой ноде (Инцидент 3); жди отцепления старого Pod
-│     ├─ "FailedMount ... timeout"             → нода не может смонтировать: CSI node-plugin/драйвер ФС/сеть к СХД
-│     └─ "MountVolume.SetUp failed: not found" → секрет/ConfigMap тома нет (для projected-томов, → м07/м16)
-│
-├─ Pod Running, но "No space left on device" ► том заполнен: df внутри Pod (kubectl exec -- df -h /path);
-│     │                                          расширить PVC (если allowVolumeExpansion=true) или чистить
-│     └─ на local-path расширение НЕ поддержано → пересоздать том большего размера + перенос данных
-│
-└─ Данные пропали после рестарта ? ──────────► том эфемерный (emptyDir) или hostPath на другой ноде —
-                                                нужен PVC/StatefulSet (Часть 1.2 vs Часть 3.3)
-```
+
+| Симптом | Команда | Что в Events / причина → куда |
+|---|---|---|
+| PVC в `Pending` | `kubectl describe pvc <pvc>` | `storageclass ... not found` — класса нет или опечатка; PVC иммутабелен → пересоздать (Инцидент 1). `waiting for first consumer` — **не ошибка**: WaitForFirstConsumer ждёт Pod (Инцидент 2). `ProvisioningFailed` — провижинер есть, но том не создал (квота/право/диск). Нет подходящего Available PV (статика) — проверь класс/accessModes/capacity/selector |
+| PVC `Bound`, Pod в `ContainerCreating` | `kubectl describe pod <pod>` | `FailedAttachVolume / Multi-Attach` — RWO-том уже на другой ноде (Инцидент 3), жди отцепления старого Pod. `FailedMount ... timeout` — нода не может смонтировать: CSI node-plugin / драйвер ФС / сеть к СХД. `MountVolume.SetUp failed: not found` — Secret/ConfigMap тома нет (м07, м16) |
+| Pod `Running`, `No space left on device` | `kubectl exec <pod> -- df -h /path` | том заполнен: расширить PVC (если `allowVolumeExpansion: true`) или чистить; на local-path расширения нет → пересоздать том большего размера и перенести данные |
+| Данные пропали после рестарта | — | том эфемерный (`emptyDir`) или `hostPath` на другой ноде — нужен PVC/StatefulSet (Часть 1.2 против 3.3) |
 
 Опорные команды: `kubectl get pvc,pv` (фазы), `describe pvc/pod` (Events — главный
 источник причины), `kubectl get volumeattachment` (факт attach к ноде), `exec -- df -h`.

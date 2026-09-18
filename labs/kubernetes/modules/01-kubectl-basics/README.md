@@ -63,8 +63,7 @@
 # kubeconfig нашего кластера (Kubespray); на другом стенде — свой путь/контекст
 export KUBECONFIG=/root/.kube/kubespray.conf
 # 1) Рабочий кластер и kubectl, который в него смотрит.
-#    Подойдёт любой кластер, который РЕАЛЬНО запускает контейнеры:
-#    kind, minikube, k3s/k3d, Docker Desktop или облачный (GKE/EKS/AKS).
+#    Стенд курса — Kubespray: 3 VM (k8s-cp-1, k8s-w-1, k8s-w-2), CNI Calico.
 kubectl version --output=yaml | head -20
 
 # 2) Должен быть ровно один текущий контекст. Если контекстов несколько —
@@ -77,18 +76,16 @@ kubectl config current-context
 which jq watch || echo "jq/watch желательны, но не критичны"
 ```
 
-> **Что за «дистрибутивы» k8s** (встретятся по всему курсу): **kind/minikube/k3s** —
-> локальные песочницы на одной машине (быстро поднять/снести); **GKE/EKS/AKS** —
-> управляемые кластеры в облаке (Google/Amazon/Azure); **Kubespray** — разворачивает
-> полноразмерный production-like кластер на ваших VM (наш учебный стенд). Сам
-> Kubernetes и команды `kubectl` везде одинаковы — отличается только КАК поднят кластер.
->
-> **Про учебный стенд.** Этот модуль рассчитан на кластер, где поды
-> по-настоящему запускаются (kind/minikube/k3s/GKE). На «ненастоящих» стендах,
-> которые лишь показывают объекты в API, но не выполняют контейнеры,
-> `readinessProbe`, `logs` и `exec` не отработают. Все «ожидаемые выводы»
-> ниже приведены для типового кластера (kube-dns на `10.96.0.10`,
-> CNI выдаёт Pod IP из `10.20.0.0/16` либо `10.244.0.0/16`).
+> **Про учебный стенд.** Весь курс идёт на одном кластере — **Kubespray** (Ansible)
+> на трёх VM: `k8s-cp-1` (control-plane + etcd), `k8s-w-1`, `k8s-w-2` (workers),
+> Kubernetes v1.36.1, CNI Calico. Константы стенда, которые встретятся в выводах:
+> Pod-сеть `10.233.64.0/18`, Service-сеть `10.233.0.0/18`, DNS — CoreDNS +
+> nodelocaldns на `169.254.25.10`, домен `cluster.local`.
+> Kubespray — лишь один из способов поднять кластер (есть managed GKE/EKS/AKS,
+> локальные kind/minikube/k3s); сам Kubernetes и `kubectl` везде одинаковы,
+> отличаются только имена нод и адреса. Часть «ожидаемых выводов» в этом модуле
+> снята на другом стенде (контекст `kind-lab`, Pod IP `10.244.x`) — на Kubespray
+> имена и адреса будут свои, структура вывода та же.
 
 ---
 
@@ -142,18 +139,20 @@ kubectl -n kube-system get pods
 
 **Архитектура кластера (кто где):**
 
-```
-          ┌──────────────── CONTROL-PLANE (k8s-cp-1) ───────────────┐
- kubectl  │  kube-apiserver ──────────────> etcd (ИСТОЧНИК ИСТИНЫ)  │
- ──REST──>┤        ▲     ▲                                          │
-          │        │     └─ kube-scheduler (выбирает ноду для Pod)  │
-          │        └──────── controller-manager (reconcile-петли)   │
-          └──────────┬───────────────────────────────────────────────┘
-                     │ apiserver — единственный, кто пишет в etcd; ноды «тянут» задания
-          ┌──────────▼ WORKER-НОДЫ (k8s-w-1 / k8s-w-2) ──────────────┐
-          │  kubelet (запускает контейнеры через containerd)         │
-          │  kube-proxy (правила Service на ноде)   CNI (Pod IP)     │
-          └──────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    kubectl["kubectl (REST)"] --> api
+    subgraph cp["Control-plane: k8s-cp-1"]
+        api["kube-apiserver"] --> etcd[("etcd — источник истины")]
+        sched["kube-scheduler<br/>выбирает ноду для Pod"] --> api
+        cm["controller-manager<br/>reconcile-петли"] --> api
+    end
+    subgraph w["Worker-ноды: k8s-w-1, k8s-w-2"]
+        kubelet["kubelet<br/>запускает контейнеры через containerd"]
+        proxy["kube-proxy<br/>правила Service на ноде"]
+        cni["CNI Calico<br/>выдаёт Pod IP"]
+    end
+    api -. "только apiserver пишет в etcd;<br/>ноды «тянут» задания" .-> kubelet
 ```
 
 **Путь запроса внутри apiserver** (где «рождаются» ошибки доступа):
@@ -195,22 +194,13 @@ core-группа (пустая) — `Pod`/`Service` (`apiVersion: v1`); име�
 Reconcile — не разовое действие на ваш `apply`, а **бесконечный цикл**, который
 каждый контроллер крутит для своих объектов:
 
-```
-        ┌──────────────────────────────────────────────┐
-        │                                              │
-        ▼                                              │
-   1. OBSERVE   читает желаемое (spec) и фактическое   │
-      (watch)   (status) состояние из apiserver        │
-        │                                              │
-        ▼                                              │
-   2. DIFF      сравнивает: spec.replicas=3, а Pod-ов 2 │
-        │                                              │
-        ▼                                              │
-   3. ACT       создаёт/удаляет ресурсы, чтобы устранить│
-                разницу (создать 1 Pod)                 │
-        │                                              │
-        └──────────► пишет status обратно в apiserver ─┘
-                     и цикл повторяется снова и снова
+```mermaid
+flowchart TD
+    O["1. OBSERVE (watch)<br/>читает spec (желаемое) и status (фактическое) из apiserver"]
+    D["2. DIFF<br/>сравнивает: spec.replicas=3, а Pod-ов 2"]
+    A["3. ACT<br/>создаёт/удаляет ресурсы, чтобы убрать разницу: создать 1 Pod"]
+    S["пишет status обратно в apiserver"]
+    O --> D --> A --> S --> O
 ```
 
 - **Level-triggered, не edge-triggered.** Контроллер реагирует на *текущее
