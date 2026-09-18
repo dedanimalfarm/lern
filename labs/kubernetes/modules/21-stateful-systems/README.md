@@ -155,27 +155,19 @@ kubectl describe nodes | grep -i cpu
 
 ### 1.3 Архитектура CloudNativePG
 
-```text
-┌───────────────────────┐          ┌───────────────────────────────────┐
-│  Kubernetes API       │          │   CloudNativePG Operator          │
-│                       │          │   (Deployment)                    │
-│  - CRD: Cluster       │◄─────────┤   - Смотрит за ресурсами Cluster  │
-│  - CRD: Backup        │          │   - Управляет Pods, PVC, Secrets  │
-└──────────┬────────────┘          └────────────────┬──────────────────┘
-           │                                        │
-           ▼                                        ▼
-┌───────────────────────┐          ┌───────────────────────────────────┐
-│  CR: Cluster "my-db"  │          │   PostgreSQL Cluster (my-db)      │
-│                       │          │                                   │
-│  instances: 3         │          │   [Pod: my-db-1 (Primary)]        │
-│  storage: 1Gi         │          │   ├── PVC: 1Gi                    │
-└───────────────────────┘          │   └── Service: my-db-rw           │
-                                   │           ▲ (streaming replication)
-                                   │           │                       │
-                                   │   [Pod: my-db-2 (Replica)]        │
-                                   │   ├── PVC: 1Gi                    │
-                                   │   └── Service: my-db-ro           │
-                                   └───────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph api["Kubernetes API"]
+        crd["CRD: Cluster, Backup"]
+        cr["CR Cluster my-db<br/>instances: 3, storage: 1Gi"]
+    end
+    op["CloudNativePG Operator (Deployment)<br/>следит за Cluster, управляет Pods / PVC / Secrets"] -- "watch" --> api
+    op --> pg
+    subgraph pg["PostgreSQL Cluster my-db"]
+        p1["Pod my-db-1 (Primary) + PVC 1Gi"] -- "streaming replication" --> p2["Pod my-db-2 (Replica) + PVC 1Gi"]
+        rw["Service my-db-rw → primary"]
+        ro["Service my-db-ro → replicas"]
+    end
 ```
 
 Каждый под PostgreSQL в CNPG запускается вместе с легковесным бинарником **Instance Manager**, который работает как PID 1 (вместо самого postgres). Instance Manager:
@@ -227,16 +219,16 @@ spec:
     size: 1Gi
   bootstrap:
     initdb:
-      database: app_db
-      owner: app_user
+      database: appdb
+      owner: appuser
 ```
+В файле репозитория у кластера ещё `primaryUpdateStrategy: unsupervised` и рядом описан
+Deployment `db-client` — тестовое приложение, которое каждые 5 секунд делает `SELECT now()`
+через `my-db-rw` с паролем из Secret `my-db-app`.
 
 ```bash
-# Применим манифест
+# Применим манифест (кластер + тестовое приложение db-client в одном файле)
 kubectl apply -f manifests/cluster.yaml
-
-# Применим тестовое приложение, которое будет писать в эту БД
-kubectl apply -f manifests/app.yaml
 ```
 
 Проверим создание кластера:
@@ -428,13 +420,32 @@ EOF
 
 # Посмотрим статус
 kubectl -n lab get backup manual-backup
-# Вы должны увидеть PHASE: completed (через секунд 10-20)
+kubectl -n lab describe backup manual-backup | tail -6
 ```
 
-```text
-NAME            AGE   CLUSTER   PHASE       ERROR
-manual-backup   20s   my-db     completed   
+На нашем стенде бэкап **не** завершится: у кластера нет секции `spec.backup`, а CNPG умеет
+писать бэкапы только в объектное хранилище (`barmanObjectStore`) или в снапшоты томов
+(`volumeSnapshot` + VolumeSnapshotClass, которого у local-path нет). `Backup` останется в
+`PHASE: failed` с ошибкой об отсутствующей конфигурации. Рабочая конфигурация с
+S3-совместимым хранилищем (например, MinIO в кластере) выглядит так — её нужно добавить
+в `Cluster` **до** создания бэкапов:
+
+```yaml
+spec:
+  backup:
+    retentionPolicy: "7d"
+    barmanObjectStore:
+      destinationPath: s3://cnpg-backups/my-db
+      endpointURL: http://minio.minio.svc:9000
+      s3Credentials:
+        accessKeyId: { name: minio-creds, key: ACCESS_KEY_ID }
+        secretAccessKey: { name: minio-creds, key: ACCESS_SECRET_KEY }
+      wal:
+        compression: gzip
 ```
+
+С такой секцией оператор начинает непрерывно архивировать WAL (это и делает возможным
+PITR из 4.2), а `Backup` переходит в `completed` за десятки секунд.
 
 ### 4.2 Point in Time Recovery (PITR)
 
@@ -677,7 +688,7 @@ kubectl -n lab get svc -l cnpg.io/cluster=my-db   # Сервисы маршру�
 
 # === Секреты и Доступ ===
 kubectl -n lab get secret my-db-app -o jsonpath="{.data.password}" | base64 -d
-kubectl -n lab exec -it my-db-1 -- psql -U app_user -d app_db
+kubectl -n lab exec -it my-db-1 -- psql -U appuser -d appdb
 
 # === Бэкапы ===
 kubectl -n lab get scheduledbackup              # Статус бэкапов по расписанию
