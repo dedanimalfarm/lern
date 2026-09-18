@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: lab-quota
+  namespace: lab
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 2Gi

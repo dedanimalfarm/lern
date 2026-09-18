@@ -15,4 +15,8 @@ for n in $(kubectl get nodes -l lab-prio=target -o name 2>/dev/null || true); do
   kubectl label "$n" lab-prio- 2>/dev/null || true
 done
 
+ROOT_DIR="$(cd "$DIR/../../.." && pwd)"
+if kubectl get ns lab >/dev/null 2>&1; then
+  bash "$ROOT_DIR/scripts/bootstrap/01-apply-quotas.sh" >/dev/null 2>&1 || true
+fi
 echo "Cleanup complete."

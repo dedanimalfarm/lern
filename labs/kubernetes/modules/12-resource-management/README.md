@@ -106,6 +106,15 @@ kubectl get nodes -l '!node-role.kubernetes.io/control-plane' \
   -o custom-columns='NODE:.metadata.name,CPU:.status.allocatable.cpu,MEM:.status.allocatable.memory'
 ```
 
+> ⚠️ На стенде в `lab` живут базовые `LimitRange lab-limits` и `ResourceQuota lab-quota`
+> (bootstrap стенда). С ними «настоящий» BestEffort-под из Части 2.3 невозможен: LimitRange
+> подставит `defaultRequest` и под станет `Burstable`, а без LimitRange квота отобьёт под
+> без `resources` (`must specify limits.cpu ...`). На время модуля оба объекта надо снять —
+> это делает `verify/prepare.sh`; руками:
+> `kubectl -n lab delete limitrange lab-limits resourcequota lab-quota`.
+> Вернуть в конце: `bash ../../scripts/bootstrap/01-apply-quotas.sh` (cleanup делает сам).
+> Часть 4 ставит **свои** LimitRange и ResourceQuota и показывает ровно этот эффект.
+
 Ожидаемый вывод:
 ```text
 NODE      CPU     MEM
