@@ -35,3 +35,11 @@ kubectl -n lab get pods
 `kubectl -n lab describe quota lab-quota` — vcluster и его CoreDNS уже
 бронируют её часть, а каждый под тенанта добавляется к used. Что произойдёт,
 если тенант запросит больше остатка — см. `broken/scenario-01/`.
+## Ожидаемый результат
+- Внутри vcluster только `default`, `kube-system`, `kube-public`, `kube-node-lease`;
+  созданный `nginx` в host-кластере виден как `nginx-x-default-x-my-vcluster` в `lab`.
+- `kubectl --kubeconfig vcluster.yaml get nodes` показывает «псевдоноду» — своих нод у
+  vcluster нет, планировщик хоста решает всё.
+- В `describe quota lab-quota` used вырос ровно на requests пода тенанта — вы объяснили,
+  почему квота хоста остаётся последней линией защиты и что увидит тенант при её
+  превышении (`broken/scenario-01`).

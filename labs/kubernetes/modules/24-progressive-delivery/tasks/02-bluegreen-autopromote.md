@@ -16,3 +16,12 @@
 prePromotionAnalysis гоняет анализ ПРОТИВ preview-версии ДО переключения
 active — провал отменяет promote, прод-трафик не страдает вообще.
 </details>
+## Ожидаемый результат
+- П.1: `curl` на active и preview Service отдаёт разные цвета, пока Rollout в
+  `BlueGreenPause`.
+- П.2: во время перехода подов вдвое больше обычного; в `describe quota` used ≤ hard —
+  иначе promote не пройдёт, и вы знаете, что подкрутить.
+- П.3: с `autoPromotionSeconds: 30` точка невозврата — момент переключения active,
+  а не старт релиза.
+- П.4: с `prePromotionAnalysis` promote ждёт результата анализа против preview; провал
+  анализа — active не меняется.

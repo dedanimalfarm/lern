@@ -55,3 +55,10 @@ kubectl get rolebinding team-edit -n team-a-dev   # права приехали 
 Проверьте «защиту от дурака»: попробуйте назначить родителем несуществующий
 namespace — валидирующий вебхук HNC откажет сразу
 (`requested parent "..." does not exist`).
+## Ожидаемый результат
+- `rolebinding team-edit` появился в `child-ns` и в `team-a-dev` без вашего участия;
+  у `team-a-dev` есть аннотация `hnc.x-k8s.io/subnamespace-of: parent-ns`.
+- Попытка указать несуществующего родителя отбита вебхуком с текстом
+  `requested parent "..." does not exist`.
+- Вы объяснили порядок удаления (якорь → дети → родитель), почему `kubectl delete ns`
+  дочернего субнеймспейса откажет и как HNC защищает от циклов в иерархии.
