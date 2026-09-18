@@ -27,6 +27,7 @@
   - [Инцидент 5: Ingress Controller не может достучаться до подов](#инцидент-5-ingress-controller-не-может-достучаться-до-подов)
   - [Инцидент 6: Блокировка эфемерных портов при строгом Egress](#инцидент-6-блокировка-эфемерных-портов-при-строгом-egress)
 - [Инструменты отладки (Debugging Dataplane)](#инструменты-отладки-debugging-dataplane)
+  - [Как Calico превращает NetworkPolicy в правила на ноде](#как-calico-превращает-networkpolicy-в-правила-на-ноде)
 - [Проверка модуля](#проверка-модуля)
 - [Финальная карта (матрица сегментации)](#финальная-карта-матрица-сегментации)
 - [Контрольные вопросы](#контрольные-вопросы)
@@ -36,6 +37,7 @@
 - [Уборка](#уборка)
 - [Решения (Solutions)](#решения-solutions)
 <!-- /TOC -->
+
 
 > ⏱ время ~45 мин · сложность 4/5 · пререквизиты: Трек 1 и Трек 3
 
@@ -94,19 +96,12 @@ kubectl -n kube-system get pods -l k8s-app=calico-node -o wide 2>/dev/null \
 
 Архитектура классического 3-tier приложения с микросегментацией выглядит так:
 
-```text
-       [ Внешний интернет / Клиенты ]
-               │
-               ▼ (Ingress Controller)
-      ┌─────────────────┐       ┌─────────────────┐
-      │   web (frontend)│── X ─▶│      db         │
-      └─────────────────┘       └─────────────────┘
-               │                         ▲
-               │ (разрешено: HTTP/80)    │ (разрешено: TCP/5432)
-               ▼                         │
-      ┌─────────────────┐                │
-      │   api (backend) │────────────────┘
-      └─────────────────┘
+```mermaid
+flowchart TD
+    I["Внешний интернет / клиенты"] -- "Ingress Controller" --> web["web (frontend)"]
+    web -- "разрешено: HTTP/80" --> api["api (backend)"]
+    api -- "разрешено: TCP/5432" --> db["db"]
+    web -. "ЗАПРЕЩЕНО" .-> db
 ```
 *Диаграмма 1. Трехуровневая архитектура с запретом прямого доступа.*
 
@@ -550,6 +545,47 @@ Cilium предлагает мощную утилиту `hubble` и `cilium moni
 # Если в кластере Cilium:
 cilium monitor --type drop
 ```
+
+### Как Calico превращает NetworkPolicy в правила на ноде
+
+NetworkPolicy — это только *желание*, записанное в API. Работу делает CNI, и у Calico она
+устроена так:
+
+```mermaid
+flowchart LR
+    API["kube-apiserver<br/>NetworkPolicy web-to-api"] -- "watch" --> Felix["Felix (в поде calico-node)<br/>на КАЖДОЙ ноде"]
+    Felix -- "переводит в правила" --> DP["dataplane ноды<br/>iptables + ipset (по умолчанию)<br/>или eBPF"]
+    DP -- "цепочки cali-fw-/cali-tw- на veth пода" --> Pod["веth-интерфейс пода<br/>cali1a2b3c4d5e6"]
+    Typha["Typha (опционально)<br/>fan-out watch на большие кластеры"] -.-> Felix
+```
+
+- **Felix** — агент в `calico-node` на каждой ноде. Он следит за подами, endpoint'ами и
+  политиками и держит на ноде актуальный набор правил только для *локальных* подов.
+- Каждый под получает **workload endpoint** и свой veth-интерфейс `caliXXXX`; для него Felix
+  создаёт цепочки `cali-tw-<iface>` (to workload — ingress) и `cali-fw-<iface>` (from workload —
+  egress). Селекторы политик раскрываются в **ipset**'ы с IP подходящих подов, поэтому
+  правил мало, а IP-адресов в них — сколько угодно.
+- Kubernetes NetworkPolicy появляется в Calico как объект `NetworkPolicy` с именем
+  `knp.default.<имя>` — это та самая «трансляция», которую можно прочитать.
+- Порядок оценки: сначала политики (`cali-pi-`/`cali-po-` — policy inbound/outbound), потом
+  профиль namespace; если ни одна политика не выбирает под — трафик разрешён (поэтому
+  `default-deny` с пустым `podSelector` так важен).
+- В режиме **eBPF** цепочек iptables нет: программы вешаются на интерфейсы, а политики
+  компилируются в eBPF-карты; логика та же, отладка — через `calico-node -bpf policy dump`.
+
+Что посмотреть на ноде стенда (`ssh -i /root/.ssh/kubespray ubuntu@<нода>`):
+
+```bash
+sudo iptables-save | grep -c 'cali-'                       # сколько правил Calico держит на ноде
+sudo iptables-save | grep 'cali-tw-' | head -3              # ingress-цепочки локальных подов
+sudo ipset list -n | grep cali | head                       # ipset'ы, в которые раскрылись селекторы
+sudo calicoctl get workloadendpoints -n lab                 # какой под на каком veth
+sudo calicoctl get networkpolicy -n lab -o yaml | grep -E 'name: knp|selector' | head
+```
+
+Отсюда же понятен эффект из Части 3: `default-deny` на egress режет и UDP/53, а DNS на
+стенде идёт через nodelocaldns на link-local `169.254.25.10` — поэтому `allow-dns` обязан
+содержать `ipBlock 169.254.25.10/32`, а не только selector на поды `kube-dns`.
 
 ---
 
