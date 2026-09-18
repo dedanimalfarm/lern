@@ -386,6 +386,14 @@ Kubeadm автоматически разворачивает полноценн
 | `etcd/ca.crt` | Отдельный CA для etcd кластера | Self-signed |
 | `/etc/kubernetes/admin.conf` | Kubeconfig с клиентским сертификатом админа | `ca` |
 
+> **На нашем стенде (Kubespray).** Control-plane здесь тоже поднят через kubeadm, поэтому
+> `kubeadm certs check-expiration` и `certs renew` работают как описано. Отличия в путях:
+> сертификаты Kubernetes лежат в `/etc/kubernetes/ssl` (`/etc/kubernetes/pki` — симлинк на
+> него), а сертификаты etcd — отдельно в `/etc/ssl/etcd/ssl/` (`ca.pem`, `member-k8s-cp-1.pem`,
+> `node-<нода>.pem`). Автопродление включается в group_vars параметром
+> `auto_renew_certificates: true` — Kubespray ставит systemd-таймер `k8s-certs-renew.timer`,
+> который сам делает `kubeadm certs renew all` и перезапускает компоненты.
+
 ### 3.1 Проверка сроков действия сертификатов
 
 Инструмент `kubeadm` имеет встроенную утилиту для управления сертификатами.
@@ -467,6 +475,16 @@ sudo chown $(id -u):$(id -g) /root/.kube/config
 
 Инструмент: `etcdctl`. Для взаимодействия с кластером etcd, `etcdctl` требует сертификаты аутентификации.
 
+> **На нашем стенде (Kubespray).** etcd — **systemd-сервис** (`systemctl status etcd`), а не
+> static pod: файла `/etc/kubernetes/manifests/etcd.yaml` нет, конфигурация — в `/etc/etcd.env`
+> (`ETCD_NAME`, `ETCD_DATA_DIR=/var/lib/etcd`, `ETCD_INITIAL_CLUSTER`). Для `etcdctl` берите
+> сертификаты etcd, а не kubeadm'овские:
+> `--cacert=/etc/ssl/etcd/ssl/ca.pem --cert=/etc/ssl/etcd/ssl/member-k8s-cp-1.pem --key=/etc/ssl/etcd/ssl/member-k8s-cp-1-key.pem`
+> (так же читали Secret из etcd в модуле 16). Восстановление вместо правки манифеста:
+> `systemctl stop etcd` → `etcdctl snapshot restore ... --name=$ETCD_NAME --data-dir=/var/lib/etcd-restore`
+> → поменять `ETCD_DATA_DIR` в `/etc/etcd.env` → `systemctl start etcd`; apiserver переподключится
+> сам. У стенда один член etcd — на время restore API-сервер недоступен.
+
 ### 4.1 Создание снапшота базы etcd
 
 Подготовим переменные окружения для `etcdctl` на control-plane ноде:
@@ -538,6 +556,14 @@ Kubernetes выпускает минорные релизы трижды в го
 2. Запустить `kubeadm upgrade plan`, затем `kubeadm upgrade apply`.
 3. Обновить `kubelet` и `kubectl` на control-plane ноде, перезапустить сервис.
 4. Повторить для каждой worker-ноды (`kubeadm upgrade node`).
+
+> **На нашем стенде (Kubespray).** Обновление делает не `kubeadm` руками, а playbook:
+> `ansible-playbook -i inventory/labcluster/hosts.yaml upgrade-cluster.yml -b -e kube_version=v1.36.2`
+> (из `/root/kubespray`). Он сам проходит по нодам по одной (`serial`): drain → обновление
+> kubeadm/kubelet/kubectl → под капотом те же `kubeadm upgrade apply` / `upgrade node`, что
+> ниже → uncordon. Правила те же: одна минорная версия за шаг, сначала control-plane, версия
+> должна поддерживаться вашим релизом Kubespray. Отката минорной версии нет — на стенде
+> тренироваться лучше на копии (`scripts/cluster/down.sh` / `up.sh`).
 
 ### 5.1 Обновление пакетов и kubeadm
 
