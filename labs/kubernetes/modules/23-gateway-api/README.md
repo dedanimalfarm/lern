@@ -163,19 +163,14 @@ envoy-gateway-7b9cd84b49-xyz12     1/1     Running   0          10m
 
 Взаимосвязь ресурсов строится иерархически:
 
-```text
-  [Инфраструктура]            GatewayClass
-                                   ▲
-                                   │ ссылается на класс
-  [Кластер Администратор]        Gateway  (например, port 80, 443)
-                                   ▲
-                                   │ parentRefs (кто принимает трафик)
-  [Разработчик]               ┌────┴────┐
-                          HTTPRoute   HTTPRoute
-                          (path /a)   (path /b)
-                              │           │ backendRefs
-                              ▼           ▼
-  [Приложение]             Service     Service
+```mermaid
+flowchart TD
+    GC["GatewayClass<br/>роль: инфраструктура"]
+    GW["Gateway — порты 80/443<br/>роль: администратор кластера"] -- "ссылается на класс" --> GC
+    R1["HTTPRoute path /a<br/>роль: разработчик"] -- "parentRefs" --> GW
+    R2["HTTPRoute path /b<br/>роль: разработчик"] -- "parentRefs" --> GW
+    R1 -- "backendRefs" --> S1["Service"]
+    R2 -- "backendRefs" --> S2["Service"]
 ```
 
 - **GatewayClass** — это абстракция (шаблон). Аналог `StorageClass` для дисков.
@@ -348,20 +343,21 @@ Status:
 
 В нашем стенде Envoy Gateway Controller настроен на публикацию шлюзов через `NodePort` Service (в реальном облаке это обычно `LoadBalancer`, и вы бы просто использовали его внешний IP).
 
-Давайте динамически найдем этот NodePort порт и IP ноды:
+С рабочей машины внутренние IP нод стенда недостижимы, поэтому запросы к шлюзу делаем из
+пода внутри кластера — через Service, который контроллер создал для нашего Gateway в
+`envoy-gateway-system`. Заведём переменную и маленький хелпер `gwcurl` (одноразовый под с
+curl; каждый вызов занимает пару секунд):
 ```bash
-# Узнаем порт HTTP-слушателя шлюза на нодах
-NODE_PORT=$(kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gateway-name=demo-gateway -o jsonpath='{.items[0].spec.ports[?(@.name=="http")].nodePort}')
-
-# Узнаем внутренний IP адрес первой ноды
-NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-
-echo "Gateway доступен по адресу: http://$NODE_IP:$NODE_PORT"
+GW=$(kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gateway-name=demo-gateway -o jsonpath='{.items[0].metadata.name}')
+echo "Gateway внутри кластера: http://$GW.envoy-gateway-system"
+gwcurl() { kubectl -n lab-gateway run "curl-$RANDOM" --rm -i --restart=Never --quiet --image=curlimages/curl:8.10.1 -- curl -s "$@"; }
 ```
+Тот же Service имеет тип NodePort: с любой ноды (или через ssh-туннель) шлюз доступен и по
+`http://<InternalIP ноды>:<nodePort>` — порт смотрите в `kubectl -n envoy-gateway-system get svc $GW`.
 
 Сделаем тестовый запрос по пути `/store`, который мы определили в `matches`:
 ```bash
-curl -s http://$NODE_IP:$NODE_PORT/store
+gwcurl http://$GW.envoy-gateway-system/store
 ```
 Ожидаемый ответ от пода `store-v1`:
 ```
@@ -370,7 +366,7 @@ Store V1
 
 Если мы запросим другой путь, получим ошибку от шлюза:
 ```bash
-curl -s -I http://$NODE_IP:$NODE_PORT/unknown-path | head -n 1
+gwcurl -I http://$GW.envoy-gateway-system/unknown-path | head -n 1
 ```
 Ожидаемый ответ:
 ```
@@ -429,11 +425,11 @@ kubectl apply -f manifests/03-advanced-routing/httproute-headers.yaml
 Проверим работу:
 ```bash
 # Запрос без заголовка (шлюз не найдет совпадения -> 404)
-curl -s -I http://$NODE_IP:$NODE_PORT/beta | head -n 1
+gwcurl -I http://$GW.envoy-gateway-system/beta | head -n 1
 # HTTP/1.1 404 Not Found
 
 # Запрос с правильным заголовком
-curl -s -H "X-Beta-Access: true" http://$NODE_IP:$NODE_PORT/beta
+gwcurl -H "X-Beta-Access: true" http://$GW.envoy-gateway-system/beta
 # Store V1
 ```
 
@@ -460,11 +456,11 @@ kubectl apply -f manifests/03-advanced-routing/httproute-query.yaml
 Проверка:
 ```bash
 # Параметр не совпадает (или отсутствует)
-curl -s -I http://$NODE_IP:$NODE_PORT/admin?role=guest | head -n 1
+gwcurl -I http://$GW.envoy-gateway-system/admin?role=guest | head -n 1
 # HTTP/1.1 404 Not Found
 
 # Строгое совпадение query-параметра
-curl -s http://$NODE_IP:$NODE_PORT/admin?role=admin
+gwcurl http://$GW.envoy-gateway-system/admin?role=admin
 # Store V1
 ```
 
@@ -551,7 +547,8 @@ kubectl apply -f manifests/02-traffic-splitting/httproute-split.yaml
 Сделаем 20 последовательных запросов и сгруппируем ответы для подсчета статистики:
 
 ```bash
-for i in {1..20}; do curl -s http://$NODE_IP:$NODE_PORT/store; done | sort | uniq -c
+kubectl -n lab-gateway run curl-loop --rm -i --restart=Never --quiet --image=curlimages/curl:8.10.1 -- \
+  sh -c "for i in \$(seq 1 20); do curl -s http://$GW.envoy-gateway-system/store; echo; done" | sort | uniq -c
 ```
 
 Примерный ожидаемый результат:
@@ -627,13 +624,13 @@ spec:
 kubectl apply -f manifests/05-filters/httproute-redirect.yaml
 
 # Проверим HTTP-заголовки ответа
-curl -s -I http://$NODE_IP:$NODE_PORT/old-store | grep -E "HTTP|location"
+gwcurl -I http://$GW.envoy-gateway-system/old-store | grep -E "HTTP|location"
 ```
 
 Ожидаемый вывод:
 ```
 HTTP/1.1 301 Moved Permanently
-location: http://192.168.1.100:32145/store
+location: http://<имя svc>.envoy-gateway-system/store
 ```
 Запрос даже не доходит до бекенда, шлюз сам формирует 301 ответ.
 
@@ -757,29 +754,13 @@ metadata:
 
 #### Алгоритм диагностики Gateway API
 
-```text
-Трафик не доходит до приложения (Connection Refused, 404, 503)
-│
-├─ Gateway в статусе Programmed = False ? ──► kubectl describe gateway <name>
-│     ├─ Контроллер Gateway API не запущен / не найден GatewayClass
-│     ├─ Порт конфликтует (Port collision - уже занят другим Gateway)
-│     └─ Ошибка валидации Listener
-│
-├─ HTTPRoute Accepted = False ? ───────────► kubectl describe httproute <name>
-│     ├─ Указан неверный parentRefs (опечатка в имени или namespace Gateway)
-│     ├─ Gateway явно не разрешает allowedRoutes для этого namespaces
-│     └─ Конфликт hostname
-│
-├─ HTTPRoute ResolvedRefs = False ? ───────► kubectl describe httproute <name>
-│     ├─ BackendRef ссылается на несуществующий Service (опечатка)
-│     ├─ BackendRef указывает на Service в другом namespace без ReferenceGrant
-│     └─ Service не имеет указанного порта (или опечатка в port)
-│
-└─ Все True, но возвращается 404/503 ? ────► Проверьте:
-      ├─ Совпадают ли matches (в пути, методе, заголовках)
-      ├─ Есть ли у Service живые Endpoints (поды в статусе Ready) -> kubectl get endpoints
-      └─ Посмотрите логи контроллера дата-плейна (Envoy pods)
-```
+
+| Условие в статусе | Команда | Причины |
+|---|---|---|
+| Gateway `Programmed=False` | `kubectl describe gateway <name>` | контроллер Gateway API не запущен / GatewayClass не найден; конфликт порта с другим Gateway; ошибка валидации Listener |
+| HTTPRoute `Accepted=False` | `kubectl describe httproute <name>` | неверный `parentRefs` (имя или namespace Gateway); Gateway не разрешает `allowedRoutes` для этого namespace; конфликт hostname |
+| HTTPRoute `ResolvedRefs=False` | `kubectl describe httproute <name>` | `backendRef` на несуществующий Service; Service в другом namespace без ReferenceGrant; у Service нет такого порта |
+| всё `True`, но 404/503 | `kubectl get endpoints`; логи Envoy | не совпадают `matches` (path/method/headers); у Service нет Ready-endpoints; смотреть логи data-plane |
 
 ---
 
@@ -844,7 +825,7 @@ Message: Gateway "typo-gateway" not found
 kubectl apply -f broken/scenario-03/httproute.yaml
 
 # Попробуем сделать запрос на прописанный там путь
-curl -s -I http://$NODE_IP:$NODE_PORT/broken-path | head -n 1
+gwcurl -I http://$GW.envoy-gateway-system/broken-path | head -n 1
 ```
 Возвращается `HTTP/1.1 503 Service Unavailable` (Envoy говорит "no healthy upstream").
 
