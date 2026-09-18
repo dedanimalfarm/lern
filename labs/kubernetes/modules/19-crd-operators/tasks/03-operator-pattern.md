@@ -22,14 +22,24 @@ kubectl -n monitoring get pods | grep operator
 ```bash
 kubectl -n monitoring get servicemonitor
 kubectl -n monitoring get secret prometheus-kps-kube-prometheus-stack-prometheus -o jsonpath='{.data.prometheus\.yaml\.gz}' | base64 -d | gunzip | grep -c 'job_name'
-kubectl -n lab apply -f manifests/servicemonitor.yaml 2>/dev/null || true
+kubectl -n lab apply -f - <<'EOF'
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata: { name: operator-demo, namespace: lab, labels: { release: kps } }
+spec:
+  selector: { matchLabels: { app: operator-demo } }
+  endpoints: [{ port: http, interval: 30s }]
+EOF
 sleep 30
 kubectl -n monitoring get secret prometheus-kps-kube-prometheus-stack-prometheus -o jsonpath='{.data.prometheus\.yaml\.gz}' | base64 -d | gunzip | grep -c 'job_name'
 ```
 
 ## Ожидаемый результат
-- После создания нового `ServiceMonitor` число `job_name` в сгенерированном конфиге
-  Prometheus выросло — оператор заметил CR и пересобрал конфигурацию без вашего участия.
+- После создания `ServiceMonitor/operator-demo` число `job_name` в сгенерированном конфиге
+  Prometheus выросло на один — оператор заметил CR и пересобрал конфигурацию без вашего
+  участия (таргетов у job нет: Service с меткой `app: operator-demo` не существует, и это
+  неважно — конфиг перестраивается по факту появления CR).
+- Уберите CR (`kubectl -n lab delete servicemonitor operator-demo`) — через ~30 с job исчез.
 - Вы объяснили, что оператор наблюдает через watch, какие ресурсы он **владеет**
   (`ownerReferences` на Secret/StatefulSet) и что случится с конфигом, если удалить
   ServiceMonitor.
