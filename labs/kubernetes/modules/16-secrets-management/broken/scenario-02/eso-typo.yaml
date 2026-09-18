@@ -1,0 +1,10 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata: { name: db-from-eso-v2, namespace: lab }
+spec:
+  refreshInterval: 15s
+  secretStoreRef: { name: fake-store, kind: SecretStore }
+  target: { name: db-from-eso-v2 }
+  data:
+  - { secretKey: username, remoteRef: { key: "/db/username" } }
+  - { secretKey: password, remoteRef: { key: "/db/passwd" } }

@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workload-demo
+  namespace: lab
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: workload-demo
+  template:
+    metadata:
+      labels:
+        app: workload-demo
+        version: v1
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        env:
+        - name: APP_VERSION
+          value: v1
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false

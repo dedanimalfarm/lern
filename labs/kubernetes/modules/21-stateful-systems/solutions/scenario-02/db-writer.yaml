@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-writer
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-writer
+  template:
+    metadata:
+      labels:
+        app: db-writer
+    spec:
+      containers:
+      - name: psql
+        image: postgres:15-alpine
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          while true; do
+            PGPASSWORD=$DB_PASSWORD psql -h my-db-rw -U appuser -d appdb -v ON_ERROR_STOP=1 \
+              -c "CREATE TABLE IF NOT EXISTS events(ts timestamptz default now()); INSERT INTO events DEFAULT VALUES;" \
+              && echo "inserted" || echo "write failed"
+            sleep 5
+          done
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-db-app
+              key: password
+        resources:
+          requests: { cpu: 20m, memory: 32Mi }
+          limits: { cpu: 100m, memory: 64Mi }

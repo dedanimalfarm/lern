@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gated-web
+  namespace: lab
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gated-web
+  template:
+    metadata:
+      labels:
+        app: gated-web
+    spec:
+      schedulingGates:
+      - name: lab.example.com/wait-for-quota-check
+      containers:
+      - name: web
+        image: nginx:1.27-alpine
+        resources:
+          requests: { cpu: 20m, memory: 32Mi }
+          limits: { cpu: 100m, memory: 64Mi }

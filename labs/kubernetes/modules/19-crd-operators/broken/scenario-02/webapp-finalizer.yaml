@@ -1,0 +1,10 @@
+apiVersion: lab.example.com/v1
+kind: WebApp
+metadata:
+  name: stuck-webapp
+  namespace: lab
+  finalizers:
+  - lab.example.com/cleanup-external-dns
+spec:
+  image: nginx:1.27-alpine
+  replicas: 1

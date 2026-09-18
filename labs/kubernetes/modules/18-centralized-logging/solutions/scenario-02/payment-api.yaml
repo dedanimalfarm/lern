@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-api
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-api
+  template:
+    metadata:
+      labels:
+        app: payment-api
+    spec:
+      containers:
+      - name: api
+        image: busybox:1.36
+        command:
+        - /bin/sh
+        - -c
+        args:
+        - "awk 'BEGIN {\n  srand();\n  split(\"/api/pay,/api/refund,/api/balance\"\
+          , paths, \",\");\n  while (1) {\n    r = rand();\n    status = (r < 0.70)\
+          \ ? 200 : (r < 0.85) ? 404 : 500;\n    lvl = (status == 500) ? \"error\"\
+          \ : \"info\";\n    dur = int(rand()*450) + 50;\n    printf(\"{\\\"level\\\
+          \":\\\"%s\\\",\\\"status\\\":%d,\\\"path\\\":\\\"%s\\\",\\\"duration_ms\\\
+          \":%d,\\\"msg\\\":\\\"request handled\\\"}\\n\", lvl, status, paths[int(rand()*3)+1],\
+          \ dur);\n    system(\"sleep 0.7\");\n  }\n}' > /var/log/app.log 2>&1\n"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi

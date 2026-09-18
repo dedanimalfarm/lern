@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: resilient-app-pdb
+  namespace: lab
+spec:
+  minAvailable: "100%"
+  selector:
+    matchLabels:
+      app: resilient-app
