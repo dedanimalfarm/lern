@@ -1,6 +1,6 @@
 # CLAUDE.md — k8s-labs
 
-Учебный репозиторий Kubernetes-лабораторий (27 модулей + 5 capstone).
+Учебный репозиторий Kubernetes-лабораторий (28 модулей + 5 capstone).
 План развития: `docs/ROADMAP.md` (модули 26–28 — следующие на очереди).
 
 ## Стенд
@@ -29,6 +29,10 @@
   `verify/{prepare.sh,verify.sh,cleanup.sh}`.
 - «Ожидаемые выводы» в README ОБЯЗАТЕЛЬНО снимаются с живого кластера —
   не из головы. Версии образов пиновать и фиксировать в README.
+- Схемы — только mermaid (GitHub рендерит нативно) или таблицы; ASCII-арт в
+  README не заводить. Деревья диагностики — таблицами «симптом → проверка → причина».
+  Среда везде одна — стенд Kubespray; kind/minikube/GKE в тексте не упоминать как
+  альтернативу стенда.
 - Бюджет ресурсов: ns `lab` под ResourceQuota (requests 1CPU/1Gi,
   limits 2CPU/2Gi) и LimitRange (default limit 300m/256Mi на контейнер без
   явных значений!). Проверять `kubectl -n lab describe quota` ДО дизайна
@@ -46,6 +50,16 @@
   должен остаться живым).
 - Линт: `scripts/qa/lint.sh` (yamllint, kubeconform, shellcheck, kustomize) +
   `check_links.sh` — гонять до коммита; CI дублирует это на GitHub.
+- Broken-сценарии не выдумывать руками: `scripts/qa/mutate.py <manifest> <мутация>`
+  (`--list` — каталог 12 мутаций по уровням 1 опечатки / 2 логика / 3 поведение,
+  `--random TIER`, `--hint` печатает симптом и первую команду диагностики).
+- У КАЖДОГО модуля есть `verify/prepare.sh` (fail-fast по пререквизитам, ns lab) и
+  `verify/cleanup.sh` (только ресурсы модуля; persistent-аддоны стенда — ingress-nginx,
+  cert-manager, Argo CD, Envoy Gateway, sealed-secrets/ESO/VSO, kps — НЕ трогать).
+  m10 теперь QA-runnable: prepare сам создаёт drain-demo + PDB.
+- Локальный k3s на этой машине (`KUBECONFIG=/etc/rancher/k3s/k3s.yaml`) годится для
+  прогона лёгких модулей (01–14, 20) и проверки скриптов; выводы для README с него
+  НЕ снимать — эталон только стенд Kubespray.
 
 ## Известные грабли (уже наступали)
 
