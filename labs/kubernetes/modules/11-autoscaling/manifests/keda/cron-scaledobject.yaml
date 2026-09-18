@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keda-worker
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keda-worker
+  template:
+    metadata:
+      labels:
+        app: keda-worker
+    spec:
+      containers:
+      - name: worker
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-cron
+  namespace: lab
+spec:
+  scaleTargetRef:
+    name: keda-worker
+  minReplicaCount: 0
+  maxReplicaCount: 3
+  cooldownPeriod: 30
+  pollingInterval: 10
+  triggers:
+  - type: cron
+    metadata:
+      timezone: Etc/UTC
+      start: "*/2 * * * *"
+      end: "1-59/2 * * * *"
+      desiredReplicas: "2"
