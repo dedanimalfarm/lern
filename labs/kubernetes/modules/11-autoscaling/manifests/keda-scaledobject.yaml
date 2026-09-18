@@ -15,7 +15,7 @@ spec:
   triggers:
   - type: prometheus
     metadata:
-      serverAddress: http://prometheus-server.monitoring.svc.cluster.local:9090
+      serverAddress: http://kps-kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
       metricName: http_requests_total
       threshold: "100"
       query: sum(rate(http_requests_total{job="worker"}[1m]))
