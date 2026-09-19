@@ -560,19 +560,102 @@ not ready`). Промежуточные `require_*` молчат; `[OK]`-стр�
 
 ### Блок 1: Scheduler и nodeSelector
 1. Опишите фильтрацию и ранжирование в работе scheduler.
+
+   <details><summary>Ответ</summary>
+
+   Scheduler работает в два этапа. **Filter (предикаты)** — отбрасывает ноды, на которые под
+   сесть не может: не хватает `requests`, не проходит `nodeSelector`/`nodeAffinity`, не
+   толерируются taints, занят `hostPort`, не доступен том. **Score (приоритеты)** — оценивает
+   оставшиеся ноды (LeastAllocated, BalancedAllocation, вес preferred-правил) и выбирает лучшую.
+   Затем **Bind**: имя ноды записывается в `pod.spec.nodeName`, дальше действует kubelet. Если
+   после фильтрации не осталось ни одной ноды — под остаётся `Pending` с событием
+   `FailedScheduling`.
+
+   </details>
+
 2. Когда `nodeSelector` достаточно, а когда нужна `affinity`?
+
+   <details><summary>Ответ</summary>
+
+   `nodeSelector` — точное совпадение по набору меток, логика «И», без вариантов. `affinity`
+   нужна, когда требуется: «ИЛИ» из нескольких значений (`In`, `NotIn`, `Exists`), мягкое
+   предпочтение (`preferred...`), правила относительно других подов (`podAffinity`/
+   `podAntiAffinity`) или топологические домены.
+
+   </details>
+
 
 ### Блок 2: Taints/Tolerations
 3. Чем `NoSchedule` отличается от `NoExecute`?
+
+   <details><summary>Ответ</summary>
+
+   `NoSchedule` действует только при планировании: новые поды без toleration на ноду не сядут,
+   уже работающие останутся. `NoExecute` действует и на работающие: поды без toleration будут
+   **выселены** (с учётом `tolerationSeconds`). Третий режим — `PreferNoSchedule`: мягкое
+   пожелание.
+
+   </details>
+
 4. Toleration гарантирует посадку на нужную ноду? Чем это дополняют?
+
+   <details><summary>Ответ</summary>
+
+   Нет: toleration лишь **разрешает** ноду, не притягивая к ней. Под с toleration может
+   спланироваться на любую подходящую ноду. Чтобы гарантированно посадить его именно на
+   выделенные ноды, toleration дополняют `nodeSelector` или `nodeAffinity` по метке этих нод —
+   классическая пара «taint + label».
+
+   </details>
+
 
 ### Блок 3: Affinity
 5. required vs preferred affinity — последствия для `Pending`.
+
+   <details><summary>Ответ</summary>
+
+   `requiredDuringSchedulingIgnoredDuringExecution` — жёсткое условие: нет подходящей ноды →
+   под висит в `Pending`. `preferred...` — мягкое: scheduler добавит ноде баллов, но при
+   отсутствии идеального варианта разместит под куда получится. Жёсткие правила надёжнее
+   изолируют, но именно они превращают нехватку нод в простой.
+
+   </details>
+
 6. Как `podAntiAffinity` + `topologyKey` разносят реплики по отказоустойчивым доменам?
+
+   <details><summary>Ответ</summary>
+
+   `podAntiAffinity` запрещает (или не советует) ставить под рядом с подами, подходящими под
+   селектор, где «рядом» определяется `topologyKey`: ноды (`kubernetes.io/hostname`), зоны
+   (`topology.kubernetes.io/zone`), стойки. Реплики одного приложения с anti-affinity по
+   hostname расходятся на разные ноды — отказ ноды не уносит весь сервис.
+
+   </details>
+
 
 ### Блок 4: Quotas
 7. Что произойдёт при попытке превысить `ResourceQuota`?
+
+   <details><summary>Ответ</summary>
+
+   API-сервер отклонит создание объекта: `Error from server (Forbidden): exceeded quota:
+   <имя>, requested: ..., used: ..., limited: ...`. Важно, что при создании через контроллер
+   (Deployment) ошибку увидит не человек, а ReplicaSet — она осядет в его событиях и в условии
+   `ReplicaFailure`, а `kubectl get pods` покажет просто меньше подов, чем ожидалось.
+
+   </details>
+
 8. Почему `LimitRange` нужен рядом с `ResourceQuota`?
+
+   <details><summary>Ответ</summary>
+
+   Квота с `requests.*`/`limits.*` требует, чтобы значения были заданы у **каждого** контейнера,
+   иначе объект отклоняется («must specify limits.cpu...»). `LimitRange` подставляет значения по
+   умолчанию тем, кто их не указал, — без него квота превращается в запрет на любой «голый» под
+   (см. сценарий 02 модуля 12).
+
+   </details>
+
 
 ---
 

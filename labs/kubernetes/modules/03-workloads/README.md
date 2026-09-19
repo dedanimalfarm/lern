@@ -669,28 +669,156 @@ bash verify/verify.sh
 
 1. Опишите путь обновления Deployment через ReplicaSet. Почему старые RS не
    удаляются?
+
+   <details><summary>Ответ</summary>
+
+   Deployment не меняет поды напрямую: на каждую уникальную версию `spec.template` он создаёт
+   свой ReplicaSet и постепенно наращивает реплики в новом RS, уменьшая в старом. Старые RS
+   остаются с `replicas: 0` как история — именно они дают мгновенный `rollout undo` (достаточно
+   поменять числа местами, образы уже описаны). Глубина истории — `revisionHistoryLimit`.
+
+   </details>
+
 2. Как `maxSurge`/`maxUnavailable` влияют на доступность во время выката?
+
+   <details><summary>Ответ</summary>
+
+   `maxUnavailable` — сколько реплик от желаемого числа можно потерять во время выката;
+   `maxSurge` — сколько можно создать сверх. `maxUnavailable: 0` + `maxSurge: 1` = ёмкость
+   никогда не проседает (нужен запас ресурсов и квоты); `maxUnavailable: 1` + `maxSurge: 0` =
+   выкат без лишних ресурсов, но с временно меньшим числом реплик. Оба нуля одновременно
+   недопустимы — выкат не сдвинется.
+
+   </details>
+
 3. Что такое `change-cause` и как он помогает при разборе инцидента релиза?
+
+   <details><summary>Ответ</summary>
+
+   Аннотация `kubernetes.io/change-cause`, которую показывает `kubectl rollout history`. Без неё
+   колонка `CHANGE-CAUSE` пустая и по истории невозможно понять, что именно катили. Ставится
+   аннотацией в манифесте (`kubectl annotate deploy X kubernetes.io/change-cause="..."`) — в
+   GitOps роль change-cause выполняет коммит, на который ссылается синк.
+
+   </details>
+
 
 ### Блок 2: Job / CronJob
 
 4. Сравните `restartPolicy: Never` и `OnFailure` для Job по числу создаваемых Pod.
+
+   <details><summary>Ответ</summary>
+
+   `Never`: упавший под не перезапускается, Job создаёт **новый** под на каждую попытку — в
+   `kubectl get pods` видно историю попыток, а `backoffLimit` считает поды. `OnFailure`: kubelet
+   перезапускает контейнер **в том же поде** — подов меньше, растёт `RESTARTS`, логи прошлой
+   попытки доступны только через `--previous`.
+
+   </details>
+
 5. Что произойдёт при `concurrencyPolicy: Forbid`, если предыдущий Job ещё идёт?
+
+   <details><summary>Ответ</summary>
+
+   CronJob пропустит запуск: новый Job не создаётся, пока предыдущий активен. В событиях
+   появится `JobAlreadyActive`/пропуск расписания. `Allow` (по умолчанию) позволил бы
+   параллельные запуски, `Replace` — убил бы текущий и запустил новый.
+
+   </details>
+
 6. Зачем у завершённых Job остаются Pod и как их автоматически убирать?
+
+   <details><summary>Ответ</summary>
+
+   Поды остаются намеренно: в них логи и статусы завершения — основной артефакт разбора. Чистят
+   их `ttlSecondsAfterFinished` у Job (удаляет сам Job вместе с подами через N секунд после
+   финиша) и `successfulJobsHistoryLimit`/`failedJobsHistoryLimit` у CronJob.
+
+   </details>
+
 
 ### Блок 3: DaemonSet
 
 7. Почему `DESIRED` у DaemonSet нельзя задать вручную?
+
+   <details><summary>Ответ</summary>
+
+   Потому что желаемое число определяется не человеком, а множеством подходящих нод: DaemonSet
+   держит по одному поду на каждой ноде, удовлетворяющей `nodeSelector`/`affinity` и
+   tolerations. Добавили ноду — под появился сам; убрали — исчез. `DESIRED` в `kubectl get ds` —
+   это отражение числа таких нод.
+
+   </details>
+
 8. Что нужно, чтобы DaemonSet покрыл control-plane ноды?
+
+   <details><summary>Ответ</summary>
+
+   Добавить toleration к их taint'у, обычно
+   `node-role.kubernetes.io/control-plane: NoSchedule` (в Kubespray control-plane затейнчен).
+   Без toleration под на такую ноду не сядет, и `DESIRED` их просто не посчитает.
+
+   </details>
+
 
 ### Блок 4: StatefulSet
 
 9. Какие три гарантии даёт StatefulSet по сравнению с Deployment?
+
+   <details><summary>Ответ</summary>
+
+   Стабильная **идентичность** (имя `web-0`, `web-1`, сохраняется при пересоздании), стабильное
+   **сетевое имя** через headless Service (`web-0.web.ns.svc`) и стабильное **хранилище** — свой
+   PVC из `volumeClaimTemplates`, который переживает пересоздание пода.
+
+   </details>
+
 10. Зачем StatefulSet headless Service и что он даёт по DNS?
+
+   <details><summary>Ответ</summary>
+
+   Headless (`clusterIP: None`) не выдаёт один VIP и не балансирует: DNS возвращает A-записи
+   всех Ready-подов, а `<pod>.<svc>.<ns>.svc.cluster.local` — адрес конкретного экземпляра. Это
+   нужно тому, кто обращается к конкретному члену кластера (реплика БД, брокер) или строит
+   список peers.
+
+   </details>
+
 11. Что случится с `data-web-0` при удалении и пересоздании Pod `web-0`?
+
+   <details><summary>Ответ</summary>
+
+   Ничего: PVC `data-web-0` создан из `volumeClaimTemplates` и живёт независимо от пода.
+   Новый `web-0` смонтирует тот же том с теми же данными. PVC не удаляется даже при удалении
+   StatefulSet (по умолчанию) — чистить приходится руками или политикой
+   `persistentVolumeClaimRetentionPolicy`.
+
+   </details>
+
 12. В каком порядке StatefulSet поднимает и ГАСИТ поды (OrderedReady)? Что меняет
     `podManagementPolicy: Parallel`?
+
+   <details><summary>Ответ</summary>
+
+   При `OrderedReady` поды поднимаются по порядку 0 → 1 → 2, каждый следующий ждёт, пока
+   предыдущий станет Ready; гасятся в обратном порядке — 2 → 1 → 0. `Parallel` снимает ожидание:
+   все поды создаются и удаляются одновременно (идентичность и PVC сохраняются). Это ускоряет
+   старт, но опасно для систем, где важен порядок инициализации кластера.
+
+   </details>
+
 13. Почему StatefulSet НЕ пересоздаёт под при отказе ноды автоматически?
+
+   <details><summary>Ответ</summary>
+
+   Потому что при недоступной ноде контроллер **не знает**, работает ли под на самом деле, а
+   две копии `web-0` с одним томом — потеря данных. Под остаётся `Terminating`/`Unknown`, пока
+   нода не вернётся, не будет удалена из кластера или под не удалят принудительно
+   (`--force --grace-period=0`) — то есть пока человек или оператор не подтвердит, что старый
+   экземпляр мёртв.
+
+   </details>
+
 
 ---
 

@@ -936,39 +936,177 @@ bash verify/verify.sh
 
 1. Объясните, почему любую операцию `kubectl` можно свести к REST-запросу к
    `kube-apiserver`. Что играет роль «источника истины» о состоянии кластера?
+
+   <details><summary>Ответ</summary>
+
+   `kubectl` — это просто HTTP-клиент: он собирает REST-запрос (`GET /api/v1/namespaces/lab/pods`,
+   `POST`, `PATCH`) и отправляет его в `kube-apiserver`. Проверить можно флагом `-v=8` — увидите
+   полный URL и тело. Источник истины — **etcd**, но писать в неё имеет право только apiserver:
+   он единственный валидирует, применяет admission и версионирует объекты.
+
+   </details>
+
 2. Распишите роли компонентов control-plane (`apiserver`, `etcd`, `scheduler`,
    `controller-manager`) и узлового слоя (`kubelet`, `kube-proxy`, CNI).
+
+   <details><summary>Ответ</summary>
+
+   Control-plane: **apiserver** — единственная дверь к etcd (authn/authz, admission, валидация);
+   **etcd** — хранилище состояния; **scheduler** — выбирает ноду для Pod без `nodeName` и
+   записывает решение через apiserver; **controller-manager** — набор reconcile-петель
+   (Deployment→ReplicaSet→Pod, endpoints, node lifecycle). Узловой слой: **kubelet** — запускает
+   и следит за контейнерами через CRI, репортит статус; **kube-proxy** — программирует правила
+   Service на ноде; **CNI** — выдаёт Pod IP и связность.
+
+   </details>
+
 3. Что такое reconciliation loop (цикл согласования)? Приведите пример на
    Deployment: что произойдёт, если фактическое число подов меньше желаемого?
+
+   <details><summary>Ответ</summary>
+
+   Контроллер в цикле сравнивает `spec` (желаемое) и `status` (фактическое) и совершает
+   действия, сокращающие разницу. Для Deployment с `replicas: 3` и двумя живыми подами:
+   ReplicaSet-контроллер видит 2 < 3, создаёт ещё один Pod, scheduler даёт ему ноду, kubelet
+   запускает контейнер, статус обновляется. Никто не «командует» — состояние сходится итеративно.
+
+   </details>
+
 
 ### Блок 2: Контексты и namespace
 
 4. Из каких трёх сущностей состоит context в kubeconfig? Что изменится, если
    переключить контекст?
+
+   <details><summary>Ответ</summary>
+
+   Context = **cluster** (адрес API и CA) + **user** (креды) + **namespace** (по умолчанию).
+   Переключение контекста меняет, *в какой кластер*, *под кем* и *в каком namespace* пойдут
+   следующие команды — одна и та же команда может уехать в прод.
+
+   </details>
+
 5. Чем namespaced-ресурс отличается от cluster-scoped? Приведите по три примера
    каждого.
+
+   <details><summary>Ответ</summary>
+
+   Namespaced живут внутри namespace и удаляются вместе с ним: Pod, Deployment, Service,
+   ConfigMap, Secret, PVC. Cluster-scoped общие для кластера: Node, PersistentVolume,
+   StorageClass, ClusterRole, CRD, Namespace. Проверка — `kubectl api-resources --namespaced=false`.
+
+   </details>
+
 6. Зачем «прибивать» namespace к контексту и какие риски у работы без явного
    `-n`?
+
+   <details><summary>Ответ</summary>
+
+   `kubectl config set-context --current --namespace=lab` убирает необходимость помнить `-n`.
+   Без этого легко выполнить `delete` в `default` или в чужом namespace — команда отработает
+   молча и успешно, просто не там, где вы думали.
+
+   </details>
+
 
 ### Блок 3: Deployment, Service, связность
 
 7. Опишите цепочку Deployment → ReplicaSet → Pod и роль `ownerReferences`.
+
+   <details><summary>Ответ</summary>
+
+   Вы редактируете Deployment; он создаёт по одному ReplicaSet на каждую версию
+   `spec.template` и держит нужное число реплик в актуальном RS; RS создаёт Pod'ы.
+   `ownerReferences` связывает потомка с владельцем: по ней работает каскадное удаление
+   (удалили Deployment — сборщик мусора удалит RS и Pod'ы) и `kubectl get rs` показывает,
+   кому принадлежит набор.
+
+   </details>
+
 8. Как `Service` находит свои поды? Сформулируйте полное условие, при котором IP
    пода попадает в `Endpoints`.
+
+   <details><summary>Ответ</summary>
+
+   Service отбирает поды по `spec.selector` (по меткам, не по имени). IP пода попадает в
+   Endpoints/EndpointSlice, если одновременно: метки пода матчат селектор, под в том же
+   namespace, у пода есть IP (назначен CNI), и он **Ready** (readinessProbe пройдена или её нет).
+
+   </details>
+
 9. Что вернёт `kubectl get endpoints <svc>`, если selector сервиса не совпадает
    ни с одним подом? А если поды есть, но не Ready?
+
+   <details><summary>Ответ</summary>
+
+   Если селектор не совпал ни с одним подом — `ENDPOINTS <none>`. Если поды есть, но не Ready —
+   тоже пусто (в EndpointSlice они попадут как `notReadyAddresses`). Симптом одинаковый —
+   «сервис не отвечает», причины разные: смотрите метки против селектора и колонку READY.
+
+   </details>
+
 10. Чем декларативный `apply` лучше императивного `create` для эксплуатации в
     проде/GitOps?
+
+   <details><summary>Ответ</summary>
+
+   `apply` декларативен: описывает желаемое состояние, идемпотентен, умеет обновлять
+   существующий объект и хранит его в git как единственный источник правды. `create` падает на
+   существующем объекте, а изменения, сделанные императивно, нигде не записаны — их невозможно
+   воспроизвести или отревьюить. GitOps (модуль 09) на `create` невозможен в принципе.
+
+   </details>
+
 
 ### Блок 4: Диагностика
 
 11. Сопоставьте `get`/`describe`/`logs`/`exec` с типами вопросов, на которые они
     отвечают. Где в этой цепочке находятся events?
+
+   <details><summary>Ответ</summary>
+
+   `get` — что есть и в каком состоянии (широко, быстро); `describe` — почему объект в этом
+   состоянии (поля + **события**); `logs` — что говорит само приложение; `exec` — проверить
+   гипотезу изнутри контейнера. Events не хранятся вечно (около часа) и видны в `describe pod`
+   или через `kubectl get events --sort-by=.lastTimestamp`.
+
+   </details>
+
 12. Под завис в `0/1 Running`. Опишите пошаговый план диагностики (какие команды
     и что в выводе искать).
+
+   <details><summary>Ответ</summary>
+
+   `0/1 Running` = контейнер запущен, но readinessProbe не пройдена. План: `describe pod` →
+   секция Events, ищем `Readiness probe failed` и текст ошибки (код ответа, connection refused);
+   сверяем путь/порт пробы с тем, что отдаёт приложение (`kubectl exec ... wget -qO- localhost:PORT/path`);
+   проверяем `kubectl get endpoints <svc>` — пока под не Ready, трафик к нему не идёт.
+
+   </details>
+
 13. Почему при `CrashLoopBackOff` нужен `logs --previous`, а не просто `logs`?
+
+   <details><summary>Ответ</summary>
+
+   `logs` читает текущий контейнер, а при CrashLoopBackOff текущего может ещё не быть (kubelet
+   ждёт back-off) или это уже новая попытка. `--previous` отдаёт логи **предыдущего, упавшего**
+   запуска — именно там лежит причина. Если контейнер живёт доли секунды и логи не успевают
+   сохраниться, причину берут из `lastState.terminated` (reason и exitCode).
+
+   </details>
+
 14. Как, не имея Service, проверить, что приложение в поде реально отвечает по
     HTTP?
+
+   <details><summary>Ответ</summary>
+
+   Пробросить порт: `kubectl -n lab port-forward pod/<pod> 8080:80`, затем `curl localhost:8080`.
+   Или изнутри кластера: `kubectl -n lab run tmp --rm -it --restart=Never --image=curlimages/curl:8.10.1
+   -- curl -s http://<pod-ip>:80`. Оба способа не требуют Service и позволяют отделить проблему
+   приложения от проблемы маршрутизации.
+
+   </details>
+
 
 ---
 

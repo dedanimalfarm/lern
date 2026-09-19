@@ -810,22 +810,133 @@ sudo systemctl restart kubelet
 
 ### Блок 1: Обслуживание
 1. В чем архитектурное отличие команд `cordon` и `drain`?
+
+   <details><summary>Ответ</summary>
+
+   `cordon` только помечает ноду `unschedulable: true` — новые поды на неё не планируются, уже
+   работающие продолжают работать. `drain` — это cordon **плюс** вытеснение существующих подов
+   через Eviction API (с уважением к PDB, graceful shutdown, пропуском DaemonSet). cordon —
+   подготовка, drain — освобождение.
+
+   </details>
+
 2. Почему DaemonSet поды мешают выполнению команды `drain` по умолчанию?
+
+   <details><summary>Ответ</summary>
+
+   Поды DaemonSet управляются не Deployment/ReplicaSet, а самим DaemonSet-контроллером, который
+   немедленно пересоздаст их на этой же ноде — выселение бессмысленно, и drain по умолчанию
+   отказывается работать. Поэтому нужен `--ignore-daemonsets`: такие поды просто пропускаются.
+
+   </details>
+
 3. Какова роль PodDisruptionBudget в обеспечении высокой доступности сервиса во время обслуживания узлов?
+
+   <details><summary>Ответ</summary>
+
+   PDB задаёт, сколько реплик приложения должно оставаться доступными при **добровольных**
+   нарушениях. Eviction API отклоняет выселение, если оно нарушит бюджет, и drain ждёт — так
+   обслуживание нод не может уронить сервис. PDB не защищает от недобровольных событий (падение
+   ноды, `kubectl delete pod`).
+
+   </details>
+
 
 ### Блок 2: Control Plane
 4. Что такое Static Pod и как `kubelet` его находит и запускает?
+
+   <details><summary>Ответ</summary>
+
+   Static Pod — под, описанный файлом в каталоге `--pod-manifest-path` (обычно
+   `/etc/kubernetes/manifests`). Kubelet сам следит за каталогом и запускает такие поды
+   напрямую через CRI, без участия scheduler и apiserver. Так поднимается control-plane:
+   apiserver не может запустить сам себя.
+
+   </details>
+
 5. Почему мы видим `kube-apiserver` в выводе `kubectl get pods`, хотя он запущен не через apiserver?
+
+   <details><summary>Ответ</summary>
+
+   Kubelet создаёт в API **mirror pod** — зеркальную копию static pod, чтобы тот был виден
+   через `kubectl`. Управлять им через API нельзя: `kubectl delete` зеркало уберёт, но kubelet
+   тут же создаст его заново из файла. Единственный способ изменить — править манифест на ноде.
+
+   </details>
+
 6. Как применить изменение конфигурации (например, добавить флаг) к работающему `kube-scheduler`?
+
+   <details><summary>Ответ</summary>
+
+   Отредактировать `/etc/kubernetes/manifests/kube-scheduler.yaml` на control-plane ноде:
+   kubelet заметит изменение файла и пересоздаст под с новыми флагами. Через `kubectl edit`
+   менять бесполезно — источник правды на диске. На Kubespray правильнее менять переменные
+   inventory и прогонять playbook, иначе правка потеряется при следующем запуске Ansible.
+
+   </details>
+
 
 ### Блок 3: PKI и безопасность
 7. Какие последствия ожидают кластер, если истечет сертификат `apiserver.crt`?
+
+   <details><summary>Ответ</summary>
+
+   Клиенты перестают доверять apiserver: `kubectl` отвечает `x509: certificate has expired`,
+   kubelet'ы не могут обновлять статусы — ноды уходят в `NotReady`, контроллеры не работают.
+   Кластер фактически неуправляем, хотя контейнеры на нодах продолжают работать. Лечится на
+   control-plane: `kubeadm certs renew` + перезапуск компонентов + обновление kubeconfig.
+
+   </details>
+
 8. Как обновить сертификаты с помощью `kubeadm` и какие компоненты необходимо перезапустить после этого?
+
+   <details><summary>Ответ</summary>
+
+   `sudo kubeadm certs check-expiration` — посмотреть сроки, `sudo kubeadm certs renew all` —
+   продлить. После этого перезапустить компоненты, которые держат сертификаты в памяти:
+   apiserver, controller-manager, scheduler и etcd — для static pods достаточно
+   `sudo touch /etc/kubernetes/manifests/*.yaml` или удаления контейнеров через `crictl`.
+   Обновлённый `admin.conf` скопировать в `~/.kube/config`. На стенде Kubespray есть таймер
+   `k8s-certs-renew`, делающий это автоматически.
+
+   </details>
+
 9. Почему при добавлении новой ноды в старый кластер может потребоваться генерация нового токена с помощью `kubeadm token create`?
+
+   <details><summary>Ответ</summary>
+
+   Bootstrap-токены по умолчанию живут 24 часа — они нужны только на время присоединения ноды и
+   намеренно короткоживущие: попавший в чужие руки токен позволяет добавить ноду в кластер.
+   Поэтому для новой ноды создают свежий токен (`kubeadm token create --print-join-command`).
+
+   </details>
+
 
 ### Блок 4: etcd и обновления
 10. Каков безопасный путь обновления версий кластера с помощью kubeadm? (От control-plane к workers, по одной минорной версии).
+
+   <details><summary>Ответ</summary>
+
+   Строго по одной минорной версии вверх и сверху вниз по ролям: сначала первая control-plane
+   нода (`kubeadm upgrade plan` → `kubeadm upgrade apply vX.Y.Z`), затем остальные
+   control-plane (`kubeadm upgrade node`), затем воркеры по одному: `drain` → обновить
+   kubeadm/kubelet/kubectl → `kubeadm upgrade node` → рестарт kubelet → `uncordon`. Перепрыгивать
+   версии нельзя из-за ограничений на skew между компонентами. На стенде это делает Kubespray
+   (`upgrade-cluster.yml`), вызывая те же команды.
+
+   </details>
+
 11. Почему для выполнения `etcdctl snapshot` требуются TLS сертификаты?
+
+   <details><summary>Ответ</summary>
+
+   etcd принимает только взаимно аутентифицированные TLS-соединения: у него свой CA, и клиент
+   обязан предъявить сертификат, подписанный им (`--cacert`, `--cert`, `--key`). Иначе любой,
+   кто достучался до порта 2379, прочитал бы всё состояние кластера, включая Secret'ы.
+   На Kubespray сертификаты etcd лежат отдельно — в `/etc/ssl/etcd/ssl/`.
+
+   </details>
+
 
 ---
 

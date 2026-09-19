@@ -545,12 +545,89 @@ bash verify/verify.sh
 ## Теоретические вопросы (итоговые)
 
 1. Выведите формулу желаемых реплик HPA. Как отсутствие `requests.cpu` в манифесте пода ломает эту математику?
+
+   <details><summary>Ответ</summary>
+
+   `desiredReplicas = ceil(currentReplicas × (currentMetric / desiredMetric))`, с зоной
+   нечувствительности ±10 % (`--horizontal-pod-autoscaler-tolerance`). Для типа `Utilization`
+   `currentMetric` — это **процент от requests**: `usage / requests × 100`. Без `requests.cpu`
+   делить не на что, HPA не может вычислить процент и показывает `TARGETS <unknown>`,
+   масштабирование не работает вовсе.
+
+   </details>
+
 2. Назовите объекты масштабирования (что именно они меняют?) для HPA, VPA и Cluster Autoscaler.
+
+   <details><summary>Ответ</summary>
+
+   HPA меняет `spec.replicas` у Deployment/StatefulSet (через subresource `scale`) — число
+   подов. VPA меняет `resources.requests/limits` контейнеров — размер пода (в режиме `Auto`
+   пересоздавая его). Cluster Autoscaler меняет число **нод**, добавляя их, когда есть
+   `Pending`-поды, и убирая недогруженные.
+
+   </details>
+
 3. Объясните причину асимметрии: почему по умолчанию scale-up происходит быстро, а scale-down медленно (задержка 5 минут)? Какое негативное явление это предотвращает?
+
+   <details><summary>Ответ</summary>
+
+   Вверх быстро — потеря трафика стоит дороже лишних подов. Вниз медленно (окно стабилизации
+   `scaleDown.stabilizationWindowSeconds`, по умолчанию 300 с) — чтобы не реагировать на шум:
+   иначе при колеблющейся нагрузке система впадает в **thrashing** (flapping), непрерывно
+   создавая и убивая поды, что само по себе создаёт нагрузку и рвёт соединения.
+
+   </details>
+
 4. Почему категорически запрещено использовать HPA и VPA в режиме `Auto` на одной и той же метрике (например, CPU)? Опишите цикл конфликта.
+
+   <details><summary>Ответ</summary>
+
+   Они управляют разными частями одной формулы и дерутся: VPA поднимает `requests`, из-за чего
+   падает вычисляемая HPA утилизация (`usage/requests`), HPA уменьшает число реплик, нагрузка
+   на оставшиеся поды растёт, VPA снова поднимает requests — и так по кругу. Допустимые
+   комбинации: HPA по CPU + VPA только в режиме `Off`/`Initial` (рекомендации), либо VPA по
+   CPU/памяти + HPA по **другой** метрике (RPS, длина очереди).
+
+   </details>
+
 5. Назовите две самые частые причины статуса `<unknown>` в TARGETS HPA и как их диагностировать (какие команды `kubectl` использовать).
+
+   <details><summary>Ответ</summary>
+
+   (1) Нет metrics-server или он не отвечает — проверка `kubectl top pods`, ошибка
+   `Metrics API not available`. (2) У контейнера не заданы `requests.cpu` —
+   `kubectl get deploy X -o jsonpath='{..resources.requests}'`, в `describe hpa` —
+   `missing request for cpu`. Третья, менее очевидная, — нет **Ready**-подов (метрики
+   собираются только с них), см. `broken/scenario-03`. Во всех случаях причина видна в
+   `kubectl describe hpa` → Conditions/Events.
+
+   </details>
+
 6. В чем фундаментальное архитектурное преимущество Karpenter перед классическим Cluster Autoscaler (CA)? Что такое group-less provisioning?
+
+   <details><summary>Ответ</summary>
+
+   Cluster Autoscaler работает через заранее заданные группы нод (node groups/ASG): он умеет
+   только менять их размер, а форма ноды фиксирована. Karpenter провижинит ноды **без групп**
+   (group-less): смотрит на конкретные Pending-поды и подбирает подходящий тип инстанса, зону,
+   spot/on-demand под их требования, запускает ноду напрямую через API облака. Итог — быстрее
+   (меньше слоёв) и плотнее упаковка, плюс консолидация (переупаковка подов на меньшее число
+   нод).
+
+   </details>
+
 7. Какую проблему решает KEDA, которую не может решить стандартный HPA?
+
+   <details><summary>Ответ</summary>
+
+   HPA масштабирует по метрикам ресурсов (или custom/external через адаптеры) и **не умеет в
+   ноль** (`minReplicas >= 1`). KEDA даёт событийный автоскейл: десятки готовых скейлеров
+   (Kafka, RabbitMQ, SQS, Prometheus, cron, Redis), масштабирование **0 → N → 0** и `ScaledJob`
+   для обработки очереди задачами. Под капотом KEDA создаёт обычный HPA, а нулём управляет сам
+   (см. задачу `tasks/04-keda.md`).
+
+   </details>
+
 
 ---
 

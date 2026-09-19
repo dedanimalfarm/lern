@@ -570,19 +570,108 @@ bash verify/verify.sh
 
 ### Блок 1: Топология и распределение
 1. **Грань между отказоустойчивостью и балансировкой**: В чём фундаментальное отличие механизмов `topologySpreadConstraints` (распределение по доменам) и `podAntiAffinity` (расталкивание подов)? Приведите пример сценария, когда использование только `topologySpreadConstraints` может привести к размещению двух реплик на одной ноде, несмотря на `maxSkew: 1`.
+
+   <details><summary>Ответ</summary>
+
+   `topologySpreadConstraints` выравнивают **количество** подов по доменам (ноды, зоны):
+   считается skew = max − min, и он не должен превышать `maxSkew`. `podAntiAffinity` — правило
+   соседства: «не ставь рядом с подом, попадающим под селектор», без арифметики.
+   Пример: три ноды, `maxSkew: 1`, три реплики — распределение 2/1/0 формально допустимо
+   (skew = 2 − 0 = 2 нарушает, а вот 2/1/1 при четырёх репликах — skew 1, и две реплики
+   оказываются на одной ноде). Anti-affinity по hostname такого не допустит вовсе.
+
+   </details>
+
 2. **Влияние Taints на расчет доменов**: Зачем при использовании `topologySpreadConstraints` в кластерах с заtaint-ованными Control Plane нодами необходимо указывать `nodeTaintsPolicy: Honor`? Что произойдет с подом при `whenUnsatisfiable: DoNotSchedule` и дефолтном `Ignore`, если недоступные из-за taints ноды будут учитываться как домены с нулем запущенных реплик?
+
+   <details><summary>Ответ</summary>
+
+   `nodeTaintsPolicy: Honor` заставляет учитывать только те ноды, на которые под реально может
+   сесть. С политикой по умолчанию (`Ignore`) затейнченная control-plane нода считается доменом
+   с нулём реплик: скьюз получается искусственно завышенным (`max − 0`), и при
+   `whenUnsatisfiable: DoNotSchedule` под уходит в `Pending`, хотя на воркерах распределение
+   идеальное. Именно поэтому в манифесте стенда стоит `Honor`.
+
+   </details>
+
 
 ### Блок 2: PDB и Eviction
 3. **Анатомия Eviction API и влияние PDB**: Опишите по шагам процесс, происходящий "под капотом" при выполнении команды `kubectl drain`. Какую роль в этом процессе играет Eviction API и как именно `PodDisruptionBudget` блокирует или разрешает выселение пода, основываясь на показателе `ALLOWED DISRUPTIONS`?
+
+   <details><summary>Ответ</summary>
+
+   `kubectl drain` сначала помечает ноду `unschedulable` (cordon), затем на каждый под вызывает
+   **Eviction API** (`POST /pods/<name>/eviction`), а не `delete`. Apiserver проверяет PDB:
+   если `status.disruptionsAllowed > 0`, выселение разрешается и счётчик уменьшается; если 0 —
+   возвращается 429 `Cannot evict pod as it would violate the pod's disruption budget`, и drain
+   повторяет попытку, ожидая, пока контроллер восстановит реплики. DaemonSet-поды пропускаются,
+   остальные получают SIGTERM и `terminationGracePeriodSeconds`.
+
+   </details>
+
 4. **Краевые случаи PDB и HPA**: Представьте ситуацию: Deployment масштабируется вниз (scale down) с помощью HPA (Horizontal Pod Autoscaler) одновременно с попыткой дренирования ноды администратором. Как это может привести к зависанию процесса `drain`, если настроен `minAvailable` в процентах или абсолютных значениях? Как избежать этой проблемы?
+
+   <details><summary>Ответ</summary>
+
+   HPA уменьшает `replicas`, из-за чего `ALLOWED DISRUPTIONS` падает до нуля: при
+   `minAvailable: 2` и трёх репликах бюджет равен 1, но если HPA одновременно ужал деплой до
+   двух, свободного запаса нет — drain ждёт бесконечно. Лечится согласованием чисел
+   (`minAvailable` ниже `minReplicas` HPA), заданием бюджета в процентах с запасом или
+   временной остановкой автоскейлера на время обслуживания.
+
+   </details>
+
 
 ### Блок 3: Обслуживание узлов и taints
 5. В чем разница между `NoSchedule` и `NoExecute` taints? Как `tolerationSeconds` влияет на время жизни пода при потере узлом сети (involuntary disruption)?
+
+   <details><summary>Ответ</summary>
+
+   `NoSchedule` запрещает планировать новые поды, работающие не трогает. `NoExecute` вдобавок
+   **выселяет** уже работающие поды без соответствующего toleration. При потере нодой связи
+   контроллер вешает на неё `node.kubernetes.io/unreachable:NoExecute`, а у подов есть
+   дефолтный toleration с `tolerationSeconds: 300` — поэтому поды переезжают не сразу, а через
+   5 минут. Уменьшение этого значения ускоряет реакцию, но увеличивает риск «переездов» при
+   кратких сетевых сбоях.
+
+   </details>
+
 6. Почему флаг `--ignore-daemonsets` необходим при выполнении команды `kubectl drain`?
+
+   <details><summary>Ответ</summary>
+
+   Поды DaemonSet пересоздаются контроллером на той же ноде немедленно, поэтому выселять их
+   бессмысленно — drain без `--ignore-daemonsets` просто отказывается начинать работу.
+   С флагом такие поды пропускаются и продолжают работать до перезагрузки ноды.
+
+   </details>
+
 
 ### Блок 4: Troubleshooting
 7. Вы видите событие `FailedScheduling` с сообщением "node(s) had taint {dedicated: database}, that the pod didn't tolerate". Как это исправить?
+
+   <details><summary>Ответ</summary>
+
+   Либо добавить поду toleration на этот taint (если он действительно должен работать на
+   выделенной ноде), либо снять taint с ноды (`kubectl taint nodes <node> dedicated-`), если он
+   был поставлен по ошибке. И помнить: toleration только **разрешает** ноду — чтобы под
+   гарантированно сел именно туда, нужен ещё `nodeSelector`/`nodeAffinity`.
+
+   </details>
+
 8. Что делать, если `kubectl drain` сообщает "Cannot evict pod as it would violate PDB"? Опишите 3 способа решения.
+
+   <details><summary>Ответ</summary>
+
+   (1) Дать бюджету запас: увеличить `replicas` (или уменьшить `minAvailable`/поднять
+   `maxUnavailable`), дождаться, пока `ALLOWED DISRUPTIONS` станет ≥ 1. (2) Починить нездоровые
+   реплики — часто бюджет исчерпан не из-за PDB, а потому что часть подов не Ready.
+   (3) В крайнем случае временно ослабить или удалить PDB на время работ либо удалить под
+   принудительно (`kubectl delete pod --force`), понимая, что это обход защиты и риск
+   недоступности сервиса.
+
+   </details>
+
 
 ---
 

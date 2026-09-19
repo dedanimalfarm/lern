@@ -498,20 +498,122 @@ bash verify/verify.sh
 
 ### Блок 1: ConfigMap / Secret
 1. Когда `ConfigMap`, когда `Secret`? Что делает их «секретность» реальной?
+
+   <details><summary>Ответ</summary>
+
+   `ConfigMap` — для неконфиденциальных настроек, `Secret` — для паролей, токенов, ключей.
+   Сам по себе Secret не шифруется: значения лежат в etcd в base64. «Секретность» дают: RBAC
+   (кто может читать `secrets` в namespace), шифрование etcd (`EncryptionConfiguration`),
+   отсутствие секретов в git (SealedSecrets/ESO/Vault — модуль 16) и запрет на вывод в логи.
+
+   </details>
+
 2. Почему правка ConfigMap-as-env не видна работающему поду?
+
+   <details><summary>Ответ</summary>
+
+   Переменные окружения читаются процессом один раз при старте контейнера: ядро передаёт их в
+   `execve`, и изменить их у работающего процесса нельзя. Поэтому правка ConfigMap видна только
+   после пересоздания пода (`rollout restart`). Тома монтируются иначе — kubelet обновляет файлы
+   и приложение может их перечитать (с задержкой до минуты).
+
+   </details>
+
 3. Покажите одной командой, что base64 в Secret обратим.
+
+   <details><summary>Ответ</summary>
+
+   `kubectl -n lab get secret app-creds -o jsonpath='{.data.password}' | base64 -d; echo` —
+   вернёт пароль открытым текстом. Это и есть демонстрация: base64 — кодирование, а не
+   шифрование; любой, кто может читать Secret, читает значение.
+
+   </details>
+
 
 ### Блок 2: RBAC
 4. Опишите цепочку Pod → SA → RoleBinding → Role (где проверяется право?).
+
+   <details><summary>Ответ</summary>
+
+   Под запускается от ServiceAccount (`spec.serviceAccountName`, иначе `default`); его токен
+   монтируется в `/var/run/secrets/kubernetes.io/serviceaccount/token`. RoleBinding связывает
+   субъект (SA, пользователя, группу) с Role, в которой перечислены `apiGroups` × `resources` ×
+   `verbs`. Право проверяет **apiserver** на каждом запросе: он определяет субъекта по токену и
+   ищет разрешающее правило; по умолчанию запрещено всё.
+
+   </details>
+
 5. Как `auth can-i --as=...` помогает аудировать права?
+
+   <details><summary>Ответ</summary>
+
+   `kubectl auth can-i <verb> <resource> --as=<user> [--as-group=...] -n <ns>` спрашивает
+   apiserver «а можно ли», не выполняя действие. Так проверяют выданные права до инцидента,
+   регрессии после правки RBAC и ожидания вида «сервисный аккаунт не должен читать секреты»
+   (`auth can-i get secrets --as=system:serviceaccount:lab:app` → `no`).
+
+   </details>
+
 6. Чем опасен `*` в RBAC и как выглядит least privilege?
+
+   <details><summary>Ответ</summary>
+
+   `*` в `resources`/`verbs`/`apiGroups` даёт права и на то, чего ещё нет в кластере: завтра
+   поставили CRD — доступ к ней уже выдан. Least privilege: перечислять конкретные ресурсы и
+   глаголы (`get`, `list`, `watch` вместо `*`), ограничивать namespace (Role вместо ClusterRole),
+   при необходимости сужать до имён объектов через `resourceNames`.
+
+   </details>
+
 7. Назовите дефолтные ClusterRole view/edit/admin — что даёт каждый и почему
    `view` НЕ включает secrets?
 
+   <details><summary>Ответ</summary>
+
+   `view` — чтение большинства ресурсов namespace, **кроме** Secret и ролей; `edit` — чтение и
+   изменение workload-ресурсов (включая чтение секретов), но без управления RBAC; `admin` — всё
+   в namespace, включая Role и RoleBinding, но не cluster-scoped объекты. `view` исключает
+   секреты намеренно: право «посмотреть» не должно давать доступ к паролям и токенам, иначе
+   эскалация до прав любого пода в namespace.
+
+   </details>
+
+
 ### Блок 3: securityContext
-7. Что гарантирует и чего НЕ гарантирует `runAsNonRoot: true`?
-8. Назовите 4 поля securityContext для «restricted»-профиля.
-9. Почему root-образ + `runAsNonRoot` даёт `CreateContainerConfigError`?
+8. Что гарантирует и чего НЕ гарантирует `runAsNonRoot: true`?
+
+   <details><summary>Ответ</summary>
+
+   Гарантирует: kubelet **не запустит** контейнер, если образ стартует от root (UID 0) и UID не
+   переопределён — проверка происходит до запуска. Не гарантирует: что процесс внутри
+   действительно ограничен (нужны `allowPrivilegeEscalation: false`, drop capabilities, seccomp)
+   и что приложение вообще заработает не от root — это свойство образа, а не флага.
+
+   </details>
+
+9. Назовите 4 поля securityContext для «restricted»-профиля.
+
+   <details><summary>Ответ</summary>
+
+   `runAsNonRoot: true`, `allowPrivilegeEscalation: false`, `capabilities.drop: ["ALL"]`,
+   `seccompProfile.type: RuntimeDefault`; дополнительно для read-only рантайма —
+   `readOnlyRootFilesystem: true` с `emptyDir` под временные каталоги.
+
+   </details>
+
+10. Почему root-образ + `runAsNonRoot` даёт `CreateContainerConfigError`?
+
+   <details><summary>Ответ</summary>
+
+   Kubelet перед стартом контейнера проверяет пользователя образа: если в образе нет `USER` или
+   он root, а `runAsUser` не задан, запуск невозможен — под получает
+   `CreateContainerConfigError` с сообщением `container has runAsNonRoot and image will run as
+   root`. Это не admission (объект уже создан) и не падение приложения: контейнер не
+   стартовал вовсе. Лечится образом, рассчитанным на non-root, или явным `runAsUser`
+   (см. сценарий 03).
+
+   </details>
+
 
 ---
 

@@ -609,30 +609,184 @@ ns/lab`.
 ### Блок 1: Service и kube-proxy
 
 1. Опишите путь пакета от `curl <ClusterIP>` до Pod. Роль `kube-proxy`.
+
+   <details><summary>Ответ</summary>
+
+   ClusterIP — виртуальный адрес, которого нет ни на одном интерфейсе. Пакет из пода уходит на
+   этот IP, попадает в правила, которые `kube-proxy` заранее записал на **каждой** ноде (цепочки
+   iptables или таблицы IPVS), там происходит DNAT на IP одного из Ready-подов из EndpointSlice,
+   дальше пакет идёт через CNI до пода. kube-proxy не стоит на пути трафика — он только
+   программирует dataplane ноды, наблюдая за Service и EndpointSlice через apiserver.
+
+   </details>
+
 2. Сравните `ClusterIP`/`NodePort`/`LoadBalancer`/`ExternalName`.
+
+   <details><summary>Ответ</summary>
+
+   `ClusterIP` — доступ только изнутри кластера (по умолчанию). `NodePort` — то же плюс порт
+   30000–32767 на **каждой** ноде. `LoadBalancer` — NodePort плюс внешний балансировщик от
+   облака (на bare-metal без MetalLB зависает в `<pending>`). `ExternalName` — не проксирует
+   вообще: CoreDNS отдаёт CNAME на внешнее имя.
+
+   </details>
+
 3. Почему пустой `Endpoints` = «Connection refused», и какие две причины этого?
+
+   <details><summary>Ответ</summary>
+
+   Пустой Endpoints означает, что DNAT-правил нет: пакет на ClusterIP никуда не транслируется и
+   ядро отвечает `connection refused` (или таймаут). Две причины: селектор Service не совпадает
+   с метками подов (опечатка, другой namespace) или поды есть, но **не Ready** — readinessProbe
+   не прошла, и адреса лежат в `notReadyAddresses`.
+
+   </details>
+
 4. iptables vs IPVS: чем отличаются и где iptables деградирует? Какой режим у нашего кластера?
+
+   <details><summary>Ответ</summary>
+
+   iptables — линейная цепочка правил на каждый Service: при тысячах сервисов растёт время
+   обновления правил (каждое изменение перезаписывает большие наборы) и латентность обхода.
+   IPVS использует хэш-таблицы ядра и алгоритмы балансировки (rr, lc, sh) — O(1) поиск и быстрые
+   обновления. Наш стенд Kubespray по умолчанию в режиме iptables; режим виден в логах kube-proxy
+   или `kubectl -n kube-system get cm kube-proxy -o yaml | grep mode`.
+
+   </details>
+
 5. `externalTrafficPolicy: Local` vs `Cluster` — что с source-IP и лишним хопом?
+
+   <details><summary>Ответ</summary>
+
+   `Cluster` (по умолчанию): пакет с ноды может быть переслан на под другой ноды — равномерная
+   балансировка, но лишний хоп и **потеря исходного IP** (SNAT). `Local`: трафик обслуживают
+   только поды на той ноде, куда пришёл пакет — source-IP сохраняется и хопа нет, но если на
+   ноде нет подов, трафик отбрасывается, и балансировка становится неравномерной.
+
+   </details>
+
 
 ### Блок 2: DNS
 
 6. Как резолвится `net-demo.lab.svc.cluster.local`? Кто отвечает?
+
+   <details><summary>Ответ</summary>
+
+   Резолвер пода — CoreDNS (на стенде запрос сначала идёт в кэш nodelocaldns). CoreDNS видит
+   суффикс `svc.cluster.local`, ищет Service `net-demo` в namespace `lab` и возвращает его
+   ClusterIP (для headless — список адресов подов). Настройки резолвера — в
+   `/etc/resolv.conf` пода (`nameserver`, `search`, `ndots`).
+
+   </details>
+
 7. `ndots:5`: сколько DNS-запросов на `api.example.com` и как убрать лишние?
+
+   <details><summary>Ответ</summary>
+
+   `ndots:5` означает: если в имени меньше пяти точек, сначала пробуем его с каждым суффиксом из
+   `search`. Для `api.example.com` (2 точки) это 4–5 запросов: `api.example.com.lab.svc.cluster.local`,
+   `api.example.com.svc.cluster.local`, `api.example.com.cluster.local`, и только потом
+   `api.example.com`. Лечится точкой в конце (`api.example.com.` — FQDN) или
+   `dnsConfig.options: [{name: ndots, value: "1"}]` у пода.
+
+   </details>
+
 8. Зачем nodelocaldns и на каком адресе он слушает?
+
+   <details><summary>Ответ</summary>
+
+   nodelocaldns — DNS-кэш на каждой ноде: снимает нагрузку с CoreDNS, убирает conntrack-проблемы
+   UDP и ускоряет повторные резолвы. На стенде слушает link-local `169.254.25.10`, и именно этот
+   адрес стоит в `/etc/resolv.conf` подов — поэтому egress-политика `allow-dns` обязана
+   разрешать `ipBlock 169.254.25.10/32`, иначе default-deny рвёт DNS.
+
+   </details>
+
 
 ### Блок 3: Внешний доступ
 
 9. Чем Ingress принципиально отличается от LoadBalancer-сервиса?
+
+   <details><summary>Ответ</summary>
+
+   LoadBalancer — это L4: один сервис = один внешний адрес, о протоколе выше TCP/UDP он ничего
+   не знает. Ingress — L7: один вход обслуживает много сервисов, маршрутизируя по `Host` и пути,
+   терминирует TLS и умеет переписывать запросы. Ingress — это объект-описание; работу делает
+   контроллер (у нас ingress-nginx).
+
+   </details>
+
 10. Зачем LoadBalancer-сервису под капотом всё равно нужен NodePort?
+
+   <details><summary>Ответ</summary>
+
+   Облачный балансировщик должен куда-то отправлять трафик, а его цели — это ноды. Kubernetes
+   выделяет сервису NodePort и регистрирует в балансировщике `<IP ноды>:<nodePort>`; дальше
+   пакет обрабатывается обычными правилами kube-proxy. Поэтому у LoadBalancer в
+   `kubectl get svc` видны оба порта.
+
+   </details>
+
 11. Чем Gateway API лучше Ingress (роли, L4, без «магии» аннотаций)?
+
+   <details><summary>Ответ</summary>
+
+   Gateway API разделяет роли: `GatewayClass` и `Gateway` описывает администратор (порты, TLS,
+   инфраструктура), `HTTPRoute` — разработчик; кросс-namespace ссылки требуют явного
+   `ReferenceGrant`. Он типизирован: веса, заголовки, редиректы, rewrite — поля спецификации, а
+   не аннотации конкретного контроллера. И он не ограничен HTTP: есть `TCPRoute`, `TLSRoute`,
+   `GRPCRoute`.
+
+   </details>
+
 
 ### Блок 4: NetworkPolicy
 
-9. Что разрешено по умолчанию и что меняет default-deny?
-10. Почему политику для DNS добавляют первой после default-deny?
-11. От чего зависит, заработает ли NetworkPolicy вообще?
-12. Поток A→B при default-deny: чьи политики (A, B или обеих) должны его
+12. Что разрешено по умолчанию и что меняет default-deny?
+
+   <details><summary>Ответ</summary>
+
+   По умолчанию разрешено всё: под без единой политики принимает и отправляет любой трафик.
+   Как только на под нацелена хотя бы одна политика с данным `policyTypes`, для этого направления
+   включается режим «разрешено только перечисленное». `default-deny` (пустой `podSelector: {}` +
+   `policyTypes: [Ingress, Egress]`) переводит в этот режим весь namespace.
+
+   </details>
+
+13. Почему политику для DNS добавляют первой после default-deny?
+
+   <details><summary>Ответ</summary>
+
+   Потому что после default-deny egress перестаёт работать DNS, и симптом выглядит как «всё
+   сломалось»: приложение не может разрешить ни одно имя (`bad address`), хотя сетевые правила
+   для самих сервисов вы, возможно, уже написали. `allow-dns` возвращает базовую способность
+   резолвить — и только после этого имеет смысл отлаживать остальное.
+
+   </details>
+
+14. От чего зависит, заработает ли NetworkPolicy вообще?
+
+   <details><summary>Ответ</summary>
+
+   От CNI: NetworkPolicy — это объект в API, а исполняет его плагин сети. Calico и Cilium
+   режут трафик реально; плагины без поддержки политик (или kindnet) молча игнорируют объект —
+   `kubectl get netpol` показывает политику, а трафик ходит. На стенде Calico, enforcement есть
+   (модуль 15).
+
+   </details>
+
+15. Поток A→B при default-deny: чьи политики (A, B или обеих) должны его
     пропустить? Почему «открыть ingress у backend» без egress у клиента не работает?
+
+   <details><summary>Ответ</summary>
+
+   Пропустить должны **обе**: egress-политика пода A (ему разрешено ходить в B) и
+   ingress-политика пода B (ему разрешено принимать от A). Если у клиента включён egress-режим
+   (например, из-за default-deny) и правила для B нет, пакет не выйдет из A — и открытый ingress
+   у backend ничего не изменит: отказ происходит на стороне отправителя.
+
+   </details>
+
 
 ---
 

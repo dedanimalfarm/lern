@@ -876,27 +876,165 @@ bash verify/verify.sh
 
 ### Блок 1: Архитектура и роли
 1. Почему Gateway API использует модель ролевого доступа и разделяет конфигурацию на GatewayClass, Gateway и HTTPRoute, в отличие от единого манифеста Ingress? Приведите пример проблемы из реальной практики, которую это решает.
+
+   <details><summary>Ответ</summary>
+
+   Потому что за вход в кластер отвечают **разные люди**: инфраструктура (какой контроллер и
+   какие ресурсы — GatewayClass), администратор кластера (порты, TLS-сертификаты, кто имеет
+   право цепляться — Gateway) и разработчик (маршруты своего сервиса — HTTPRoute). В Ingress всё
+   это один объект, поэтому разработчику приходилось давать право править объект, в котором
+   лежат TLS и hostname всей платформы. Реальная проблема: правка `spec.tls` или host'а одной
+   командой ломала чужие сайты на том же контроллере, а ревью аннотаций нельзя было
+   автоматизировать.
+
+   </details>
+
 2. В чем принципиальная разница между ресурсами `GatewayClass` и `Gateway`?
+
+   <details><summary>Ответ</summary>
+
+   `GatewayClass` — cluster-scoped описание **реализации**: какой контроллер обслуживает такие
+   шлюзы (аналог StorageClass). `Gateway` — конкретный экземпляр шлюза в namespace: порты,
+   протоколы, сертификаты, правила допуска маршрутов. Один класс — много Gateway'ев.
+
+   </details>
+
 3. Какой именно контроллер (ingress/gateway-реализация) материализует объекты Gateway в данной лаборатории?
+
+   <details><summary>Ответ</summary>
+
+   **Envoy Gateway** (`gateway.envoyproxy.io/gatewayclass-controller`), GatewayClass `eg`,
+   ставится `scripts/bootstrap/11-install-gateway-api.sh`. Он создаёт для каждого Gateway
+   свой deployment Envoy и Service в namespace `envoy-gateway-system`.
+
+   </details>
+
 
 ### Блок 2: Gateway и Listeners
 4. За что отвечает блок `listeners` в манифесте `Gateway`?
+
+   <details><summary>Ответ</summary>
+
+   `listeners` описывают, что шлюз слушает: имя, порт, протокол (HTTP/HTTPS/TCP/TLS), при
+   необходимости `hostname` и блок `tls` с ссылкой на Secret. Это «физический» вход:
+   один Gateway может иметь несколько слушателей (80 и 443, разные домены), и маршруты
+   привязываются к конкретному из них через `parentRefs.sectionName`.
+
+   </details>
+
 5. Что делает секция `allowedRoutes` внутри слушателя? Что произойдет, если разработчик из чужого namespace попробует прикрепить маршрут?
+
+   <details><summary>Ответ</summary>
+
+   `allowedRoutes` задаёт, из каких namespace и каких видов маршруты могут цепляться к этому
+   слушателю (`Same`, `All`, `Selector` по меткам namespace). Маршрут из неразрешённого
+   namespace будет создан, но не принят: в его `status.parents[].conditions` появится
+   `Accepted: False` с reason `NotAllowedByListeners`, трафик через него не пойдёт.
+
+   </details>
+
 6. На чьей стороне происходит настройка портов и заказ TLS-сертификатов: в `Gateway` или в `HTTPRoute`? Обоснуйте архитектурное решение.
+
+   <details><summary>Ответ</summary>
+
+   В `Gateway` — то есть на стороне администратора. Архитектурно это то же разделение ролей:
+   сертификаты и порты — общая инфраструктура, её нельзя отдавать каждому разработчику
+   (компрометация одного приложения не должна давать доступ к TLS-ключам платформы).
+   Разработчик в `HTTPRoute` вообще не знает, по HTTP или HTTPS обслуживается его путь.
+
+   </details>
+
 
 ### Блок 3: HTTPRoute и маршрутизация
 7. Как `HTTPRoute` логически привязывается к `Gateway` (какое поле используется)?
+
+   <details><summary>Ответ</summary>
+
+   Через `spec.parentRefs` — ссылку на имя (и при необходимости namespace/sectionName)
+   Gateway. Привязка двусторонняя: Gateway через `allowedRoutes` решает, принимать ли маршрут,
+   и результат виден в `status.parents[].conditions` маршрута (`Accepted`).
+
+   </details>
+
 8. Как Gateway API объединяет условия внутри одного элемента массива `matches` (по И или по ИЛИ)?
+
+   <details><summary>Ответ</summary>
+
+   Внутри одного элемента `matches` условия объединяются по **И** (путь И заголовок И метод),
+   а разные элементы массива — по **ИЛИ**. Поэтому «/beta с заголовком X» — это один элемент с
+   двумя полями, а «/beta или /gamma» — два элемента.
+
+   </details>
+
 9. Каков механизм разделения трафика (Traffic Splitting) в Gateway API? Зависит ли он от "магических" аннотаций, как это было в Ingress?
+
+   <details><summary>Ответ</summary>
+
+   Через поле `weight` в `backendRefs`: несколько backend'ов в одном правиле, у каждого свой
+   вес; веса не обязаны давать в сумме 100 — это пропорции. Это часть спецификации, а не
+   аннотация конкретного контроллера: манифест переносится на любую реализацию Gateway API
+   (в Ingress то же делалось аннотациями `nginx.ingress.kubernetes.io/canary-*`).
+
+   </details>
+
 
 ### Блок 4: Фильтры и безопасность
 10. Какой встроенный фильтр (filter type) нужно использовать, чтобы перенаправить HTTP-трафик на новый путь с кодом ответа 301?
+
+   <details><summary>Ответ</summary>
+
+   `RequestRedirect` — с полями `path` (например, `ReplaceFullPath`), `scheme`, `hostname`,
+   `port` и `statusCode: 301`. Ответ формирует сам шлюз, запрос до бэкенда не доходит.
+
+   </details>
+
 11. Какой встроенный фильтр позволяет изменить (перезаписать) URL до отправки запроса в контейнер приложения?
+
+   <details><summary>Ответ</summary>
+
+   `URLRewrite` — меняет путь (`ReplacePrefixMatch`/`ReplaceFullPath`) или `hostname` перед
+   отправкой в backend. Это типизированная замена nginx-аннотации `rewrite-target` с
+   регулярными выражениями.
+
+   </details>
+
 12. Для чего нужен `ReferenceGrant` в Gateway API? Какую критическую уязвимость multi-tenant кластеров он устраняет?
+
+   <details><summary>Ответ</summary>
+
+   `ReferenceGrant` создаётся в **целевом** namespace и явно разрешает ссылаться на его ресурсы
+   из указанных namespace и типов объектов. Без него кросс-namespace ссылки запрещены, и это
+   закрывает уязвимость multi-tenant: иначе любая команда могла бы прописать в своём HTTPRoute
+   `backendRef` на чужой Service (например, напрямую на БД соседей, в обход их API) или на
+   чужой TLS-Secret.
+
+   </details>
+
 
 ### Блок 5: Troubleshooting
 13. О чем говорит статус объекта Gateway `Programmed: False`? Приведите 2 возможные причины.
+
+   <details><summary>Ответ</summary>
+
+   `Programmed: False` означает, что контроллер не смог материализовать шлюз — dataplane не
+   настроен. Причины: (1) `gatewayClassName` указывает на несуществующий класс либо контроллер
+   этого класса не запущен (сценарий 01); (2) конфликт или ошибка listener'а — занятый порт,
+   ссылка на отсутствующий TLS-Secret, некорректный hostname. Детали — в
+   `kubectl describe gateway` → Conditions и Events.
+
+   </details>
+
 14. Где искать причину ошибки и какой `Reason` будет указан, если `HTTPRoute` ссылается на Service, которого не существует?
+
+   <details><summary>Ответ</summary>
+
+   В статусе самого HTTPRoute: `kubectl describe httproute <name>` → `status.parents[].conditions`.
+   Условие `Accepted` будет `True` (Gateway маршрут принял), а `ResolvedRefs` — `False` с
+   reason **`BackendNotFound`**. Трафик по такому правилу получает 500/503, а не 404 —
+   это ключ к отличию «нет маршрута» от «маршрут есть, backend не разрешён» (сценарий 03).
+
+   </details>
+
 
 ---
 
