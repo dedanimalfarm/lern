@@ -44,6 +44,10 @@
 
 > ⏱ время ~35-45 мин · сложность 3/5 · пререквизиты: Трек 1 и Трек 3
 
+<!-- NAV -->
+**⬅ [15-network-policy-enforced](../15-network-policy-enforced/)** · [индекс курса](../../README.md) · [карта обучения](../../docs/02-learning-path.md) · **[17-metrics-alerting](../17-metrics-alerting/) ➡**
+<!-- /NAV -->
+
 Цель всей работы: понять, почему обычный `Secret` — это НЕ безопасное хранение, и глубоко освоить
 четыре production-подхода: шифрование etcd (encryption-at-rest), **Sealed Secrets**
 (git-safe), **External Secrets Operator** (синк из внешнего менеджера) и

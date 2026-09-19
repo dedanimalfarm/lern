@@ -68,6 +68,10 @@
 
 > ⏱ время ~45 мин · сложность 3/5 · пререквизиты: модули 02, 12
 
+<!-- NAV -->
+**⬅ [28-cost-multitenancy](../28-cost-multitenancy/)** · [индекс курса](../../README.md) · [карта обучения](../../docs/02-learning-path.md) · **[30-tracing-otel](../30-tracing-otel/) ➡**
+<!-- /NAV -->
+
 ---
 
 Цель: глубоко освоить ТРИ современные возможности API пода (все GA/beta в свежих версиях Kubernetes), которые кардинально меняют повседневные паттерны платформ: **native sidecar-контейнеры** (GA 1.33), **scheduling gates** (GA 1.30) и **in-place Pod resize** (beta 1.33).

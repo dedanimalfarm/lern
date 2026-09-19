@@ -40,6 +40,10 @@
 
 > ⏱ время ~45 мин · сложность 2/5 · пререквизиты: модуль 03
 
+<!-- NAV -->
+**⬅ [05-storage](../05-storage/)** · [индекс курса](../../README.md) · [карта обучения](../../docs/02-learning-path.md) · **[07-config-security](../07-config-security/) ➡**
+<!-- /NAV -->
+
 Цель: научиться управлять тем, на какую ноду попадёт Pod и сколько ресурсов он
 сможет занять — через `nodeSelector`/labels, `taints`/`tolerations`,
 `affinity`/`anti-affinity` и `ResourceQuota`/`LimitRange`. К концу модуля вы

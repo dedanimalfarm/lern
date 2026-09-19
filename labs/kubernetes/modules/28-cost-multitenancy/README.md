@@ -39,6 +39,10 @@
 
 > ⏱ время ~90–120 мин · сложность 5/5 · пререквизиты: модули 06 (квоты/LimitRange), 07 (RBAC), 12 (resource management), 17 (Prometheus)
 
+<!-- NAV -->
+**⬅ [25-gitops-at-scale](../25-gitops-at-scale/)** · [индекс курса](../../README.md) · [карта обучения](../../docs/02-learning-path.md) · **[29-pod-lifecycle-v2](../29-pod-lifecycle-v2/) ➡**
+<!-- /NAV -->
+
 ## Цели
 
 1. **Глубоко понять спектр изоляции тенантов**: от общего namespace (soft multi-tenancy) до выделенного виртуального кластера (hard multi-tenancy). Понимать, в каких бизнес-сценариях уместен каждый подход.
