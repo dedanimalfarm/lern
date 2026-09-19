@@ -5,12 +5,12 @@ on:
     branches: [main]
     tags: ["v*"]
     paths:
-      - "docker-lab/13-cicd-github-actions/lab/**"
+      - "labs/docker/13-cicd-github-actions/lab/**"
       - ".github/workflows/docker-lab-13-build-push.yml"
   pull_request:
     branches: [main]
     paths:
-      - "docker-lab/13-cicd-github-actions/lab/**"
+      - "labs/docker/13-cicd-github-actions/lab/**"
       - ".github/workflows/docker-lab-13-build-push.yml"
   workflow_dispatch:
 
@@ -30,7 +30,7 @@ jobs:
       - name: Lint Dockerfile (hadolint)
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: docker-lab/13-cicd-github-actions/lab/Dockerfile
+          dockerfile: labs/docker/13-cicd-github-actions/lab/Dockerfile
           failure-threshold: warning
 
   # ──────────────────────────────────────────────
@@ -49,7 +49,7 @@ jobs:
       - name: Build image (load locally, no push)
         uses: docker/build-push-action@v6
         with:
-          context: docker-lab/13-cicd-github-actions/lab
+          context: labs/docker/13-cicd-github-actions/lab
           load: true
           tags: ${{ env.IMAGE }}:test
           cache-from: type=gha
@@ -78,7 +78,7 @@ jobs:
       - name: Build image for scanning
         uses: docker/build-push-action@v6
         with:
-          context: docker-lab/13-cicd-github-actions/lab
+          context: labs/docker/13-cicd-github-actions/lab
           load: true
           tags: ${{ env.IMAGE }}:scan
           cache-from: type=gha
@@ -137,7 +137,7 @@ jobs:
       - name: Build & push multi-arch (amd64 + arm64)
         uses: docker/build-push-action@v6
         with:
-          context: docker-lab/13-cicd-github-actions/lab
+          context: labs/docker/13-cicd-github-actions/lab
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

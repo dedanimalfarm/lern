@@ -19,6 +19,6 @@ USER app
 EXPOSE 3000
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-  CMD wget -qO- http://localhost:3000/healthz || exit 1
+  CMD ["sh", "-c", "wget -qO- http://localhost:3000/healthz || exit 1"]
 
 CMD ["node", "server.js"]

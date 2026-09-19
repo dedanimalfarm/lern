@@ -26,4 +26,3 @@ services:
         # Rebuild: изменение конфига → пересборка контейнера
         - action: rebuild
           path: ./nginx.conf
-

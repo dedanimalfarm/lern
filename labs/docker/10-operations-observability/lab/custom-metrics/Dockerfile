@@ -16,6 +16,6 @@ USER app
 EXPOSE 8080
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')" || exit 1
+  CMD ["sh", "-c", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\" || exit 1"]
 
 CMD ["python", "app.py"]

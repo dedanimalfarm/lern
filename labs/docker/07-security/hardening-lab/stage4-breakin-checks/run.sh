@@ -9,7 +9,7 @@
 # и НЕ годятся как индикатор работы cap_drop. Используем проверки,
 # которые точно зависят от конкретных капов.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 CONTAINER=hardening-stage3
 PASS=0

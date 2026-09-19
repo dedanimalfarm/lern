@@ -18,7 +18,8 @@ mkdir -p reports
 
 scan_image() {
   local image="$1"
-  local out="reports/$(echo "$image" | tr '/:' '__').txt"
+  local out
+  out="reports/$(echo "$image" | tr '/:' '__').txt"
   echo "==> scan $image -> $out"
   # Сканируем ВСЕ severity: ubuntu:latest может быть чистым на HIGH/CRITICAL
   # (патчи накатываются), но будет кишеть LOW/MEDIUM. Именно этот

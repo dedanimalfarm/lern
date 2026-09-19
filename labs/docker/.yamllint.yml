@@ -5,3 +5,7 @@ rules:
     max: 140
     level: warning
   truthy: disable
+  # Учебные compose-файлы пишутся без «---» (как в документации Docker),
+  # а комментарии часто выравниваются по ключу, а не по значению.
+  document-start: disable
+  comments-indentation: disable

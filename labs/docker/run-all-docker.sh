@@ -43,7 +43,7 @@ for lab in "${LABS[@]}"; do
   # Ensure we clean up any previous failures first
   if [[ -f "$lab/cleanup.sh" ]]; then
     echo "Running initial cleanup..."
-    (cd "$lab" && chmod +x *.sh 2>/dev/null || true; ./cleanup.sh >/dev/null 2>&1 || true)
+    (cd "$lab" && { chmod +x ./*.sh 2>/dev/null || true; ./cleanup.sh >/dev/null 2>&1 || true; })
   fi
 
   STATUS=0
@@ -58,7 +58,7 @@ for lab in "${LABS[@]}"; do
   # Run Cleanup
   if [[ -f "$lab/cleanup.sh" ]]; then
     echo "Running final cleanup..."
-    (cd "$lab" && ./cleanup.sh >/dev/null 2>&1 || true)
+    (cd "$lab" && { ./cleanup.sh >/dev/null 2>&1 || true; })
   fi
 
   if [[ $STATUS -eq 0 ]]; then

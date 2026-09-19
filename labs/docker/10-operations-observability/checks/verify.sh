@@ -5,7 +5,7 @@ docker compose -f lab/compose.yaml up -d >/dev/null
 trap 'docker compose -f lab/compose.yaml down -v --remove-orphans >/dev/null 2>&1 || true' EXIT
 
 # Wait for cadvisor/metrics to be ready
-for i in {1..15}; do
+for _ in {1..15}; do
   if curl -fsS http://localhost:8086/metrics >/dev/null 2>&1; then
     break
   fi

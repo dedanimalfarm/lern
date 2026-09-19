@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 down_if_up() {
   local dir="$1"
   if [[ -f "$dir/compose.yaml" ]]; then
-    (cd "$dir" && docker compose down -v 2>/dev/null || true)
+    (cd "$dir" && { docker compose down -v 2>/dev/null || true; })
   fi
 }
 
@@ -25,7 +25,7 @@ for s in stage0-antipattern stage1-minimal-nonroot stage2-secrets stage3-runtime
   echo "############################################"
   (cd "$s" && ./run.sh)
   # Между этапами останавливаем контейнер, чтобы порт 8083 освободился.
-  (cd "$s" && docker compose down >/dev/null 2>&1 || true)
+  (cd "$s" && { docker compose down >/dev/null 2>&1 || true; })
 done
 
 # stage3 уже down; поднимаем снова для stage4.
