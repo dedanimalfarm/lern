@@ -49,4 +49,5 @@
 | `scripts/qa/add-toc.sh`, `add-nav.sh` | оглавление и навигация «предыдущий · следующий» в README | после добавления или переименования модуля |
 | `scripts/cluster/{up,start,stop,down}.sh` | жизненный цикл стенда Kubespray (`up.sh --addons` — со всеми persistent-аддонами) | начало и конец работы |
 | `scripts/cluster/nightly.sh` | start → проверка аддонов → sweep → отчёт → stop | ночная регрессия по cron |
+| `scripts/qa/exam.sh` | экзамен по всему курсу: N случайных broken-сценариев из разных модулей, таймер, зачёт по verify (`start N` / `check` / `status` / `reveal` / `reset`) | самопроверка после прохождения курса |
 | `projects/project-c/chaos/random-incident.sh` | случайные инциденты без подсказок (`start N` / `reveal` / `reset`) | экзамен-режим |

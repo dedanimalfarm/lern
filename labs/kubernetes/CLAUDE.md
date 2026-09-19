@@ -50,6 +50,12 @@
   должен остаться живым).
 - Линт: `scripts/qa/lint.sh` (yamllint, kubeconform, shellcheck, kustomize) +
   `check_links.sh` — гонять до коммита; CI дублирует это на GitHub.
+- Экзамен-режим: `scripts/qa/exam.sh start N` разворачивает N случайных broken-
+  сценариев (по одному на модуль, пул задаётся POOL), `check` считает зачёт по
+  verify этих модулей, `reset` возвращает стенд к baseline.
+- Навигация и оглавление в README генерируются: `scripts/qa/add-nav.sh`,
+  `scripts/qa/add-toc.sh` (оба идемпотентны, блоки между маркерами).
+- Регрессия ночью: `scripts/cluster/nightly.sh` (start -> sweep -> отчёт -> stop).
 - Broken-сценарии не выдумывать руками: `scripts/qa/mutate.py <manifest> <мутация>`
   (`--list` — каталог 12 мутаций по уровням 1 опечатки / 2 логика / 3 поведение,
   `--random TIER`, `--hint` печатает симптом и первую команду диагностики).
