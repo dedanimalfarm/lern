@@ -18,6 +18,13 @@
 | **Отказоустойчивость** | `m06` (Scheduling/Affinity) | `m13` (Resilience) | От базового nodeSelector/Affinity к topologySpreadConstraints и PDB. |
 | **Расширяемость API** | `m01` (API-модель) | `m19` (CRD/Operators) | От понимания стандартных ресурсов к созданию собственных CRD и операторов. |
 | **Трейсинг** | `m08` (Observability), `m17`/`m18` (Grafana/Loki) | `m30` (Tracing/OTel) | Третий сигнал наблюдаемости: OTLP-конвейер (SDK → Collector → Tempo), TraceQL и корреляция трейсов с логами по trace_id. |
+| **Логи** | `m08` (kubectl logs) | `m18` (Centralized Logging) | От логов одного пода к конвейеру Promtail → Loki, LogQL-парсерам и метрикам из логов. |
+| **Жизненный цикл Pod v2** | `m02` (init/probes/QoS) | `m29` (Pod Lifecycle v2) | Native sidecars вместо контейнера-логгера, scheduling gates вместо busy-wait, in-place resize вместо пересоздания пода. |
+| **SLO и алерты** | `m08` (4.4 SLI/SLO/error budget) | `m17` (Metrics/Alerting) | От определения SLI к recording rules, burn-rate-алертам и маршрутизации в Alertmanager. |
+| **Автоскейл по событиям** | `m11` (HPA/VPA) | `m11`, задача `04-keda` | От CPU-метрик к внешним триггерам (cron, очередь, PromQL) и масштабированию в ноль. |
+| **Изоляция и стоимость** | `m12` (Quota/LimitRange), `m14` (PSA) | `m28` (Cost/Multi-tenancy) | От namespace с квотой к иерархии (HNC), виртуальным кластерам (vcluster) и showback по requests. |
+| **Как CNI исполняет политики** | `m15` (NetworkPolicy) | `m15`, раздел про Calico dataplane | От объекта в API к Felix, цепочкам `cali-tw-/cali-fw-`, ipset и eBPF-режиму на ноде. |
+| **Диагностика инцидентов** | `broken/scenario-*` каждого модуля | `project-c` + `chaos/random-incident.sh` | От поломки с известной темой к случайному инциденту без подсказок, на время. |
 
 ## Интеграционные проекты (Capstone)
 
@@ -30,3 +37,16 @@
 | **Project D (Production)** | `m03`, `m08`, `m11` | Аудит production-readiness чек-листа (PDB, probes, limits, replicas). |
 | **Project E (Secure)** | `m07`, `m12`, `m14`, `m15` | Multi-tenant изоляция с использованием PSA, VAP, NetPol и RBAC (5 контролей). |
 | **Project F (Incident)** | *Все базовые* | Troubleshooting боевых инцидентов (CrashLoop, Pending, Network-deny, Cert-expiry) с триаж-скриптом. |
+
+## Инструменты курса
+
+| Инструмент | Что делает | Когда нужен |
+|---|---|---|
+| `scripts/qa/run-module.sh <путь>` | prepare → apply манифестов → verify → cleanup через trap | проверить один модуль после правок |
+| `scripts/qa/sweep.sh [цели]` | прогон всех (или указанных) модулей и проектов, отчёт в markdown; восстанавливает quota/LimitRange между модулями | регрессия перед коммитом и в CI |
+| `scripts/qa/lint.sh` | yamllint + kubeconform + shellcheck + kustomize build | до коммита (CI дублирует) |
+| `scripts/qa/mutate.py <манифест> <мутация>` | портит эталонный манифест типовой ошибкой (12 мутаций, 3 уровня), `--hint` печатает симптом и первую команду | заготовка нового broken-сценария |
+| `scripts/qa/add-toc.sh`, `add-nav.sh` | оглавление и навигация «предыдущий · следующий» в README | после добавления или переименования модуля |
+| `scripts/cluster/{up,start,stop,down}.sh` | жизненный цикл стенда Kubespray (`up.sh --addons` — со всеми persistent-аддонами) | начало и конец работы |
+| `scripts/cluster/nightly.sh` | start → проверка аддонов → sweep → отчёт → stop | ночная регрессия по cron |
+| `projects/project-c/chaos/random-incident.sh` | случайные инциденты без подсказок (`start N` / `reveal` / `reset`) | экзамен-режим |
