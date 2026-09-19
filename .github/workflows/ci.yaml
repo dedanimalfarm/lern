@@ -1,6 +1,6 @@
 name: Kubernetes Labs CI
 
-# path-фильтр: kind-тест 6 модулей не должен гоняться (и краснеть) на
+# path-фильтр: kind-тест не должен гоняться (и краснеть) на
 # коммитах в другие лабы репо (ansible/docker/linux).
 on:
   push:
@@ -35,10 +35,16 @@ jobs:
           cd labs/kubernetes
           bash scripts/qa/lint.sh
 
+      - name: Check markdown links
+        run: |
+          cd labs/kubernetes
+          bash check_links.sh
+
   kind-test:
     name: Test on Kind
     runs-on: ubuntu-latest
     needs: lint
+    timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -48,6 +54,13 @@ jobs:
         with:
           version: v0.23.0
           node_image: kindest/node:v1.30.0
+
+      # helm нужен модулю 09 (lint/install/upgrade/rollback чарта demo-app);
+      # без него его verify падает на need_bin.
+      - name: Install helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
 
       - name: Bootstrap lab namespaces and quotas
         # На свежем kind нет ns lab — без bootstrap каждый run-module падал
@@ -61,21 +74,45 @@ jobs:
       - name: Run automated sweep on kind
         run: |
           cd labs/kubernetes
-          # Create a dummy script or modify sweep.sh to only run cluster-agnostic modules.
-          # Some modules (e.g., ingress, cert-manager, external-secrets) require specific node setups or heavy operators,
-          # so we only run basic stateless modules on kind in CI.
           export KUBECONFIG=~/.kube/config
-          # clean-module после каждого модуля сносит quota/limitrange —
-          # восстанавливаем перед каждым прогоном, чтобы условия были одинаковые.
-          run_one() {
-            echo "Running module $1..."
-            bash scripts/bootstrap/00-create-namespaces.sh >/dev/null
-            bash scripts/bootstrap/01-apply-quotas.sh >/dev/null
-            bash scripts/qa/run-module.sh "modules/$1"
-          }
-          run_one 01-kubectl-basics
-          run_one 02-pods-lifecycle
-          run_one 03-workloads
-          run_one 06-scheduling
-          run_one 07-config-security
-          run_one 20-batch-workflows
+          # Прогоняем модули, которым хватает однонодового кластера без тяжёлых
+          # аддонов стенда. Все перечисленные проверены на локальном k3s.
+          # sweep.sh сам восстанавливает ns lab + quota/LimitRange перед каждым
+          # модулем (clean-module в конце прогона сносит их вместе со всем в lab).
+          #
+          # Вне списка и почему:
+          #   08, 11   — нужен metrics-server (11 ещё и ставит VPA через helm);
+          #   15       — нужен CNI с enforcement NetworkPolicy (kindnet не режет);
+          #   16,22,25 — sealed-secrets/ESO/VSO, ingress-nginx+cert-manager, Argo CD;
+          #   17,18,30 — kube-prometheus-stack, Loki/Promtail, Tempo;
+          #   19,21,23,24,28 — операторы (kopf/CNPG/Envoy Gateway/Argo Rollouts/HNC+vcluster);
+          #   29       — требует Kubernetes >= 1.33 (native sidecars, in-place resize),
+          #              а нода kind здесь 1.30 — prepare честно откажется;
+          #   project-c/d/e — инциденты и аудиты поверх аддонов стенда.
+          MODULES=(
+            modules/01-kubectl-basics
+            modules/02-pods-lifecycle
+            modules/03-workloads
+            modules/04-networking
+            modules/05-storage
+            modules/06-scheduling
+            modules/07-config-security
+            modules/09-helm-gitops
+            modules/10-kubeadm-admin
+            modules/12-resource-management
+            modules/13-resilience
+            modules/14-pod-security-admission
+            modules/20-batch-workflows
+            projects/project-a-platform-namespace
+            projects/project-b-stateful-service
+          )
+          MODULE_TIMEOUT=420 REPORT_FILE=/tmp/qa-report.md \
+            bash scripts/qa/sweep.sh "${MODULES[@]}"
+
+      - name: Upload QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-qa-report
+          path: /tmp/qa-report.md
+          if-no-files-found: ignore
