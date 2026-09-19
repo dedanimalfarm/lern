@@ -68,12 +68,25 @@ kubectl get nodes -o wide
 
 Массовый прогон всех тестов (regression suite):
 ```bash
-./scripts/qa/sweep.sh
+./scripts/qa/sweep.sh                      # все модули и проекты
+./scripts/qa/sweep.sh modules/05-storage   # только указанные
+```
+
+## 🎯 Экзамен-режим
+
+Когда модули пройдены — проверьте себя на случайных поломках без подсказок,
+какой модуль сломан:
+
+```bash
+./scripts/qa/exam.sh start 3   # три инцидента, таймер 45 минут
+./scripts/qa/exam.sh check     # прогнать verify: что уже починено
+./scripts/qa/exam.sh reveal    # показать, что было сломано
+./scripts/qa/exam.sh reset     # убрать за собой
 ```
 
 ## 📂 Структура репозитория
 
-- `docs/` — Базовые документы, чеклисты, справочники (playbooks, cheatsheets), а также [Глоссарий терминов](docs/03-glossary.md).
+- `docs/` — Базовые документы и справочники: [карта обучения](docs/02-learning-path.md), [глоссарий](docs/03-glossary.md), [карта связей модулей и инструменты курса](docs/04-cross-references.md), [покрытие CKA/CKAD/CKS](docs/05-cert-matrix.md), [playbook диагностики](docs/99-troubleshooting-playbook.md), [roadmap](docs/ROADMAP.md).
 - `scripts/` — Скрипты инициализации (bootstrap), очистки и QA-верификации.
 - `common/` — Общие ресурсы для лаборатории (базовые namespace, квоты и т.д.).
 - `modules/` — Директории учебных модулей (теория, манифесты, практические сломанные сценарии).
