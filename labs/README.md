@@ -2,6 +2,9 @@
 
 Все учебные лабы из проекта, рассортированные по темам.
 
+Состояние лаб и план их развития — [`LABS-ROADMAP.md`](./LABS-ROADMAP.md); план расширения
+курса Kubernetes — [`kubernetes/docs/ROADMAP.md`](./kubernetes/docs/ROADMAP.md).
+
 ## Содержание
 
 ### Системы и Linux
@@ -12,7 +15,7 @@
 | [`linux-memory`](./linux-memory/) | Управление памятью: основы, лимиты cgroup v2, Transparent Hugepages (THP) | 3 лабы |
 | [`linux-cgroups`](./linux-cgroups/) | cgroup v2: CPU, IO, Memory | 3 |
 | [`linux-processes`](./linux-processes/) | Процессы: основы и стартовая лаба | 2 |
-| [`linux-process-isolation`](./linux-process-isolation/) | Изоляция процессов: chroot, namespaces, cgroups, seccomp, AppArmor — путь к контейнерам | 15 этапов |
+| [`linux-process-isolation`](./linux-process-isolation/) | Изоляция процессов: chroot, namespaces, cgroups, seccomp, AppArmor, eBPF — путь к контейнерам | 15 этапов (00–14) |
 | [`linux-troubleshooting`](./linux-troubleshooting/) | Боевая диагностика: CPU/RAM, диски, сеть, логи, certs, strace, tcpdump, auditd, kernel tuning | 9 |
 | [`storage`](./storage/) | Дисковая подсистема: разделы, ext4/xfs/btrfs, mdadm RAID, LVM, troubleshooting | 1 (6 модулей) |
 
@@ -21,7 +24,7 @@
 | Папка | О чём | Кол-во |
 |-------|-------|--------|
 | [`docker`](./docker/) | Docker от основ до production: CLI, Dockerfile, compose, storage, networking, security, CI/CD, capstone | 17 глав |
-| [`kubernetes`](./kubernetes/) | k8s: kubectl, pods, workloads, networking, storage, scheduling, security, observability, helm/gitops, kubeadm | 10 модулей + 3 проекта |
+| [`kubernetes`](./kubernetes/) | k8s от kubectl до GitOps, Gateway API, трейсинга и multi-tenancy; стенд Kubespray; QA-обвязка с broken-сценариями и verify | 28 модулей + 5 проектов |
 | [`helm`](./helm/) | Первая лаба по Helm 3 | 1 |
 
 ### Автоматизация
