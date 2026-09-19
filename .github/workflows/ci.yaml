@@ -70,6 +70,19 @@ jobs:
           export KUBECONFIG=~/.kube/config
           bash scripts/bootstrap/00-create-namespaces.sh
           bash scripts/bootstrap/01-apply-quotas.sh
+          # На стенде Kubespray StorageClass по умолчанию называется local-path
+          # (bootstrap/05), и манифесты m05/project-b ссылаются на это имя явно.
+          # kind ставит тот же provisioner под именем standard — заводим алиас,
+          # чтобы гонять модули без правок учебного содержимого.
+          kubectl get sc local-path >/dev/null 2>&1 || printf '%s\n' \
+            'apiVersion: storage.k8s.io/v1' \
+            'kind: StorageClass' \
+            'metadata:' \
+            '  name: local-path' \
+            'provisioner: rancher.io/local-path' \
+            'reclaimPolicy: Delete' \
+            'volumeBindingMode: WaitForFirstConsumer' | kubectl apply -f -
+          kubectl get sc
 
       - name: Run automated sweep on kind
         run: |
