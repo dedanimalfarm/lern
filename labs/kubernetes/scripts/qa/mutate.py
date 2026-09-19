@@ -11,7 +11,7 @@
   scripts/qa/mutate.py manifests/deploy.yaml image-tag > broken/scenario-05/deploy.yaml
   scripts/qa/mutate.py manifests/deploy.yaml --random 2 -o broken/deploy.yaml --hint
 """
-import argparse, copy, random, sys
+import argparse, copy, pathlib, random, sys
 import yaml
 
 WORKLOADS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
@@ -201,8 +201,9 @@ def main():
             kind, obj, tier, symptom, diag = res
             out = yaml.safe_dump_all(mutated, sort_keys=False, allow_unicode=True)
             if a.output:
-                with open(a.output, "w", encoding="utf-8") as f:
-                    f.write(out)
+                out_path = pathlib.Path(a.output)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(out, encoding="utf-8")
             else:
                 sys.stdout.write(out)
             if a.hint or a.output:

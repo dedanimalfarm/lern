@@ -1,0 +1,34 @@
+# Команда «закрутила гайки» по чек-листу безопасности, не проверив, умеет ли
+# образ работать в таких условиях.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hardened-web
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hardened-web
+  template:
+    metadata:
+      labels:
+        app: hardened-web
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: web
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests: { cpu: 20m, memory: 32Mi }
+          limits: { cpu: 100m, memory: 64Mi }
