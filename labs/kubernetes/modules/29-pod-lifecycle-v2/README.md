@@ -21,8 +21,6 @@
   - [3.1 Resize без рестарта (reality на нашем кластере)](#31-resize-без-рестарта-reality-на-нашем-кластере)
   - [3.2 Механика работы resizePolicy: NotRequired vs RestartContainer](#32-механика-работы-resizepolicy-notrequired-vs-restartcontainer)
   - [3.3 Поймать обе валидации (ограничения QoS и limit)](#33-поймать-обе-валидации-ограничения-qos-и-limit)
-  - [3.4 Как kubelet обновляет cgroups](#34-как-kubelet-обновляет-cgroups)
-  - [3.5 Статус subresource resize и фазы применения](#35-статус-subresource-resize-и-фазы-применения)
 - [Часть 4: Troubleshooting — боевые инциденты](#часть-4-troubleshooting--боевые-инциденты)
   - [Теория: алгоритм диагностики по симптому](#теория-алгоритм-диагностики-по-симптому)
   - [Инцидент 1: Job не завершается (sidecar-антипаттерн)](#инцидент-1-job-не-завершается-sidecar-антипаттерн)
@@ -423,6 +421,15 @@ kubectl -n lab patch pod resize-demo --subresource resize --type=json \
 
 ```text
 The Pod "resize-demo" is invalid: spec.containers[0].resources.requests: Invalid value: "500m": must be less than or equal to cpu limit of 300m
+```
+
+---
+
+## Часть 4: Troubleshooting — боевые инциденты
+
+---
+
+### Теория: алгоритм диагностики по симптому
 
 | Симптом | Причина | Что делать |
 |---|---|---|
@@ -432,10 +439,17 @@ The Pod "resize-demo" is invalid: spec.containers[0].resources.requests: Invalid
 | In-place resize отбит: `must be <= cpu limit` | requests больше limit | сначала поднять limit |
 | In-place resize отбит: `only cpu and memory mutable` | попытка изменить ephemeral-storage / GPU | запрещено — только cpu и memory |
 | Под `OOMKilled` после resize | лимит памяти понижен на лету (`NotRequired`), приложение (JVM) память не отдало | для памяти `resizePolicy: RestartContainer` |
+
+### Инцидент 1: Job не завершается (sidecar-антипаттерн)
+
+Симптом: Job месяцами висит в `Active`, хотя основной контейнер давно отработал.
+
+```bash
 kubectl get pods -l job-name=my-job
 # NAME           READY   STATUS     RESTARTS
 # my-job-abcde   1/2     NotReady   0
 ```
+
 Если статус `1/2 NotReady`, а в `kubectl logs my-job-abcde -c <sidecar>` вы видите, что sidecar работает штатно — это 100% проблема отсутствия `restartPolicy: Always` в блоке `initContainers`. Перепишите манифест.
 
 ### Инцидент 2: Под завис в Pending из-за забытого Gate
