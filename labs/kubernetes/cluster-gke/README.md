@@ -1,5 +1,13 @@
 # cluster-gke — реальный GKE-кластер для прогона лаб
 
+> **⚠️ Не основной стенд курса.** Этот GKE-кластер был удалён 2026-06-02, описание
+> оставлено как рабочий пример managed-кластера и на случай, если захотите поднять свой.
+> Все модули курса пишутся и проверяются на **Kubespray**-стенде —
+> [`../cluster-kubespray`](../cluster-kubespray/). Отличия, важные для лаб: в GKE есть
+> настоящий `LoadBalancer` и свой CNI, а `NetworkPolicy` по умолчанию **не enforce**;
+> на Kubespray — Calico с реальным enforcement, `LoadBalancer` остаётся в `<pending>`.
+
+
 Terraform-описание дешёвого учебного GKE-кластера для прогона лаб из
 `../modules`. Нужен **настоящий** кластер, где контейнеры реально запускаются:
 `readinessProbe`, `logs`, `exec`, StorageClass, LoadBalancer работают только
