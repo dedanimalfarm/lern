@@ -6,7 +6,7 @@ metadata:
 spec:
   initContainers:
   - name: vault-agent
-    image: vault:1.13.0
+    image: hashicorp/vault:1.18
     restartPolicy: Always
     command: ["sh", "-c", "echo 'starting vault agent proxy' && sleep infinity"]
   containers:

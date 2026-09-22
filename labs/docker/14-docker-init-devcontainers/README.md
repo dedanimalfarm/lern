@@ -58,7 +58,7 @@ docker init
 ```bash
 # Посмотреть сгенерированный Dockerfile
 cat Dockerfile
-# FROM golang:1.24-alpine AS build
+# FROM golang:1.26-alpine AS build
 # WORKDIR /src
 # COPY go.sum go.mod ./
 # RUN go mod download

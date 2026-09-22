@@ -276,7 +276,7 @@ jobs:
 ```yaml
 # GitLab CI: нужен DinD-сервис
 integration-test:
-  image: golang:1.24
+  image: golang:1.26
   services:
     - docker:27-dind
   variables:

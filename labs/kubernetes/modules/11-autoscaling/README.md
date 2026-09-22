@@ -433,6 +433,12 @@ Dynamic Resource Allocation абстрагирует "железо" подобн
 cat manifests/dra-resourceclaim.yaml
 ```
 
+DRA прошла путь `v1alpha2` (1.26) → `v1beta1` (1.32) → **`resource.k8s.io/v1` (GA в 1.34)**, и
+форма ресурса менялась на каждом шаге. В GA-версии устройство запрашивается через
+`spec.devices.requests[].exactly.deviceClassName`; старые поля `resourceClassName` и
+`parametersRef` удалены вместе с альфа-группой, поэтому манифесты из статей 2023 года на
+нашем стенде (1.36) не применяются — apiserver ответит `no matches for kind`.
+
 ---
 
 ## Часть 6: Troubleshooting (Расширенный)
