@@ -7,6 +7,9 @@ for cmd in ip sysctl iptables nft; do
     command -v "$cmd" &>/dev/null || { echo "❌ Missing dependency: $cmd" >&2; exit 1; }
 done
 
+echo "ВНИМАНИЕ: скрипт очищает ВСЕ правила iptables на этой машине."
+echo "Не запускайте его там, где работают Docker, Kubernetes или боевой firewall."
+
 # Clean up previous setup
 for NS in web app db; do
     ip netns del $NS 2>/dev/null || true
@@ -53,12 +56,22 @@ done
 
 echo "Включение маршрутизации и NAT на хосте..."
 sysctl -w net.ipv4.ip_forward=1 >/dev/null
+
+echo "Включение br_netfilter (без него правила FORWARD не увидят трафик внутри моста)..."
+modprobe br_netfilter 2>/dev/null || true
+if ! sysctl -w net.bridge.bridge-nf-call-iptables=1 >/dev/null 2>&1; then
+    echo "❌ Не удалось включить net.bridge.bridge-nf-call-iptables." >&2
+    echo "   Задания 3, 6, 7, 10, 12 и 14 работать не будут: трафик между" >&2
+    echo "   namespace'ами коммутируется мостом и в цепочку FORWARD не попадает." >&2
+    exit 1
+fi
 DEFAULT_IFACE=$(ip route show default | awk '/default/ {print $5}' | head -1)
 iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o $DEFAULT_IFACE -j MASQUERADE
 
 echo "=========================================================="
 echo "✅ Lab 7 Setup Complete!"
 echo "Bridge br0: 10.0.0.1/24"
+echo "br_netfilter: включён (bridge-nf-call-iptables=1)"
 echo "web: 10.0.0.2 (dev eth0-web)"
 echo "app: 10.0.0.3 (dev eth0-app)"
 echo "db:  10.0.0.4 (dev eth0-db)"

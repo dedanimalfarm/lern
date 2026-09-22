@@ -6,7 +6,7 @@ echo "Verifying Lab 7 (iptables / nftables)..."
 
 # 1. Check if namespaces exist
 for ns in web app db; do
-    if ! ip netns list | grep -q "$ns"; then
+    if ! ip netns list | awk '{print $1}' | grep -qx "$ns"; then
         echo "[FAIL] Namespace $ns does not exist!"
         exit 1
     fi
@@ -26,6 +26,17 @@ if [ "$forward" != "1" ]; then
     exit 1
 fi
 echo "  [OK] IP forwarding is enabled."
+
+bridge_nf=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || echo 0)
+if [ "$bridge_nf" != "1" ]; then
+    echo "[FAIL] net.bridge.bridge-nf-call-iptables=$bridge_nf"
+    echo "       Трафик между web/app/db коммутируется мостом и не доходит до цепочки"
+    echo "       FORWARD - правила сегментации из заданий 3, 6, 7, 10, 12, 14 молча"
+    echo "       не работают. Лечится: sudo modprobe br_netfilter &&"
+    echo "       sudo sysctl -w net.bridge.bridge-nf-call-iptables=1"
+    exit 1
+fi
+echo "  [OK] br_netfilter is enabled (bridged traffic hits FORWARD)."
 
 # 4. Check if either iptables rules or nftables rules are loaded
 iptables_rules=$(iptables -t filter -S | wc -l)

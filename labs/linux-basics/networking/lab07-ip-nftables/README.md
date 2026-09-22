@@ -7,26 +7,36 @@
 ## Оглавление
 <!-- TOC -->
 - [Обзор лабораторной](#обзор-лабораторной)
+- [Связь с теоретическим конспектом](#связь-с-теоретическим-конспектом)
 - [Что вы построите](#что-вы-построите)
 - [Что нужно](#что-нужно)
 - [Ключевые концепции](#ключевые-концепции)
 - [Часть 0: Подготовка сети](#часть-0-подготовка-сети)
   - [Задание 0: Создание инфраструктуры](#задание-0-создание-инфраструктуры)
-- [Часть 1: Базовая фильтрация (iptables filter)](#часть-1-базовая-фильтрация-iptables-filter)
-  - [Задание 1: Защита хоста (INPUT)](#задание-1-защита-хоста-input)
-  - [Задание 2: Безопасность сети (FORWARD)](#задание-2-безопасность-сети-forward)
-- [Часть 2: Отслеживание состояний (Stateful Inspection)](#часть-2-отслеживание-состояний-stateful-inspection)
-  - [Задание 3: Оптимизация правил через Conntrack](#задание-3-оптимизация-правил-через-conntrack)
-- [Часть 3: Продвинутые возможности iptables](#часть-3-продвинутые-возможности-iptables)
-  - [Задание 4: Логирование (LOG)](#задание-4-логирование-log)
-  - [Задание 5: Ограничение трафика (Rate Limiting)](#задание-5-ограничение-трафика-rate-limiting)
-  - [Задание 6: Защита от Port Scanning и Syn Flood](#задание-6-защита-от-port-scanning-и-syn-flood)
-- [Часть 4: NAT (Network Address Translation)](#часть-4-nat-network-address-translation)
-  - [Задание 7: Проброс портов (DNAT)](#задание-7-проброс-портов-dnat)
-  - [Задание 8: Маскировка (SNAT/Masquerade)](#задание-8-маскировка-snatmasquerade)
+- [Часть 1: Основы iptables](#часть-1-основы-iptables)
+  - [Задание 1: Структура iptables - таблицы, цепочки, правила](#задание-1-структура-iptables---таблицы-цепочки-правила)
+  - [Задание 2: Фильтрация на хосте - защита INPUT](#задание-2-фильтрация-на-хосте---защита-input)
+  - [Задание 3: Фильтрация FORWARD - межсерверный firewall](#задание-3-фильтрация-forward---межсерверный-firewall)
+  - [Задание 4: Фильтрация внутри namespace - iptables на «сервере»](#задание-4-фильтрация-внутри-namespace---iptables-на-сервере)
+- [Часть 2: Stateful Inspection - conntrack](#часть-2-stateful-inspection---conntrack)
+  - [Задание 5: Состояния соединений](#задание-5-состояния-соединений)
+- [Часть 3: Логирование и диагностика](#часть-3-логирование-и-диагностика)
+  - [Задание 6: Логирование пакетов](#задание-6-логирование-пакетов)
+- [Часть 4: Продвинутые сценарии](#часть-4-продвинутые-сценарии)
+  - [Задание 7: Rate Limiting - защита от брутфорса и DDoS](#задание-7-rate-limiting---защита-от-брутфорса-и-ddos)
+  - [Задание 8: Проброс портов (DNAT) - публикация сервисов](#задание-8-проброс-портов-dnat---публикация-сервисов)
+  - [Задание 9: Сохранение и восстановление правил](#задание-9-сохранение-и-восстановление-правил)
 - [Часть 5: Переход на nftables](#часть-5-переход-на-nftables)
   - [Задание 10: Основы nftables - замена iptables](#задание-10-основы-nftables---замена-iptables)
-  - [Задание 11: NAT и Stateful в nftables](#задание-11-nat-и-stateful-в-nftables)
+  - [Задание 11: nftables - sets и maps (продвинутые фичи)](#задание-11-nftables---sets-и-maps-продвинутые-фичи)
+  - [Задание 12: nftables - конфигурация из файла](#задание-12-nftables---конфигурация-из-файла)
+- [Часть 6: Практические сценарии](#часть-6-практические-сценарии)
+  - [Задание 13: Трассировка пакетов - полная отладка](#задание-13-трассировка-пакетов---полная-отладка)
+  - [Задание 14: Итоговый сценарий - полная конфигурация production firewall](#задание-14-итоговый-сценарий---полная-конфигурация-production-firewall)
+  - [Задание 15: Очистка](#задание-15-очистка)
+- [Чеклист выполнения](#чеклист-выполнения)
+- [Ответы на вопросы (для самопроверки)](#ответы-на-вопросы-для-самопроверки)
+- [Вопросы](#вопросы)
 - [Проверка модуля](#проверка-модуля)
 - [Уборка](#уборка)
 <!-- /TOC -->
@@ -38,7 +48,7 @@
 В этой лабораторной вы построите виртуальную сеть из namespace'ов (как в предыдущей работе по Linux Bridge) и на ней отработаете все ключевые возможности iptables и nftables: фильтрацию трафика, NAT, stateful inspection, логирование, rate limiting, защиту от сканирования портов и брутфорса. В конце - переход на nftables как современную замену iptables.
 
 ## Связь с теоретическим конспектом
-Перед выполнением лабораторной работы рекомендуется ознакомиться с концепциями портов, протоколов и свойств интерфейсов в [Теоретическом конспекте](file:///root/lern/labs/linux-basics/networking/abstract1/README.md).
+Перед выполнением лабораторной работы рекомендуется ознакомиться с концепциями портов, протоколов и свойств интерфейсов в [Теоретическом конспекте](../abstract1/README.md).
 
 ## Что вы построите
 
@@ -78,6 +88,11 @@
 sudo apt-get update
 sudo apt-get install -y iproute2 iptables nftables ncat tcpdump curl conntrack
 ```
+
+> **⚠️ Нужна отдельная VM.** Лаба несколько раз выполняет `iptables -F`, `nft flush ruleset`
+> и `iptables -P INPUT DROP` — это сносит **все** правила на машине. Если на ней работает
+> Docker, Kubernetes, libvirt или ваш собственный firewall, их сеть сломается. Берите
+> одноразовую виртуалку, а не рабочую машину.
 
 ## Ключевые концепции
 
@@ -151,13 +166,17 @@ sudo ip netns exec db ip link set eth0-db up
 sudo ip netns exec db ip route add default via 10.0.0.1
 ```
 
-**Шаг 5.** Включите IP forwarding и базовый NAT:
+**Шаг 5.** Включите IP forwarding, br_netfilter и базовый NAT:
 
 ```bash
 sudo sysctl -w net.ipv4.ip_forward=1
 
+# ОБЯЗАТЕЛЬНО: без этого весь FORWARD-фаервол дальше не будет работать
+sudo modprobe br_netfilter
+sudo sysctl -w net.bridge.bridge-nf-call-iptables=1
+
 # Определите внешний интерфейс
-EXT_IF=$(ip route show default | awk '{print $5}')
+EXT_IF=$(ip route show default | awk '{print $5}' | head -1)
 echo "Внешний интерфейс: $EXT_IF"
 
 sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o $EXT_IF -j MASQUERADE
@@ -165,6 +184,18 @@ sudo iptables -A FORWARD -i br0 -o $EXT_IF -j ACCEPT
 sudo iptables -A FORWARD -i $EXT_IF -o br0 -m state --state RELATED,ESTABLISHED -j ACCEPT
 sudo iptables -A FORWARD -i br0 -o br0 -j ACCEPT
 ```
+
+> **⚠️ Почему `br_netfilter` критичен.** `web`, `app` и `db` сидят в одной подсети
+> `10.0.0.0/24` на одном мосту, поэтому трафик между ними **коммутируется на L2**, а не
+> маршрутизируется хостом. По умолчанию такой трафик вообще не заходит в цепочку `FORWARD` —
+> и все правила сегментации из Заданий 3, 6, 7, 10, 12 и 14 молча не сработают: пакеты будут
+> проходить, счётчики правил останутся нулевыми. Модуль `br_netfilter` с
+> `bridge-nf-call-iptables=1` заворачивает мостовой трафик в обычные IP-хуки Netfilter.
+> На чистой Ubuntu/Debian модуль **не загружен** — если на машине стоит Docker или
+> Kubernetes, он подгружен ими, и это единственная причина, по которой лаба «иногда
+> работает сама».
+>
+> Проверить: `sysctl net.bridge.bridge-nf-call-iptables` должно вернуть `= 1`.
 
 **Шаг 6.** Проверьте связность:
 
@@ -187,13 +218,13 @@ sudo ip netns exec web ping -c 1 8.8.8.8
 # Web-сервер (HTTP на порту 80)
 sudo ip netns exec web sh -c '
     while true; do
-        echo -e "HTTP/1.1 200 OK\r\nContent-Length: 22\r\n\r\nHello from web server!" | ncat -l -p 80 2>/dev/null
+        printf "HTTP/1.1 200 OK\r\nContent-Length: 22\r\n\r\nHello from web server!" | ncat -l -p 80 2>/dev/null
     done &'
 
 # App-сервер (на порту 8080)
 sudo ip netns exec app sh -c '
     while true; do
-        echo -e "HTTP/1.1 200 OK\r\nContent-Length: 22\r\n\r\nHello from app server!" | ncat -l -p 8080 2>/dev/null
+        printf "HTTP/1.1 200 OK\r\nContent-Length: 22\r\n\r\nHello from app server!" | ncat -l -p 8080 2>/dev/null
     done &'
 
 # «MySQL» (на порту 3306)
@@ -210,6 +241,12 @@ for NS in web app db; do
         done &'
 done
 ```
+
+> **Почему `printf`, а не `echo -e`.** `ip netns exec ... sh -c` запускает `/bin/sh`, а это
+> `dash` на Debian/Ubuntu. Встроенный `echo` в dash не понимает флаг `-e` и печатает его
+> **как часть строки**: ответ начинается с `-e HTTP/1.1 200 OK`, и любой `curl` дальше по
+> лабе падает с `Received HTTP/0.9 when not allowed`. `printf` ведёт себя одинаково в dash и
+> bash.
 
 **Шаг 8.** Убедись, что сервисы работают:
 
@@ -382,6 +419,19 @@ sudo iptables -A INPUT -p udp --sport 53 -j ACCEPT
 sudo iptables -P INPUT DROP
 ```
 
+> **⚠️ Если вы работаете с машиной по SSH — прочитайте до того, как нажмёте Enter.**
+> Правило 4 разрешает SSH только из `10.0.0.0/24`, то есть из namespace'ов лабы. Ваша
+> собственная SSH-сессия выживет благодаря правилу 2 (`ESTABLISHED,RELATED`), но **новое**
+> подключение с вашего рабочего места будет отброшено: разорвётся сессия — попадёте в
+> машину только через консоль провайдера. Либо выполняйте лабу на локальной VM, либо
+> сначала добавьте своё правило:
+>
+> ```bash
+> sudo iptables -I INPUT 4 -s <ваш-IP>/32 -p tcp --dport 22 -j ACCEPT
+> ```
+>
+> Бэкап из Шага 1 возвращается командой `sudo iptables-restore < /tmp/iptables-backup.rules`.
+
 **Шаг 4.** Проверьте:
 
 ```bash
@@ -443,7 +493,7 @@ sudo iptables -A FORWARD -s 10.0.0.3 -d 10.0.0.4 -p tcp --dport 3306 -j ACCEPT
 sudo iptables -A FORWARD -s 10.0.0.0/24 -d 10.0.0.0/24 -p icmp -j ACCEPT
 
 # 5. Разрешить namespace'ам выход в интернет
-EXT_IF=$(ip route show default | awk '{print $5}')
+EXT_IF=$(ip route show default | awk '{print $5}' | head -1)
 sudo iptables -A FORWARD -i br0 -o $EXT_IF -j ACCEPT
 sudo iptables -A FORWARD -i $EXT_IF -o br0 -m state --state RELATED,ESTABLISHED -j ACCEPT
 
@@ -524,13 +574,24 @@ sudo ip netns exec db iptables -A INPUT -j DROP
 # app -> db:3306 - РАЗРЕШЕНО
 sudo ip netns exec app ncat -z -v -w 2 10.0.0.4 3306
 
-# web -> db:3306 - ЗАБЛОКИРОВАНО (даже если FORWARD разрешал бы)
-# Примечание: FORWARD уже блокирует, но db-firewall - вторая линия обороны
+# web -> db:3306 - ЗАБЛОКИРОВАНО (но пока ещё цепочкой FORWARD на хосте, не правилами db)
 sudo ip netns exec web ncat -z -v -w 2 10.0.0.4 3306
+
+# А вот проверка, которая показывает именно firewall ВНУТРИ db.
+# Трафик с самого хоста не проходит через FORWARD (он локально сгенерирован),
+# поэтому до db он доезжает - и его отбивает уже INPUT-цепочка db:
+ncat -z -v -w 2 10.0.0.4 3306    # ЗАБЛОКИРОВАНО: db пускает 3306 только с 10.0.0.3
+ncat -z -v -w 2 10.0.0.4 22      # РАЗРЕШЕНО: SSH с хоста (10.0.0.1) db пускает
 
 # Посмотрите логи заблокированных пакетов
 sudo dmesg | grep "DB-DROPPED" | tail -5
 ```
+
+> **Важно про точку запуска теста.** После Задания 3 цепочка `FORWARD` — это белый список из
+> трёх потоков (`web→app:8080`, `app→db:3306`, ICMP внутри сети). Любой другой трафик
+> *между namespace'ами* умирает на хосте и до firewall внутри namespace просто не доезжает.
+> Поэтому правила самого namespace проверяем **с хоста**: пакеты хоста локально сгенерированы
+> и идут `OUTPUT → POSTROUTING`, минуя `FORWARD`.
 
 **Шаг 4.** Настройте firewall внутри web:
 
@@ -558,15 +619,24 @@ sudo ip netns exec web iptables -A INPUT -j DROP
 **Шаг 5.** Проверьте:
 
 ```bash
-# HTTP работает
-sudo ip netns exec app curl -s --connect-timeout 2 10.0.0.2:80
+# HTTP с хоста работает - web разрешает 80 отовсюду
+curl -s --connect-timeout 2 10.0.0.2:80
+echo
 
-# SSH от app - заблокирован (разрешён только от хоста)
-sudo ip netns exec app ncat -z -v -w 2 10.0.0.2 22
+# SSH с хоста работает - web разрешает 22 с 10.0.0.1
+ncat -z -v -w 2 10.0.0.2 22
+
+# А теперь проверим, что web отбивает SSH с ЧУЖОГО адреса.
+# Временно разрешим app -> web:22 на хосте, иначе пакет не переживёт FORWARD:
+sudo iptables -I FORWARD 2 -s 10.0.0.3 -d 10.0.0.2 -p tcp --dport 22 -j ACCEPT
+
+sudo ip netns exec app ncat -z -v -w 2 10.0.0.2 22   # ЗАБЛОКИРОВАНО уже самим web
 
 # Посмотрите логи
 sudo dmesg | grep "WEB-DROPPED" | tail -5
 ```
+
+Правило на хосте оставьте — оно понадобится в Задании 7 для проверки rate limiting.
 
 > **❓ Вопрос:** Зачем настраивать firewall И на роутере (FORWARD), И внутри namespace (INPUT)? Это избыточно? Подсказка: принцип defense in depth. Что будет, если кто-то получит доступ к app и попытается подключиться к db на порту, который не MySQL?
 
@@ -845,7 +915,9 @@ sudo iptables -I FORWARD 3 -d 10.0.0.2 -p tcp --dport 80 \
 **Шаг 1.** Настройте DNAT: порт 80 хоста → порт 80 web (10.0.0.2):
 
 ```bash
-sudo iptables -t nat -A PREROUTING -p tcp --dport 80 \
+EXT_IF=$(ip route show default | awk '{print $5}' | head -1)
+
+sudo iptables -t nat -A PREROUTING -i $EXT_IF -p tcp --dport 80 \
     -j DNAT --to-destination 10.0.0.2:80
 
 # Разрешите forward для этого трафика (если ещё нет)
@@ -853,12 +925,23 @@ sudo iptables -I FORWARD 2 -p tcp -d 10.0.0.2 --dport 80 \
     -m state --state NEW -j ACCEPT
 ```
 
+> **Зачем `-i $EXT_IF`.** Без привязки к интерфейсу правило ловит **любой** пакет с
+> `--dport 80`, включая трафик самих namespace'ов наружу: `curl http://example.com` из `web`
+> будет молча переписан на `10.0.0.2:80`. Публикуемый сервис всегда ограничивают тем
+> интерфейсом, с которого приходят внешние клиенты.
+
 **Шаг 2.** Для доступа с самого хоста (localhost) нужно отдельное правило OUTPUT:
 
 ```bash
-sudo iptables -t nat -A OUTPUT -p tcp --dport 80 \
+sudo iptables -t nat -A OUTPUT -d 127.0.0.1 -p tcp --dport 80 \
     -j DNAT --to-destination 10.0.0.2:80
 ```
+
+> **Зачем `-d 127.0.0.1`.** Цепочка `OUTPUT` таблицы `nat` видит **весь** трафик, который
+> порождает сам хост. Правило без `-d` перехватит и `apt-get update`, и любой `curl` на
+> внешний сайт по HTTP — они попадут на наш web-сервер. Проверяется это прямо: с правилом
+> без `-d` запрос на произвольный адрес `curl -s http://1.2.3.4` отвечает
+> `Hello from web server!`.
 
 **Шаг 3.** Проверьте:
 
@@ -873,10 +956,10 @@ sudo iptables -t nat -L -n -v --line-numbers
 **Шаг 4.** Добавь DNAT для app-сервера: порт 8080 хоста → порт 8080 app:
 
 ```bash
-sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 \
+sudo iptables -t nat -A PREROUTING -i $EXT_IF -p tcp --dport 8080 \
     -j DNAT --to-destination 10.0.0.3:8080
 
-sudo iptables -t nat -A OUTPUT -p tcp --dport 8080 \
+sudo iptables -t nat -A OUTPUT -d 127.0.0.1 -p tcp --dport 8080 \
     -j DNAT --to-destination 10.0.0.3:8080
 
 sudo iptables -I FORWARD 2 -p tcp -d 10.0.0.3 --dport 8080 \
@@ -1029,23 +1112,20 @@ sudo nft list ruleset
 
 **Шаг 4.** Сравни ключевые отличия синтаксиса:
 
-```
-┌─────────────────────────┬────────────────────────────────────┐
-│       iptables          │           nftables                 │
-├─────────────────────────┼────────────────────────────────────┤
-│ -A INPUT                │ add rule inet firewall input       │
-│ -p tcp --dport 80       │ tcp dport 80                       │
-│ -s 10.0.0.0/24          │ ip saddr 10.0.0.0/24              │
-│ -j ACCEPT               │ accept                            │
-│ -j DROP                 │ drop                               │
-│ -j LOG --log-prefix "X" │ log prefix "X"                    │
-│ -m state --state NEW    │ ct state new                       │
-│ -m limit --limit 5/sec  │ limit rate 5/second               │
-│ -m multiport 80,443     │ tcp dport {80, 443}               │
-│ iptables-save           │ nft list ruleset                   │
-│ iptables-restore        │ nft -f file.nft                   │
-└─────────────────────────┴────────────────────────────────────┘
-```
+| iptables | nftables |
+|----------|----------|
+| `-A INPUT` | `add rule inet firewall input` |
+| `-p tcp --dport 80` | `tcp dport 80` |
+| `-s 10.0.0.0/24` | `ip saddr 10.0.0.0/24` |
+| `-j ACCEPT` | `accept` |
+| `-j DROP` | `drop` |
+| `-j LOG --log-prefix "X"` | `log prefix "X"` |
+| `-m state --state NEW` | `ct state new` |
+| `-m limit --limit 5/sec` | `limit rate 5/second` |
+| `-m multiport 80,443` | `tcp dport { 80, 443 }` |
+| `-j DNAT --to-destination IP:PORT` | `dnat ip to IP:PORT` |
+| `iptables-save` | `nft list ruleset` |
+| `iptables-restore` | `nft -f file.nft` |
 
 **Шаг 5.** Добавь правила INPUT (аналог Задания 2):
 
@@ -1082,7 +1162,7 @@ sudo nft add rule inet firewall forward ip saddr 10.0.0.3 ip daddr 10.0.0.4 tcp 
 sudo nft add rule inet firewall forward ip saddr 10.0.0.0/24 ip daddr 10.0.0.0/24 ip protocol icmp accept
 
 # Выход в интернет
-EXT_IF=$(ip route show default | awk '{print $5}')
+EXT_IF=$(ip route show default | awk '{print $5}' | head -1)
 sudo nft add rule inet firewall forward iifname "br0" oifname "$EXT_IF" accept
 sudo nft add rule inet firewall forward iifname "$EXT_IF" oifname "br0" ct state related,established accept
 
@@ -1098,17 +1178,21 @@ sudo nft add table inet nat
 
 # POSTROUTING - masquerade
 sudo nft add chain inet nat postrouting {type nat hook postrouting priority 100\;}
-EXT_IF=$(ip route show default | awk '{print $5}')
+EXT_IF=$(ip route show default | awk '{print $5}' | head -1)
 sudo nft add rule inet nat postrouting ip saddr 10.0.0.0/24 oifname "$EXT_IF" masquerade
 
 # PREROUTING - DNAT для web:80
 sudo nft add chain inet nat prerouting {type nat hook prerouting priority -100\;}
-sudo nft add rule inet nat prerouting tcp dport 80 dnat to 10.0.0.2:80
+sudo nft add rule inet nat prerouting iifname "$EXT_IF" tcp dport 80 dnat ip to 10.0.0.2:80
 
 # OUTPUT - DNAT для localhost
 sudo nft add chain inet nat output {type nat hook output priority -100\;}
-sudo nft add rule inet nat output tcp dport 80 dnat to 10.0.0.2:80
+sudo nft add rule inet nat output ip daddr 127.0.0.1 tcp dport 80 dnat ip to 10.0.0.2:80
 ```
+
+> **`dnat ip to`, а не `dnat to`.** В таблице семейства `inet` (IPv4 + IPv6) nft требует явно
+> указать семейство адреса назначения, иначе правило не примется:
+> `Error: specify 'dnat ip' or 'dnat ip6' in inet table to disambiguate`.
 
 **Шаг 8.** Проверьте всю конфигурацию:
 
@@ -1181,13 +1265,26 @@ sudo nft add set inet firewall ssh_banned {type ipv4_addr\; flags timeout\; time
 sudo nft add set inet firewall ssh_meter {type ipv4_addr\; flags dynamic\;}
 
 # Правило: если IP в бан-листе - дропай
-sudo nft insert rule inet firewall input ip saddr @ssh_banned drop
+sudo nft insert rule inet firewall input ip saddr @ssh_banned counter drop
 
-# Правило: если более 4 SSH-подключений за 60 сек - в бан
-sudo nft add rule inet firewall input tcp dport 22 ct state new \
+# Правило: если более 4 SSH-подключений за 60 сек - в бан.
+# ВАЖНО: оно должно стоять ВЫШЕ разрешающего SSH-правила, иначе никогда не сработает.
+sudo nft insert rule inet firewall input tcp dport 22 ct state new \
     add @ssh_meter { ip saddr limit rate over 4/minute } \
-    add @ssh_banned { ip saddr } drop
+    add @ssh_banned { ip saddr } counter drop
 ```
+
+> **Порядок здесь решает всё.** В Задании 10 (Шаг 5) мы уже добавили
+> `ip saddr 10.0.0.0/24 tcp dport 22 accept`. Если счётчик-бан дописать в конец цепочки
+> через `add rule`, SSH-пакет из namespace примет более раннее `accept` и до
+> счётчика не дойдёт: set `ssh_banned` останется пустым, а все 8 попыток в Шаге 4 пройдут.
+> Проверьте порядок перед тестом:
+>
+> ```bash
+> sudo nft -a list chain inet firewall input
+> ```
+>
+> Правила `@ssh_banned drop` и `add @ssh_meter ... drop` должны идти **до** `tcp dport 22 accept`.
 
 **Шаг 4.** Протестируй (из app пробуй SSH к хосту):
 
@@ -1200,6 +1297,18 @@ done
 # Посмотрите, попал ли IP в бан
 sudo nft list set inet firewall ssh_banned
 ```
+
+Ожидаемый результат: первые **5** попыток проходят, с шестой соединения отваливаются по
+таймауту, а в `ssh_banned` появляется запись:
+
+```
+elements = { 10.0.0.3 timeout 5m expires 4m56s }
+```
+
+Пять, а не четыре, потому что `limit rate over 4/minute` по умолчанию получает
+`burst 5 packets` — ведро стартует полным. Точное значение видно в выводе
+`nft list chain inet firewall input`. Если хотите ровно 4, укажите burst явно:
+`limit rate over 4/minute burst 4 packets`.
 
 **Шаг 5.** Maps - маршрутизация трафика по портам (verdict maps):
 
@@ -1307,8 +1416,8 @@ table inet firewall {
 table inet nat {
     chain prerouting {
         type nat hook prerouting priority -100;
-        tcp dport 80 dnat to 10.0.0.2:80
-        tcp dport 8080 dnat to 10.0.0.3:8080
+        iifname != "br0" tcp dport 80 dnat ip to 10.0.0.2:80
+        iifname != "br0" tcp dport 8080 dnat ip to 10.0.0.3:8080
     }
 
     chain postrouting {
@@ -1318,7 +1427,7 @@ table inet nat {
 
     chain output {
         type nat hook output priority -100;
-        tcp dport 80 dnat to 10.0.0.2:80
+        ip daddr 127.0.0.1 tcp dport 80 dnat ip to 10.0.0.2:80
     }
 }
 EOF
@@ -1551,10 +1660,10 @@ table inet nat {
     chain prerouting {
         type nat hook prerouting priority -100;
 
-        # Публикация web-сервера
-        tcp dport 80 dnat to 10.0.0.2:80
-        tcp dport 443 dnat to 10.0.0.2:443
-        tcp dport 8080 dnat to 10.0.0.3:8080
+        # Публикация web-сервера (только трафик снаружи, не из внутренней сети)
+        iifname != "br0" tcp dport 80 dnat ip to 10.0.0.2:80
+        iifname != "br0" tcp dport 443 dnat ip to 10.0.0.2:443
+        iifname != "br0" tcp dport 8080 dnat ip to 10.0.0.3:8080
     }
 
     chain postrouting {
@@ -1566,7 +1675,7 @@ table inet nat {
 
     chain output {
         type nat hook output priority -100;
-        tcp dport 80 dnat to 10.0.0.2:80
+        ip daddr 127.0.0.1 tcp dport 80 dnat ip to 10.0.0.2:80
     }
 }
 NFTEOF
@@ -1598,7 +1707,7 @@ echo "=== Test 4: web -> app:22 (DENY) ==="
 sudo ip netns exec web ncat -z -v -w 2 10.0.0.3 22
 
 echo ""
-echo "=== Test 5: app -> web:80 (DENY - обратное направление) ==="
+echo "=== Test 5: app -> web:80 (ALLOW - и это дыра в политике) ==="
 sudo ip netns exec app ncat -z -v -w 2 10.0.0.2 80
 
 echo ""
@@ -1619,6 +1728,19 @@ sudo ip netns exec web ping -c 1 -W 2 8.8.8.8
 ```bash
 sudo nft list ruleset | grep -E "counter packets [1-9]"
 ```
+
+> **Разбор Test 5.** Правило первого уровня написано как
+> `ip daddr 10.0.0.2 tcp dport @web_ports ct state new accept` — оно не ограничивает
+> **источник**, поэтому на web:80 может ходить кто угодно, включая `app` и `db`. Формально
+> политика в таблице выше разрешает «Интернет → web», а по факту мы разрешили «все → web».
+> В трёхуровневой архитектуре это лишний путь: скомпрометированный `db` получает доступ к
+> фронтенду. Закройте дыру, ограничив правило внешним трафиком:
+>
+> ```nft
+> iifname != "br0" ip daddr 10.0.0.2 tcp dport @web_ports ct state new counter accept
+> ```
+>
+> После этого Test 5 действительно станет DENY, а публикация наружу продолжит работать.
 
 ---
 
@@ -1771,6 +1893,81 @@ sudo iptables -L -n
 1. В чем разница между `iptables` и `nftables` на архитектурном уровне?
 2. Чем отличается `conntrack` состояние `ESTABLISHED` от `RELATED`?
 3. Как работает защита от сканирования портов или Syn Flood с использованием модуля `recent` в `iptables`?
+
+<details>
+<summary><strong>1 — iptables и nftables на архитектурном уровне</strong></summary>
+
+У `iptables` под каждый протокол свой отдельный инструмент и свой набор таблиц в ядре:
+`iptables`, `ip6tables`, `arptables`, `ebtables`. Каждое правило — это фиксированная
+структура с набором match-модулей (`xt_tcpudp`, `xt_state`, `xt_limit`), и ядро проходит
+цепочку **линейно**, сверху вниз. Любое изменение означает перезагрузку всей таблицы
+целиком, а во время неё правила недоступны.
+
+`nftables` — одна подсистема на все семейства (`ip`, `ip6`, `inet`, `arp`, `bridge`,
+`netdev`). Правило компилируется в байткод для виртуальной машины внутри ядра (по духу
+как BPF): вместо десятка специализированных модулей — универсальные операции «загрузить
+поле пакета», «сравнить», «вынести вердикт». Отсюда всё остальное: именованные sets и maps
+с поиском за O(1)/O(log n) вместо линейного перебора, атомарные транзакции (`nft -f`
+применяется целиком или не применяется вообще), один синтаксис для IPv4 и IPv6 в семействе
+`inet`, счётчики и логирование как обычные выражения. `iptables` сегодня — это чаще всего
+`iptables-nft`: фронтенд со старым синтаксисом поверх того же nftables-движка
+(`iptables --version` показывает `nf_tables`).
+
+</details>
+
+<details>
+<summary><strong>2 — ESTABLISHED против RELATED</strong></summary>
+
+`ESTABLISHED` — пакет принадлежит **тому же** потоку, который conntrack уже видел:
+совпадают протокол, адреса и порты в прямом или обратном направлении. Это ответ сервера на
+ваш запрос и вообще весь двусторонний обмен после первого пакета.
+
+`RELATED` — пакет относится **к другому** потоку, но логически связан с существующим
+соединением; связь устанавливает conntrack-хелпер. Примеры: ICMP `destination unreachable`
+или `fragmentation needed` в ответ на ваш TCP-сегмент (это ICMP, а не TCP — другой поток);
+data-соединение активного FTP на порт 20, порождённое control-сессией на порту 21;
+ответы в traceroute (`time-exceeded`).
+
+Практический смысл: правило `ct state established,related accept` одной строкой разрешает и
+ответный трафик, и служебные ICMP-сообщения, без которых ломается Path MTU Discovery — при
+`established`-only сайты начинают «зависать» на больших ответах.
+
+</details>
+
+<details>
+<summary><strong>3 — защита модулем recent</strong></summary>
+
+`-m recent` ведёт в ядре список адресов с отметками времени. Работает в два приёма:
+
+```bash
+# 1) каждое новое соединение на 22 порт записывает src-IP в список ssh_brute
+iptables -A INPUT -p tcp --dport 22 -m state --state NEW \
+    -m recent --name ssh_brute --set
+
+# 2) если с этого IP уже было >= 4 записей за последние 60 секунд - дропаем
+iptables -A INPUT -p tcp --dport 22 -m state --state NEW \
+    -m recent --name ssh_brute --update --seconds 60 --hitcount 4 -j DROP
+```
+
+`--set` добавляет адрес в список, `--update` проверяет его и **сдвигает** отметку времени
+(поэтому атакующий, который продолжает долбиться, не выходит из бана — в отличие от
+`--rcheck`, который время не обновляет). `--hitcount` задаёт порог, `--seconds` — окно.
+
+Против сканирования портов тот же приём вешают не на один порт, а на порт-приманку или на
+цепочку, ловящую обращения к закрытым портам: первый же стук заносит IP в список, и
+дальнейшие пакеты с него дропаются целиком.
+
+Отличие от `-m limit`: `limit` — это общий token bucket на правило, он одинаково душит и
+атакующего, и легитимных пользователей. `recent` работает **per-IP**, поэтому наказывает
+только источник атаки. Ограничения жёсткие и заданы параметрами модуля `xt_recent`:
+`ip_list_tot` — сколько адресов помнит один список (по умолчанию 100), `ip_pkt_list_tot` —
+сколько отметок времени хранится на адрес (по умолчанию 20, максимум 255), и именно он
+ограничивает максимальный `--hitcount`. Посмотреть текущие значения:
+`cat /sys/module/xt_recent/parameters/ip_list_tot`, состояние списков —
+в `/proc/net/xt_recent/<name>`. В nftables то же самое делается динамическим set с
+`flags dynamic` и `timeout` (Задание 11), без этих лимитов.
+
+</details>
 
 ## Проверка модуля
 

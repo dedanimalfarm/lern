@@ -13,6 +13,9 @@ done
 ip link del br0 2>/dev/null || true
 iptables -F || true
 iptables -t nat -F || true
+iptables -P INPUT ACCEPT || true
+iptables -P FORWARD ACCEPT || true
 nft flush ruleset 2>/dev/null || true
+sysctl -w net.ipv4.ip_forward=0 >/dev/null 2>&1 || true
 echo "✅ Lab 7 cleanup complete."
 
