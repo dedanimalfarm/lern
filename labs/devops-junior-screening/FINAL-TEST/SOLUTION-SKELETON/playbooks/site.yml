@@ -1,0 +1,5 @@
+---
+- name: Baseline configuration
+  hosts: lab
+  roles:
+    - common

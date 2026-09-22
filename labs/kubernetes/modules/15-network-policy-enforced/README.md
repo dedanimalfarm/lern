@@ -230,7 +230,7 @@ kubectl -n lab run t --image=busybox:1.36 --restart=Never -i --rm --labels app=w
 
 **Политика для `web` (исходящий трафик к API):**
 ```yaml
-# 02-web-egress.yaml
+# manifests/netpol/02-web.yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -254,7 +254,7 @@ spec:
 
 **Политика для `api` (входящий от web, исходящий к db):**
 ```yaml
-# 03-api-policy.yaml
+# manifests/netpol/03-api.yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -497,7 +497,7 @@ kubectl -n lab run t --labels app=web --image=busybox:1.36 --restart=Never -i --
   wget -qO- --timeout=5 http://api 2>&1 | tail -1
 # Вывод: wget: download timed out  <- нужна ОБЕ стороны
 # Восстанавливаем
-kubectl -n lab apply -f manifests/netpol/02-web-egress.yaml
+kubectl -n lab apply -f manifests/netpol/02-web.yaml
 ```
 
 ### Инцидент 3: «политика не работает» (CNI без enforcement)

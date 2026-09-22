@@ -375,7 +375,7 @@ kubectl describe node k8s-node-1 | grep -A 5 "Allocated resources:"
 **Воспроизведение:**
 ```bash
 # Команда контейнера намеренно завершается с exit 1
-kubectl -n lab apply -f broken/scenario-01-crashloop/deploy.yaml 2>/dev/null || \
+kubectl -n lab apply -f broken/scenario-01/deploy.yaml 2>/dev/null || \
 cat <<EOF | kubectl -n lab apply -f -
 apiVersion: apps/v1
 kind: Deployment

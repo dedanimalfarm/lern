@@ -106,7 +106,7 @@ ansible -i inventory.ini lab -m ping
 # ожидаемый ответ: "ping": "pong"
 ```
 
-Если оба шага зелёные — стенд готов. Переходи к [`../01-ansible-baseline/`](../01-ansible-baseline/).
+Если оба шага зелёные — стенд готов. Переходи к [`../01-linux-baseline/`](../01-linux-baseline/).
 
 ## Типовые грабли
 

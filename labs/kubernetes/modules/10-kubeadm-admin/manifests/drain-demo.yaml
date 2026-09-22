@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drain-demo
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: drain-demo
+  template:
+    metadata:
+      labels:
+        app: drain-demo
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: drain-demo-pdb
+  namespace: default
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: drain-demo

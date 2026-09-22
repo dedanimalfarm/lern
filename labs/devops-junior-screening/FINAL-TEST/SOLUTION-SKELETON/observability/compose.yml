@@ -1,0 +1,4 @@
+---
+# TODO Часть B: Prometheus со scrape job `node` на localhost:9100.
+# node_exporter ставится на хост (apt/systemd), НЕ в этот compose.
+services: {}

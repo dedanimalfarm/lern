@@ -35,17 +35,15 @@ for lab in "${LABS[@]}"; do
   echo "############################################################"
   
   # Ensure we clean up any previous failures first
-  if [[ "$lab" == "lab01-routing-dnat" ]]; then
-    (cd "$lab/scripts" && chmod +x *.sh && ./cleanup.sh >/dev/null 2>&1 || true)
-  elif [[ -f "$lab/cleanup.sh" ]]; then
-    (cd "$lab" && chmod +x *.sh && ./cleanup.sh >/dev/null 2>&1 || true)
+  if [[ -f "$lab/cleanup.sh" ]]; then
+    (cd "$lab" && chmod +x ./*.sh && ./cleanup.sh >/dev/null 2>&1 || true)
   fi
 
   # Run Setup
   STATUS=0
   if [[ "$lab" == "lab01-routing-dnat" ]]; then
     echo "Running setup..."
-    (cd "$lab/scripts" && ./setup.sh) || STATUS=1
+    (cd "$lab" && chmod +x ./*.sh && ./setup.sh) || STATUS=1
     sleep 2
     if [[ $STATUS -eq 0 ]]; then
       echo "Applying routing/DNAT solution..."
@@ -71,20 +69,14 @@ for lab in "${LABS[@]}"; do
   # Run Verify
   if [[ $STATUS -eq 0 ]]; then
     echo "Running verification..."
-    if [[ "$lab" == "lab01-routing-dnat" ]]; then
-      (cd "$lab/scripts" && ./verify.sh) || STATUS=1
-    else
-      (cd "$lab" && ./verify.sh) || STATUS=1
-    fi
+    (cd "$lab" && ./verify.sh) || STATUS=1
   else
     echo "Setup failed! Skipping verification."
   fi
 
   # Run Cleanup
   echo "Running cleanup..."
-  if [[ "$lab" == "lab01-routing-dnat" ]]; then
-    (cd "$lab/scripts" && ./cleanup.sh) || true
-  elif [[ -f "$lab/cleanup.sh" ]]; then
+  if [[ -f "$lab/cleanup.sh" ]]; then
     (cd "$lab" && ./cleanup.sh) || true
   fi
 

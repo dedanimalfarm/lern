@@ -1,0 +1,4 @@
+---
+# TODO Часть A: пользователь deploy, sshd hardening, пакеты, chrony,
+# unattended-upgrades, ufw (сначала allow 22!), hostname из inventory_hostname.
+# Требование: повторный прогон даёт changed=0.

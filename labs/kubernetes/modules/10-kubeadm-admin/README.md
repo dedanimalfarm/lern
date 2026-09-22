@@ -195,7 +195,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nginx:1.25-alpine
+        image: nginx:1.27-alpine
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget

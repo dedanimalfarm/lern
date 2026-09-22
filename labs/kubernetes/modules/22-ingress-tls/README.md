@@ -496,29 +496,26 @@ hello from web-b
 Создадим заведомо сломанный Ingress.
 
 ```yaml
-# Файл broken/scenario-01/broken-ingress.yaml
+# Файл broken/scenario-01/ingress.yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: broken-routing
+  namespace: lab
 spec:
-  ingressClassName: typo-nginx # ОПЕЧАТКА!
+  ingressClassName: nginx-does-not-exist     # <-- нет такого IngressClass
   rules:
   - host: broken.lab.local
     http:
       paths:
       - path: /
         pathType: Prefix
-        backend:
-          service:
-            name: web-a
-            port:
-              number: 80
+        backend: { service: { name: web-a, port: { number: 80 } } }
 ```
 
 ```bash
 # Применяем сломанный манифест
-kubectl -n lab apply -f broken/scenario-01/broken-ingress.yaml
+kubectl -n lab apply -f broken/scenario-01/ingress.yaml
 
 # Проверяем адрес
 kubectl -n lab get ingress broken-routing
@@ -762,7 +759,7 @@ bash verify/verify.sh
 1. **Разведение трафика**: Создайте новый Ingress, который будет направлять запросы на хост `test.lab.local`, где путь `/appA` идет на `web-a`, а `/appB` идет на `web-b`. Обязательно используйте `rewrite-target`. Проверьте работоспособность через curl.
 2. **Ручной TLS**: Сгенерируйте self-signed сертификат для нового домена `custom.lab.local`. Создайте Secret и Ingress. Убедитесь с помощью `curl -v`, что отдаётся именно ваш сертификат с правильным полем Subject.
 3. **cert-manager в деле**: Разверните новое приложение (например, nginx) и настройте Ingress для `super.lab.local`. Повесьте аннотацию `cert-manager.io/cluster-issuer: "selfsigned-issuer"` и убедитесь, что Secret создаётся самостоятельно.
-4. **Ремонт (Troubleshooting)**: Примените манифест `broken/scenario-01/broken-ingress.yaml`. Убедитесь, что Ingress не получает IP адрес. Затем исправьте манифест (почините `ingressClassName`), примените и убедитесь, что маршрутизация заработала.
+4. **Ремонт (Troubleshooting)**: Примените манифест `broken/scenario-01/ingress.yaml`. Убедитесь, что Ingress не получает IP адрес. Затем исправьте манифест (почините `ingressClassName`), примените и убедитесь, что маршрутизация заработала.
 5. **Проверка конфликтов**: Попробуйте создать два разных Ingress ресурса, которые пытаются повесить разные TLS сертификаты на одну и ту же комбинацию host+path. Изучите логи ingress-контроллера, чтобы увидеть, как он реагирует на такие конфликты.
 
 ---
