@@ -5,6 +5,8 @@ metadata:
   namespace: lab
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: probe-demo
