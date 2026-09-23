@@ -46,9 +46,9 @@ on: push main / tag v* / ручной запуск
 ```bash
 # Вариант А: создать новый GitLab-проект и скопировать lab/
 git clone https://gitlab.com/<your-username>/my-app.git
-cp -r docker-lab/13-cicd-github-actions/lab/* my-app/
+cp -r labs/docker/13-cicd-github-actions/lab/* my-app/
 cd my-app
-cp docker-lab/13-cicd-github-actions/examples/gitlab-ci-template.yml .gitlab-ci.yml
+cp labs/docker/13-cicd-github-actions/examples/gitlab-ci-template.yml .gitlab-ci.yml
 git add .
 git commit -m "ci: add GitLab CI/CD pipeline"
 git push origin main
@@ -69,7 +69,7 @@ git push gitlab main
 2. **CI/CD configuration file**: вставить путь:
 
 ```text
-docker-lab/13-cicd-github-actions/lab/gitlab-ci/.gitlab-ci.yml
+labs/docker/13-cicd-github-actions/lab/gitlab-ci/.gitlab-ci.yml
 ```
 
 3. Сохранить.
@@ -189,7 +189,7 @@ build:
 
 ```bash
 # Локально: собрать и проверить
-docker build -t cicd-app:test docker-lab/13-cicd-github-actions/lab
+docker build -t cicd-app:test labs/docker/13-cicd-github-actions/lab
 docker run -d --name smoke -p 8080:8080 cicd-app:test
 curl http://localhost:8080/healthz   # ok
 docker rm -f smoke
@@ -426,7 +426,7 @@ docker buildx imagetools inspect registry.gitlab.com/<username>/<project>:latest
 
 ```bash
 # Скопировать шаблон в корень нового GitLab-проекта
-cp docker-lab/13-cicd-github-actions/examples/gitlab-ci-template.yml \
+cp labs/docker/13-cicd-github-actions/examples/gitlab-ci-template.yml \
    /path/to/my-project/.gitlab-ci.yml
 
 # Отредактировать переменные в начале файла:
