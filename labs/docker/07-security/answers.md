@@ -26,7 +26,7 @@
 
 ## Найденные проблемы в broken
 
-- `broken/Dockerfile.secret`:
+- `broken/Dockerfile`:
 
 ## Что улучшить
 

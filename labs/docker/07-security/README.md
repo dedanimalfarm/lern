@@ -163,7 +163,7 @@ docker inspect security-app \
 
 ```bash
 # Собираем сломанный образ
-docker build -t dockerlab/secret-leak:bad ./broken
+docker build -t dockerlab/secret-leak:bad -f broken/Dockerfile ./lab
 
 # Секрет виден в истории слоёв — НАВСЕГДА
 docker history dockerlab/secret-leak:bad --no-trunc | grep -i secret
@@ -302,11 +302,11 @@ curl http://localhost:8083/healthz
 
 | Файл | Проблема |
 |---|---|
-| `broken/Dockerfile.secret` | `ENV API_TOKEN=...` — секрет в слое образа |
+| `broken/Dockerfile` | `ENV API_TOKEN=...` — секрет в слое образа |
 
 ```bash
 # Собери и найди секрет
-docker build -t dockerlab/secret-leak:bad ./broken
+docker build -t dockerlab/secret-leak:bad -f broken/Dockerfile ./lab
 docker history dockerlab/secret-leak:bad --no-trunc | grep API_TOKEN
 docker rm -f $(docker ps -aq --filter ancestor=dockerlab/secret-leak:bad) 2>/dev/null || true
 docker rmi dockerlab/secret-leak:bad

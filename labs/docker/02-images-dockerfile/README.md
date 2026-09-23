@@ -191,7 +191,7 @@ docker image rm test-secret
 ### 7. Сравните с broken/Dockerfile.bad
 
 ```bash
-docker build -t dockerlab/simple-web:bad ./broken
+docker build -t dockerlab/simple-web:bad -f broken/Dockerfile.bad ./lab
 docker history dockerlab/simple-web:dev   # сколько слоёв? какой размер?
 docker history dockerlab/simple-web:bad
 ```
