@@ -323,7 +323,7 @@ gcloud logging read \
 **Шаг 3.** Посмотрите метрики NAT:
 
 ```bash
-# Количество активных соединений
+# Количество активных соединений (команда устарела, перепроверить)
 gcloud monitoring metrics list \
     --filter='metric.type = starts_with("compute.googleapis.com/nat")'
 ```
