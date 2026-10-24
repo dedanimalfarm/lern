@@ -1,9 +1,15 @@
-# Текстовый линт linux-basics (пока раздел 1.live-in-terminal) — зеркало локального
-# scripts/qa/lint_text.py. Ловит дефекты, невидимые глазами, но ломавшие задания
-# на практике: CRLF (grep 'x$' переставал находить строки), файлы без \n в конце
+# Линт и самопроверка linux-basics — зеркало локальных scripts/qa/lint_text.py
+# и lfcs-mock-exam/ci-selftest.sh.
+#
+# lint: текстовая гигиена, которую не видно глазами, но которая ломала задания на
+# практике: CRLF (grep 'x$' переставал находить строки), файлы без \n в конце
 # (wc -l недосчитывал строку), кириллические буквы в опциях (grep -С → invalid
-# option) и в именах каталогов (19.сut-and-paste), смесь латиницы и кириллицы
-# в одном слове. Живой прогон заданий остаётся за стендом (контейнер/VM).
+# option) и в именах каталогов (первая «с» в 19.cut-and-paste была кириллической),
+# смесь латиницы и кириллицы в одном слове; плюс shellcheck скриптов.
+#
+# mock-exam: пробный экзамен в одноразовых контейнерах Ubuntu 22.04 и 24.04.
+# solutions — на нетронутом стенде verify.sh даёт 0 баллов, после эталонных решений 100;
+# mistakes  — после типичных ошибок каждая задача с ловушкой получает FAIL.
 name: linux-basics-lint
 
 on:
@@ -11,11 +17,13 @@ on:
     branches: [main]
     paths:
       - 'labs/linux-basics/1.live-in-terminal/**'
+      - 'labs/linux-basics/lfcs-mock-exam/**'
       - 'labs/linux-basics/scripts/qa/**'
       - '.github/workflows/linux-basics-lint.yml'
   pull_request:
     paths:
       - 'labs/linux-basics/1.live-in-terminal/**'
+      - 'labs/linux-basics/lfcs-mock-exam/**'
       - 'labs/linux-basics/scripts/qa/**'
       - '.github/workflows/linux-basics-lint.yml'
 
@@ -34,5 +42,27 @@ jobs:
       - name: Самопроверка линтера
         run: python3 scripts/qa/lint_text.py --self-test
 
-      - name: 1.live-in-terminal
-        run: python3 scripts/qa/lint_text.py 1.live-in-terminal
+      - name: Текстовый линт
+        run: python3 scripts/qa/lint_text.py 1.live-in-terminal lfcs-mock-exam
+
+      - name: shellcheck
+        run: find lfcs-mock-exam -type f -name '*.sh' -print0 | xargs -0 shellcheck -x
+
+  mock-exam:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:22.04', 'ubuntu:24.04']
+        mode: [solutions, mistakes]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ci-selftest.sh ${{ matrix.mode }} в ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD/lfcs-mock-exam:/exam:ro" "${{ matrix.image }}" bash -c '
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq sudo acl xz-utils >/dev/null
+            /exam/ci-selftest.sh ${{ matrix.mode }}'
