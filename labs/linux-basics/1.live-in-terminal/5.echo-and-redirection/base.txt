@@ -14,3 +14,42 @@ echo "Hello, World!" > output.txt
 Пример:
 echo "Hello again!" >> output.txt
 Этот пример добавит строку "Hello again!" в конец файла output.txt, не удаляя предыдущие данные.
+
+Три стандартных потока
+У каждой команды есть три потока, у каждого свой номер (дескриптор):
+  0 — stdin, стандартный ввод (по умолчанию клавиатура)
+  1 — stdout, стандартный вывод (результат)
+  2 — stderr, поток ошибок
+> и >> — это сокращения для 1> и 1>>: они перенаправляют только stdout. Ошибки по-прежнему идут на экран.
+
+Перенаправление ошибок
+  ls /etc/hostname /nope 2> err.txt       — ошибки в файл err.txt, результат на экран
+  ls /nope 2>> err.log                    — дописать ошибки в конец файла
+  ls /nope 2> /dev/null                   — выбросить ошибки (/dev/null поглощает всё, что в него пишут)
+  find / -name passwd 2>/dev/null         — типичное применение: убрать "Permission denied" из вывода
+
+Вывод и ошибки в один файл
+  ls /etc/hostname /nope > all.txt 2>&1   — сначала stdout в файл, потом stderr туда же, куда stdout
+  ls /etc/hostname /nope &> all.txt       — то же самое короче (так умеет bash, но не sh)
+  ls /etc/hostname /nope |& wc -l         — оба потока в пайп (bash)
+Порядок важен: 2>&1 означает "stderr туда, куда СЕЙЧАС направлен stdout".
+  ls /etc/hostname /nope 2>&1 > all.txt   — ошибка уйдёт на экран: в момент 2>&1 stdout ещё был экраном
+
+Перенаправление ввода
+  tr a-z A-Z < /etc/hostname              — файл подаётся на stdin команды
+  wc -w <<< "one two three"                — here-string: строка подаётся на stdin (bash)
+
+Here-doc: многострочный текст прямо в команде — удобно для создания конфигов
+  cat > app.conf <<EOF
+  port=8080
+  user=$USER
+  EOF
+Строки до слова-маркера EOF попадают на stdin. Переменные внутри подставляются ($USER станет вашим именем).
+Если маркер взять в кавычки (<<'EOF'), текст попадёт как есть, без подстановок.
+Записать here-doc в файл root: sudo tee /etc/app.conf > /dev/null <<EOF ... EOF
+(sudo cat > /etc/app.conf не сработает — перенаправление выполняет ваша оболочка без прав root).
+
+Защита от случайной перезаписи
+  set -o noclobber    — после этого > не перезапишет существующий файл ("cannot overwrite existing file")
+  echo x >| file      — перезаписать явно, несмотря на noclobber
+  set +o noclobber    — выключить защиту
