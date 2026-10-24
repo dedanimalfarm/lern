@@ -10,6 +10,11 @@
 # mock-exam: пробный экзамен в одноразовых контейнерах Ubuntu 22.04 и 24.04.
 # solutions — на нетронутом стенде verify.sh даёт 0 баллов, после эталонных решений 100;
 # mistakes  — после типичных ошибок каждая задача с ловушкой получает FAIL.
+#
+# ls-certification: сертификация «Lord of the LiSts» (тема 1, 40 задач «одна задача —
+# одна команда»). tests/selftest.sh: шаблон → 0 из 40, эталон → 40 из 40 и сертификат,
+# каждая типичная ошибка → FAIL, равносильные записи → OK, check.sh не меняет арену.
+# Гоняется от root и от обычного пользователя: студент сдаёт без root.
 name: linux-basics-lint
 
 on:
@@ -46,7 +51,7 @@ jobs:
         run: python3 scripts/qa/lint_text.py 1.live-in-terminal lfcs-mock-exam
 
       - name: shellcheck
-        run: find lfcs-mock-exam -type f -name '*.sh' -print0 | xargs -0 shellcheck -x
+        run: find lfcs-mock-exam 1.live-in-terminal -type f -name '*.sh' -print0 | xargs -0 shellcheck -x
 
   mock-exam:
     runs-on: ubuntu-latest
@@ -66,3 +71,21 @@ jobs:
             apt-get update -qq
             apt-get install -y -qq sudo acl xz-utils >/dev/null
             /exam/ci-selftest.sh ${{ matrix.mode }}'
+
+  ls-certification:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:22.04', 'ubuntu:24.04']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: selftest.sh в ${{ matrix.image }} — от root и от обычного пользователя
+        run: |
+          docker run --rm -v "$PWD/1.live-in-terminal/1.ls-and-history(wadd)/ls-certification:/cert:ro" \
+            "${{ matrix.image }}" bash -c '
+              set -e
+              echo "### root";    /cert/tests/selftest.sh
+              useradd -m -s /bin/bash student
+              echo "### student"; su - student -c /cert/tests/selftest.sh'
