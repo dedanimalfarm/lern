@@ -1,0 +1,41 @@
+sudo и su — доступ к правам root
+
+su и sudo
+  su - alice          — войти под alice: нужен ПАРОЛЬ ALICE, запускается login-оболочка с её окружением
+  su -                — то же для root (в Ubuntu у root обычно нет пароля, поэтому su - не сработает)
+  sudo команда        — выполнить одну команду от root: нужен ВАШ пароль, и вам должно быть это разрешено
+  sudo -i             — login-оболочка root (так получают права на экзамене LFCS)
+  sudo -u alice cmd   — выполнить команду от имени alice
+  sudo -iu alice      — войти под alice как при обычном входе (с её профилем и окружением)
+  sudo -l             — показать, что вам разрешено; sudo -l -U alice — что разрешено alice (нужен root)
+Без дефиса (su alice, sudo -u alice без -i) профили не читаются: вы остаётесь в текущем каталоге,
+а переменных из /etc/profile.d и ~/.profile нет. Сравните: sudo -u alice pwd и sudo -iu alice pwd.
+
+Кому разрешён sudo
+Правила лежат в /etc/sudoers и в файлах каталога /etc/sudoers.d/ (их подключает строка @includedir /etc/sudoers.d).
+Проще всего дать полный sudo — добавить пользователя в группу администраторов:
+  sudo usermod -aG sudo alice      — Ubuntu и Debian (группа sudo)
+  sudo usermod -aG wheel alice     — RHEL, Rocky, Alma, Fedora (группа wheel)
+Как и с любой группой, право появится после повторного входа alice.
+
+Своё правило в /etc/sudoers.d
+Формат строки:  КТО  ГДЕ=(ОТ_ИМЕНИ_КОГО)  [NOPASSWD:]  КОМАНДЫ
+  carol   ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/bin/passwd
+  %dev    ALL=(ALL)  /usr/bin/journalctl
+  %       — перед именем группы
+  ALL     — первое ALL: на любом хосте; (ALL) — от имени любого пользователя; ALL в конце — любые команды
+  NOPASSWD: — не спрашивать пароль (двоеточие обязательно)
+  команды пишутся с полным путём (узнать путь: command -v useradd)
+
+Редактируйте sudoers только через visudo: он проверяет синтаксис перед сохранением.
+Ошибка в sudoers ломает sudo для всех — и починить его без root-пароля будет нечем.
+  sudo visudo                              — править /etc/sudoers
+  sudo visudo -f /etc/sudoers.d/helpdesk   — создать или править отдельный файл (рекомендуется)
+  sudo visudo -c                           — проверить все файлы; visudo -cf файл — проверить один файл
+Права на файлы в /etc/sudoers.d — 0440. visudo -f создаёт новый файл не с 0440 (в Ubuntu 24.04 — 0640),
+поэтому после создания выполните sudo chmod 0440 /etc/sudoers.d/helpdesk — иначе visudo -c сообщит
+"bad permissions, should be mode 0440". Файл, доступный всем на запись, sudo игнорирует с предупреждением
+"is world writable".
+Имя файла в /etc/sudoers.d не должно содержать точку и не должно оканчиваться на ~ — такие файлы пропускаются.
+
+Пример EXAMPLES со множеством готовых правил — man 5 sudoers, образец файла — /usr/share/doc/sudo/examples/sudoers.

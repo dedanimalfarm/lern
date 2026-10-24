@@ -1,0 +1,11 @@
+Выполняйте на учебной VM: ошибки в sudoers на рабочей машине могут лишить вас sudo.
+
+1. Посмотрите, что разрешено вам: sudo -l. В какой группе вы состоите, чтобы иметь sudo (id)?
+2. Создайте пользователя opsadmin и дайте ему полный sudo через группу (sudo в Ubuntu, wheel в RHEL).
+   Проверьте: sudo -l -U opsadmin
+3. Создайте пользователя helpdesk и через файл /etc/sudoers.d/helpdesk разрешите ему без пароля
+   выполнять только /usr/sbin/useradd и /usr/bin/passwd. Используйте visudo -f, затем выставьте права 0440
+   и проверьте все файлы командой sudo visudo -c.
+4. Проверьте правило: sudo -u helpdesk sudo -n -l, затем попробуйте от helpdesk выполнить sudo -n cat /etc/shadow.
+   Почему вторая команда не сработала?
+5. Сравните окружение: выполните из /tmp команды sudo -u helpdesk pwd и sudo -iu helpdesk pwd. Почему каталоги разные?
