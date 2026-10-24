@@ -1,0 +1,15 @@
+# Учебная копия фрагмента /etc/ssh/sshd_config — правьте её, а не системный файл.
+#Port 22
+#AddressFamily any
+#ListenAddress 0.0.0.0
+
+#LoginGraceTime 2m
+PermitRootLogin yes
+#MaxAuthTries 6
+
+PubkeyAuthentication yes
+PasswordAuthentication yes
+#PermitEmptyPasswords no
+
+X11Forwarding yes
+#AllowUsers alice bob
