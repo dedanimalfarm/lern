@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Проверка сертификации «Lord of the LiSts»: 40 задач, одна задача — одна команда.
+# Проверка сертификации «Lord of the LiSts»: 26 задач, одна задача — одна команда.
+# Задачи повторяют карточку card.txt: каждая команда карточки — одна задача, в том же порядке.
 #
 # Как проверяется ответ. Команда из файла ответов и эталонная команда запускаются по очереди
 # в одной и той же арене, и сравниваются их вывод (stdout вместе с stderr) и код возврата.
@@ -11,13 +12,13 @@
 # имени на строку, без цвета и кавычек. Поэтому, если по выводу правильный ответ не отличить
 # от неправильного (ls и ls -1), задача дополнительно требует флаг — см. NEED.
 #
-# Скрипт ничего не меняет: ls, du, wc, head и tail только читают арену.
+# Скрипт ничего не меняет: ls, wc и head только читают арену.
 #
-#   ./check.sh          результат по задачам, ранг; при 40 из 40 — сертификат
+#   ./check.sh          результат по задачам, ранг; когда решены все — сертификат
 #   ./check.sh --card   то же плюс карточка с отметками [x] у решённых задач
 #
 #   LS_ARENA, LS_ANSWERS — как в setup.sh. LS_CERT_NAME — имя в сертификате.
-# Код возврата: 0 — все 40 задач решены, 1 — не все, 2 — нет арены или файла ответов.
+# Код возврата: 0 — все задачи решены, 1 — не все, 2 — нет арены или файла ответов.
 set -uo pipefail
 
 HERE=$(dirname "$(readlink -f "$0")")
@@ -33,17 +34,19 @@ SHOW_CARD=0
 # ---------------------------------------------------------------- задачи
 # task НОМЕР ФОРМА 'ЭТАЛОН' ['NEED — обязательный фрагмент, regex' 'почему он нужен']
 # ФОРМА: ls   — одна команда ls без конвейера;
-#        pipe — ls и один | в wc, head или tail;
-#        du   — одна команда ls или du.
+#        pipe — ls и один | в wc, head или tail.
 declare -A FORM REF NEED WHY
 task() { FORM[$1]=$2; REF[$1]=$3; NEED[$1]=${4:-}; WHY[$1]=${5:-}; }
 
 # Флаг внутри любой связки: -1, -l1, -1A и т. п.
 flag() { printf '(^|[[:space:]])-[A-Za-z0-9]*%s' "$1"; }
 
-LEVELS=(1:6:"LOOKER" 7:12:"DOT-FILE DETECTIVE" 13:21:"LONG-LIST LEGEND"
-        22:32:"SORT SORCERER" 33:40:"LORD OF THE LiSts")
-TOTAL=40
+# Уровни как на карточке. POWER COMBOS входят в LV5: звание Lord of the LiSts —
+# это все задачи карточки, и сертификат выдаётся вместе с ним.
+LEVELS=(1:6:"LOOKER" 7:11:"DOT-FILE DETECTIVE" 12:15:"LONG-LIST LEGEND"
+        16:21:"SORT SORCERER" 22:26:"LORD OF THE LiSts")
+declare -A SUB=([24]="POWER COMBOS (входят в LV5)")
+TOTAL=26
 
 # LV1 · LOOKER
 task  1 ls 'ls'
@@ -52,52 +55,37 @@ task  3 ls 'ls -1' "$(flag 1)|--format=single-column" \
   'вывод совпал: в конвейере ls и так пишет по имени в строке. В терминале будут колонки — нужен флаг'
 task  4 ls 'ls etc/*.conf'
 task  5 ls 'ls words/?a??'
-task  6 ls 'ls words/[bc]*'
+task  6 ls 'ls words/[ab]*'
 # LV2 · DOT-FILE DETECTIVE
 task  7 ls 'ls -a'
 task  8 ls 'ls -A'
 task  9 ls 'ls -F'
 task 10 ls 'ls -p'
 task 11 ls 'ls -d */'
-task 12 ls "ls -I '*.gz' logs"
 # LV3 · LONG-LIST LEGEND
-task 13 ls 'ls -l'
-task 14 ls 'ls -lh'
-task 15 ls 'ls -ld logs'
-task 16 ls 'ls -li notes.txt hard.txt'
-task 17 ls 'ls -n notes.txt'
-task 18 ls 'ls -s logs'
-task 19 ls 'ls -lL link-to-notes'
-task 20 ls 'ls -l --time-style=long-iso logs'
-task 21 ls 'ls --full-time logs'
+task 12 ls 'ls -l'
+task 13 ls 'ls -lh'
+task 14 ls 'ls -li notes.txt hard.txt'
+task 15 ls 'ls -R deep'
 # LV4 · SORT SORCERER
-task 22 ls 'ls -lt logs'
-task 23 ls 'ls -ltr logs'
-task 24 ls 'ls -lS logs'
-task 25 ls 'ls -lSr logs'
-task 26 ls 'ls -X docs'
-task 27 ls 'ls -v chapters'
-task 28 ls 'ls -ltc logs'
-task 29 ls 'ls -ltu logs'
-task 30 ls 'ls -U logs' "$(flag U)|--sort=none" \
+task 16 ls 'ls -lt logs'
+task 17 ls 'ls -ltr logs'
+task 18 ls 'ls -lS logs'
+task 19 ls 'ls -lSr logs'
+task 20 ls 'ls -X docs'
+task 21 ls 'ls -U logs' "$(flag U)|--sort=none" \
   'порядок в каталоге случайно совпал с алфавитом. Нужен флаг, который отключает сортировку'
-task 31 ls 'ls --group-directories-first'
-task 32 ls 'ls -R deep'
 # LV5 · LORD OF THE LiSts
-task 33 ls 'ls -l current'
-task 34 ls 'ls -l current/'
-task 35 pipe 'ls -A | wc -l'
-task 36 du 'du -sh bigdir'
-task 37 ls 'ls -Q'
-task 38 ls 'LC_ALL=C ls' '(^|[[:space:]])(LC_ALL|LC_COLLATE)=(C|POSIX)(\.[A-Za-z0-9-]+)?[[:space:]]' \
-  'совпало, потому что у вас уже побайтовая локаль. Задайте её для команды явно'
-task 39 ls 'ls -alF'
-task 40 pipe 'ls -lS logs | head -4'
+task 22 ls 'ls -l current'
+task 23 pipe 'ls -A | wc -l'
+# POWER COMBOS
+task 24 ls 'ls -lah'
+task 25 ls 'ls -ld */'
+task 26 pipe 'ls -lhS logs | head -5'
 
 # ---------------------------------------------------------------- форма ответа
 RE_ENV='^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
 RE_LS="${RE_ENV}(\\\\?ls|command[[:space:]]+ls)([[:space:]]|$)"
-RE_DU="${RE_ENV}du([[:space:]]|$)"
 RE_TAIL='^[[:space:]]*(wc|head|tail)([[:space:]]|$)'
 RE_SKIP='^[[:space:]]*(#|$)'
 RE_ANS='^[[:space:]]*([0-9]{1,2})[.:)]?([[:space:]]+(.*))?$'
@@ -119,10 +107,6 @@ check_form() {
     [[ $right =~ $RE_TAIL ]] || { echo 'после | можно только wc, head или tail'; return 1; }
   fi
   [[ $left =~ $RE_LS ]] && return 0
-  if [ "$form" = du ]; then
-    [[ $left =~ $RE_DU ]] && return 0
-    echo 'команда должна начинаться с ls или du'; return 1
-  fi
   echo 'команда должна начинаться с ls'; return 1
 }
 
@@ -180,6 +164,7 @@ for ((n = 1; n <= TOTAL; n++)); do
   if [ "$n" -eq "$from" ]; then
     printf '\n── LV%d · %s\n' $((lvl + 1)) "$name"
   fi
+  [ -n "${SUB[$n]-}" ] && printf '\n── %s\n' "${SUB[$n]}"
   IFS=: read -r _ to _ <<<"${LEVELS[lvl]}"
   [ "$n" -eq "$to" ] && lvl=$((lvl + 1))
 

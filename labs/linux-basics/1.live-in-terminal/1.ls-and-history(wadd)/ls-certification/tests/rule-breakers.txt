@@ -8,12 +8,12 @@
 03 printf '%s\n' *
 04 echo etc/*.conf
 # перенаправление
-13 ls -l > /tmp/out
+12 ls -l > /tmp/out
 # подстановка команды
-15 ls -ld $(echo logs)
+14 ls -li $(echo notes.txt hard.txt)
 # конвейер там, где он не нужен
-22 ls -lt logs | cat
+16 ls -lt logs | cat
 # два конвейера
-35 ls -A | sort | wc -l
+23 ls -A | sort | wc -l
 # после | можно только wc, head, tail
-40 ls -lS logs | grep -v total
+26 ls -lhS logs | grep -v total

@@ -4,30 +4,23 @@
 02 ls logs etc
 03 ls --format=single-column
 04 ls -d etc/*.conf
+06 ls -d words/[ab]*
 07 ls --all
 08 ls --almost-all
 09 ls --classify
 11 ls -d -- */
-12 ls --hide='*.gz' logs
-13 \ls -l
-14 ls -l -h
-15 ls -dl "$PWD"/logs
-16 ls -il hard.txt notes.txt
-17 command ls -ln notes.txt
-19 ls -l --dereference link-to-notes
-20 ls -l --time-style=+%Y-%m-%d\ %H:%M logs
-21 ls -l --time-style=full-iso logs
-22 ls logs --sort=time -l
-23 ls -l -r -t logs
-24 ls -l --sort=size logs
-26 ls --sort=extension docs
-27 ls --sort=version chapters
-30 ls --sort=none logs
-33 ls -ld current
-34 ls -lL current
-35 ls -A | wc --lines
-36 du -s -h bigdir
-37 ls --quote-name
-38 LC_COLLATE=C ls
-39 ls -laF
-40 ls -lS logs | head -n 4
+12 \ls -l
+13 command ls -l -h
+14 ls -il hard.txt notes.txt
+15 ls -R "$PWD"/deep
+16 ls logs --sort=time -l
+17 ls -l -r -t logs
+18 ls -l --sort=size logs
+19 ls -rlS logs
+20 ls --sort=extension docs
+21 ls --sort=none logs
+22 ls -ld current
+23 ls -A | wc --lines
+24 ls --all -lh
+25 ls -dl */
+26 ls -lhS logs | head -n 5

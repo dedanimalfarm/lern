@@ -12,8 +12,8 @@
 04 ls etc/*.conf
 # ? — ровно один любой символ: ?a?? — четыре символа, второй a.
 05 ls words/?a??
-# [bc] — один символ из набора.
-06 ls words/[bc]*
+# [ab] — один символ из набора.
+06 ls words/[ab]*
 
 # LV2 · DOT-FILE DETECTIVE
 # -a показывает всё, что начинается с точки, включая . (этот каталог) и .. (родитель).
@@ -26,58 +26,36 @@
 10 ls -p
 # */ раскрывается в список каталогов (и ссылок на каталоги), -d не даёт ls заходить внутрь.
 11 ls -d */
-# -I прячет записи по шаблону. Кавычки нужны, чтобы *.gz раскрыл не shell, а ls.
-12 ls -I '*.gz' logs
 
 # LV3 · LONG-LIST LEGEND
-13 ls -l
+12 ls -l
 # -h без -l ничего не меняет: у ls без -l и -s нет колонки размеров.
-14 ls -lh
-# Без -d ls -l logs показал бы содержимое logs.
-15 ls -ld logs
+13 ls -lh
 # Номера inode одинаковые: notes.txt и hard.txt — два имени одного файла (счётчик ссылок 2).
-16 ls -li notes.txt hard.txt
-# Числа нужны, когда владельца уже нет в /etc/passwd (после userdel) или он из другой системы.
-17 ls -n notes.txt
-# Колонка слева — место на диске в блоках по 1K: файл в 500 байт всё равно занимает 4K.
-18 ls -s logs
-# -L — разыменовать ссылку: размер и права цели, а не самой ссылки.
-19 ls -lL link-to-notes
-20 ls -l --time-style=long-iso logs
-# --full-time = -l --time-style=full-iso.
-21 ls --full-time logs
+14 ls -li notes.txt hard.txt
+15 ls -R deep
 
 # LV4 · SORT SORCERER
-22 ls -lt logs
+16 ls -lt logs
 # -r переворачивает любую сортировку: свежие оказываются внизу, рядом с приглашением.
-23 ls -ltr logs
-24 ls -lS logs
-25 ls -lSr logs
-26 ls -X docs
-27 ls -v chapters
-# -c с -lt: сортировка по ctime и ctime в колонке даты. ctime — время setup.sh, поэтому дата сегодняшняя.
-28 ls -ltc logs
-# -u с -lt: то же по atime — времени последнего чтения.
-29 ls -ltu logs
+17 ls -ltr logs
+18 ls -lS logs
+19 ls -lSr logs
+# Заглавная X. Строчная -x — совсем другое: имена строками, а не колонками.
+20 ls -X docs
 # -U — порядок, в котором записи лежат в каталоге. ls -f тоже не сортирует, но включает -a.
-30 ls -U logs
-31 ls --group-directories-first
-32 ls -R deep
+21 ls -U logs
 
 # LV5 · LORD OF THE LiSts
 # Ссылка, указанная аргументом, вместе с -l не разыменовывается: видна сама ссылка.
-33 ls -l current
-# Слэш в конце — путь уже не к ссылке, а к каталогу, на который она указывает.
-34 ls -l current/
+# ls -l current/ (со слэшем) показал бы уже содержимое releases/v2.
+22 ls -l current
 # В конвейере ls пишет по имени на строку, wc -l их считает. ls | wc -l пропустил бы скрытые.
-35 ls -A | wc -l
-# 4096 у каталога — размер самого каталога (списка имён), а не содержимого.
-36 du -sh bigdir
-# Кавычки ls ставит в терминале и сам ('my file.txt'), но это только отображение; -Q — всегда "...".
-37 ls -Q
-# Порядок сортировки задаёт локаль: в en_US apple Banana, в C — Banana apple (по кодам байтов).
-38 LC_ALL=C ls
-# alias ll — 'ls -alF' в ~/.bashrc Ubuntu. \ls или command ls запускают ls в обход алиаса.
-39 ls -alF
-# Первая строка ls -l — «total N», поэтому для трёх файлов нужно head -4.
-40 ls -lS logs | head -4
+23 ls -A | wc -l
+
+# POWER COMBOS (входят в LV5)
+24 ls -lah
+# Без -d ls -l */ показал бы содержимое каждого каталога.
+25 ls -ld */
+# Первая строка ls -l — «total N», поэтому head -5 даёт только четыре файла.
+26 ls -lhS logs | head -5
