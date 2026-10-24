@@ -1,0 +1,38 @@
+# Текстовый линт linux-basics (пока раздел 1.live-in-terminal) — зеркало локального
+# scripts/qa/lint_text.py. Ловит дефекты, невидимые глазами, но ломавшие задания
+# на практике: CRLF (grep 'x$' переставал находить строки), файлы без \n в конце
+# (wc -l недосчитывал строку), кириллические буквы в опциях (grep -С → invalid
+# option) и в именах каталогов (19.сut-and-paste), смесь латиницы и кириллицы
+# в одном слове. Живой прогон заданий остаётся за стендом (контейнер/VM).
+name: linux-basics-lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'labs/linux-basics/1.live-in-terminal/**'
+      - 'labs/linux-basics/scripts/qa/**'
+      - '.github/workflows/linux-basics-lint.yml'
+  pull_request:
+    paths:
+      - 'labs/linux-basics/1.live-in-terminal/**'
+      - 'labs/linux-basics/scripts/qa/**'
+      - '.github/workflows/linux-basics-lint.yml'
+
+defaults:
+  run:
+    working-directory: labs/linux-basics
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Сначала доказываем, что линтер не «зелёный по умолчанию»:
+      # каждое правило обязано сработать на своём примере дефекта.
+      - name: Самопроверка линтера
+        run: python3 scripts/qa/lint_text.py --self-test
+
+      - name: 1.live-in-terminal
+        run: python3 scripts/qa/lint_text.py 1.live-in-terminal
