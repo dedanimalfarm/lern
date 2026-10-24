@@ -12,7 +12,7 @@
 | `docker` | 17 глав + challenges, capstone | частично (`lab/`, `broken/`, `checks/`) | 48 check-файлов | **сломан**: workflow фильтрует `docker-lab/**` — старый путь до переезда 2026-05-19; последние запуски — май, оба красные | 2026-06-17 |
 | `linux-process-isolation` | 15 этапов (00–14) | **да** (эталон `01-chroot`) | 32 verify, 42 tasks/broken | нет workflow | 2026-06-24 |
 | `api` | 8 модулей + Helpdesk-стенд | **да** | 19 verify, 24 tasks/broken | `api-labs-lint.yml` | 2026-06-17 |
-| `linux-basics` | 6 разделов (~14 лаб) | нет (`tasks/broken` — 0) | 13 проверок | `linux-basics-lint.yml` — только текстовый линт `1.live-in-terminal` (CRLF, `\n` в конце, кириллица в опциях и путях) | 2026-10-24 |
+| `linux-basics` | 6 разделов (~14 лаб) + пробный экзамен `lfcs-mock-exam` (18 задач, verify) | нет (`tasks/broken` — 0) | 13 проверок + 18 задач экзамена | `linux-basics-lint.yml` — текстовый линт и shellcheck; самопроверка экзамена в Ubuntu 22.04/24.04 (решения → 100, типичные ошибки → FAIL) | 2026-10-24 |
 | `linux-troubleshooting` | 12 модулей (USE-методология) | нет (`broken` — 0) | 14 проверок | нет | 2026-06-22 |
 | `ansible` | 20 лаб старой нумерации (`1.easy-playbook` …) | нет | 2 проверки | нет | 2026-06-22 |
 | `postgresql` | 9 модулей (standalone + production track) | частично | 9 проверок, 14 tasks/broken | нет | 2026-06-12 |
