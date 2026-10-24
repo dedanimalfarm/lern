@@ -16,8 +16,12 @@ cp file1.txt file2.txt
 
 Копирование директории рекурсивно:
 cp -r folder1 folder2
+Если folder2 не существует, он будет создан как копия folder1. Если folder2 уже существует (как в этой ЛР),
+копия окажется внутри него: folder2/folder1. Проверьте: mkdir folder1 && cp -r folder1 folder2 && ls folder2
 
-mv file.txt new_location 
+Перемещение файла в каталог (каталог new_location должен существовать):
+mv file.txt new_location/
+Слэш в конце страхует: если каталога нет, mv выдаст ошибку, а не переименует file.txt в файл new_location.
 
 Переименование файла:
 mv old_name.txt new_name.txt
