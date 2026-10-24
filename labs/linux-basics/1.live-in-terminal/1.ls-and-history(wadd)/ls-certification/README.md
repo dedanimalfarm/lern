@@ -1,4 +1,4 @@
-# Сертификация `ls`: Lord of the LiSts
+# Сертификация `ls`: The Lord of the LiSt
 
 > *One command to list them all.*
 
@@ -19,7 +19,7 @@
 | LV2 | Dot-File Detective | 07–11 | `ls -a`, `ls -A`, `ls -F`, `ls -p`, `ls -d */` |
 | LV3 | Long-List Legend | 12–15 | `ls -l`, `ls -lh`, `ls -li`, `ls -R` |
 | LV4 | Sort Sorcerer | 16–21 | `ls -lt`, `ls -ltr`, `ls -lS`, `ls -lSr`, `ls -X`, `ls -U` |
-| LV5 | **Lord of the LiSts** | 22–26 | ловушки `ls -l link`, `ls -A \| wc -l` и power combos `ls -lah`, `ls -ld */`, `ls -lhS \| head -5` |
+| LV5 | **The Lord of the LiSt** | 22–26 | ловушки `ls -l link`, `ls -A \| wc -l` и power combos `ls -lah`, `ls -ld */`, `ls -lhS \| head -5` |
 
 ## Как сдавать
 
@@ -60,7 +60,7 @@ cd '1.ls-and-history(wadd)/ls-certification'   # кавычки обязател
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                      CERTIFICATE OF ACHIEVEMENT                      ║
-║                        LORD OF THE  L i S t s                        ║
+║                       THE LORD OF THE  L i S t                       ║
 ║                          awarded to student                          ║
 ║         26 of 26 tasks · one task, one command · 2026-10-24          ║
 ╚══════════════════════════════════════════════════════════════════════╝

@@ -1,10 +1,10 @@
 ╔══════════════════════════════════════════════════════════════════════╗
-║                       LORD OF THE  L i S t s                         ║
+║                       THE LORD OF THE  L i S t                       ║
 ║                  "One command to list them all."                     ║
 ║            Certified ls Practitioner  ·  GNU coreutils               ║
 ╚══════════════════════════════════════════════════════════════════════╝
   Rank path:  Looker → Dot-File Detective → Long-List Legend
-              → Sort Sorcerer → LORD OF THE LiSts
+              → Sort Sorcerer → THE LORD OF THE LiSt
   One box = one task in tasks.txt = one command. ./check.sh ticks them.
 
 ── LV1 · LOOKER ─────────────────────────────────── just look ─────────
@@ -45,7 +45,7 @@
  [ ] ls -X                  by extension (capital X; -x means "rows")
  [ ] ls -U                  no sorting: fast in huge directories
 
-── LV5 · LORD OF THE LiSts ─────────────────────── the traps ──────────
+── LV5 · THE LORD OF THE LiSt ──────────────────── the traps ──────────
  [ ] ls -l link             the link itself; link/ lists its target dir
  [ ] ls -A | wc -l          count incl. dotfiles (ls | wc -l skips them)
 

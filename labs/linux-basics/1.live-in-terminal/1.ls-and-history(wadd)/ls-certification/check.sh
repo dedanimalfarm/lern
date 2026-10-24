@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Проверка сертификации «Lord of the LiSts»: 26 задач, одна задача — одна команда.
+# Проверка сертификации «The Lord of the LiSt»: 26 задач, одна задача — одна команда.
 # Задачи повторяют карточку card.txt: каждая команда карточки — одна задача, в том же порядке.
 #
 # Как проверяется ответ. Команда из файла ответов и эталонная команда запускаются по очереди
@@ -41,10 +41,10 @@ task() { FORM[$1]=$2; REF[$1]=$3; NEED[$1]=${4:-}; WHY[$1]=${5:-}; }
 # Флаг внутри любой связки: -1, -l1, -1A и т. п.
 flag() { printf '(^|[[:space:]])-[A-Za-z0-9]*%s' "$1"; }
 
-# Уровни как на карточке. POWER COMBOS входят в LV5: звание Lord of the LiSts —
+# Уровни как на карточке. POWER COMBOS входят в LV5: звание The Lord of the LiSt —
 # это все задачи карточки, и сертификат выдаётся вместе с ним.
 LEVELS=(1:6:"LOOKER" 7:11:"DOT-FILE DETECTIVE" 12:15:"LONG-LIST LEGEND"
-        16:21:"SORT SORCERER" 22:26:"LORD OF THE LiSts")
+        16:21:"SORT SORCERER" 22:26:"THE LORD OF THE LiSt")
 declare -A SUB=([24]="POWER COMBOS (входят в LV5)")
 TOTAL=26
 
@@ -75,7 +75,7 @@ task 19 ls 'ls -lSr logs'
 task 20 ls 'ls -X docs'
 task 21 ls 'ls -U logs' "$(flag U)|--sort=none" \
   'порядок в каталоге случайно совпал с алфавитом. Нужен флаг, который отключает сортировку'
-# LV5 · LORD OF THE LiSts
+# LV5 · THE LORD OF THE LiSt
 task 22 ls 'ls -l current'
 task 23 pipe 'ls -A | wc -l'
 # POWER COMBOS
@@ -250,7 +250,7 @@ if [ "$PASSED" -eq "$TOTAL" ]; then
   echo
   echo '╔══════════════════════════════════════════════════════════════════════╗'
   centre 'CERTIFICATE OF ACHIEVEMENT'
-  centre 'LORD OF THE  L i S t s'
+  centre 'THE LORD OF THE  L i S t'
   centre "awarded to ${LS_CERT_NAME:-$(id -un)}"
   centre "$TOTAL of $TOTAL tasks · one task, one command · $(date +%F)"
   echo '╚══════════════════════════════════════════════════════════════════════╝'

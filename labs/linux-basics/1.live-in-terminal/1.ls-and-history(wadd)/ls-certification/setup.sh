@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Арена для сертификации «Lord of the LiSts» — каталог с файлами для задач из tasks.txt.
+# Арена для сертификации «The Lord of the LiSt» — каталог с файлами для задач из tasks.txt.
 #
 # Данные подобраны так, чтобы у каждой задачи был свой вывод, ни на что не похожий:
 # в logs у файлов разные размер и mtime, и порядки -S и -t не совпадают ни друг с другом,
@@ -43,7 +43,7 @@ make_arena() {
   ln -s notes.txt link-to-notes             # символическая ссылка: свой inode, тип l
   printf '#!/bin/sh\necho "one command to list them all"\n' > run.sh
   chmod 755 run.sh                          # ls -F пометит звёздочкой
-  printf 'Arena for the Lord of the LiSts certification. Tasks: tasks.txt\n' > README
+  printf 'Arena for The Lord of the LiSt certification. Tasks: tasks.txt\n' > README
   printf 'you found me\n' > .hidden-note
   printf 'theme=dark\n' > .config/settings
 

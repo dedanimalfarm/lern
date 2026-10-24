@@ -51,7 +51,7 @@ grep -A1 '^\[FAIL\]' <<<"$OUT" || true
 [ "$RC" -eq 0 ] || die "эталон: код $RC, ожидался 0"
 grep -q "^Итого: $N из $N\$" <<<"$OUT" || die "эталон: не $N из $N"
 grep -q 'CERTIFICATE OF ACHIEVEMENT' <<<"$OUT" || die "эталон: нет сертификата"
-grep -q '^Ранг: LORD OF THE LiSts' <<<"$OUT" || die "эталон: не высший ранг"
+grep -q '^Ранг: THE LORD OF THE LiSt' <<<"$OUT" || die "эталон: не высший ранг"
 [ "$(grep -c '\[x\]' <<<"$OUT")" -eq "$N" ] || die "эталон: в карточке не $N отметок [x]"
 
 echo "== 3. равносильные записи → OK"
