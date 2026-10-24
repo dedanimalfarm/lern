@@ -1,0 +1,19 @@
+# Ответы, которые нарушают правило «одна задача — одна команда ls». tests/selftest.sh
+# требует FAIL для каждого — даже если вывод совпал бы с эталоном.
+
+# две команды
+01 ls && ls
+02 ls etc; ls logs
+# не ls
+03 printf '%s\n' *
+04 echo etc/*.conf
+# перенаправление
+13 ls -l > /tmp/out
+# подстановка команды
+15 ls -ld $(echo logs)
+# конвейер там, где он не нужен
+22 ls -lt logs | cat
+# два конвейера
+35 ls -A | sort | wc -l
+# после | можно только wc, head, tail
+40 ls -lS logs | grep -v total

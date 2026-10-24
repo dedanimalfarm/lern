@@ -1,0 +1,85 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║                       LORD OF THE  L i S t s                         ║
+║                  "One command to list them all."                     ║
+║            Certified ls Practitioner  ·  GNU coreutils               ║
+╚══════════════════════════════════════════════════════════════════════╝
+  Rank path:  Looker → Dot-File Detective → Long-List Legend
+              → Sort Sorcerer → LORD OF THE LiSts
+  One box = one task in tasks.txt = one command. ./check.sh ticks them.
+
+── LV1 · LOOKER ─────────────────────────────────── just look ─────────
+ [ ] ls                     list the current directory
+ [ ] ls /etc ~ /tmp         several directories in one call
+ [ ] ls -1                  one name per line (automatic when piped)
+ [ ] ls *.conf              the SHELL expands the glob, ls only prints
+ [ ] ls ?a??                ? = exactly one character
+ [ ] ls [bc]*               [bc] = one character from the set
+
+── LV2 · DOT-FILE DETECTIVE ────────────────────── see the hidden ─────
+ [ ] ls -a                  all: dotfiles plus . and ..
+ [ ] ls -A                  almost all: dotfiles, without . and ..
+ [ ] ls -F                  / dir  * exec  @ link  | fifo  = socket
+ [ ] ls -p                  slash after directories only
+ [ ] ls -d */               directories only
+ [ ] ls -I '*.gz'           hide entries matching a pattern
+
+── LV3 · LONG-LIST LEGEND ──────────────────────── read every column ──
+ [ ] ls -l                  long format:
+      -rw-r--r-- 2 root root 10 Oct 24 11:19 small.txt
+      │ │        │ │    │    │  │            └─ name
+      │ │        │ │    │    │  └─ mtime (last modified)
+      │ │        │ │    │    └─ size, bytes
+      │ │        │ │    └─ group
+      │ │        │ └─ owner
+      │ │        └─ hard links
+      │ └─ permissions: user | group | others
+      └─ type: - file  d dir  l link  c/b device  p fifo  s socket
+ [ ] ls -lh                 human sizes: 2.0M (-h needs -l or -s)
+ [ ] ls -ld /etc            the directory ITSELF, not its contents
+ [ ] ls -li                 inode numbers: hard links share one
+ [ ] ls -n                  numeric UID/GID (spot orphans after userdel)
+ [ ] ls -s   + "total N"    space on disk in 1K blocks (10 bytes → 4)
+ [ ] ls -lL link            details of the symlink TARGET
+ [ ] ls -l --time-style=long-iso    2026-03-05 10:00
+ [ ] ls --full-time         seconds, nanoseconds, timezone
+
+── LV4 · SORT SORCERER ─────────────────────────── order matters ──────
+ [ ] ls -lt                 newest first (by mtime)
+ [ ] ls -ltr                newest LAST: the classic for logs
+ [ ] ls -lS                 largest first
+ [ ] ls -lSr                smallest first
+ [ ] ls -X                  by extension
+ [ ] ls -v                  natural order: ch1 ch2 ch10
+ [ ] ls -ltc                by ctime: last change of metadata
+ [ ] ls -ltu                by atime: last read
+ [ ] ls -U                  no sorting: fast in huge directories
+ [ ] ls --group-directories-first
+ [ ] ls -R                  recursive
+
+── LV5 · LORD OF THE LiSts ─────────────────────── the traps ──────────
+ [ ] ls -l link             the symlink itself: one line, "-> target"
+ [ ] ls -l link/            what is inside the directory it points to
+ [ ] ls -A | wc -l          count incl. dotfiles (ls | wc -l skips them)
+ [ ] du -sh DIR             real size: a dir's own 4096 is not content
+ [ ] ls -Q                  "quoted"; 'my file' on a tty is display only
+ [ ] LC_ALL=C ls            byte order anywhere: Banana before apple
+ [ ] ls -alF                what Ubuntu's ll alias runs; \ls skips it
+ [ ] ls -lS | head -4       top-3 long format: line 1 is "total"
+
+── REMEMBER ───────────────────────────────────────────────────────────
+   ls *.zip with no match → "cannot access '*.zip'", exit code 2
+   never parse ls output in scripts: use globs or find
+   en_US sorts apple Banana; LC_ALL=C sorts Banana apple
+
+── POWER COMBOS ───────────────────────────────────────────────────────
+   ls -lah                  everything, readable sizes
+   ls -ltrh /var/log | tail what was written just now
+   ls -lhS | head -6        top-5 biggest files (+ "total" line)
+   ls -ld */                details of subdirectories only
+   ls -li a b               same inode = same file (hard link)
+
+── NO INTERNET? ───────────────────────────────────────────────────────
+   man ls    ·    ls --help | grep -- -S    ·    /sort in man (n = next)
+
+  Awarded to: ____________________  Date: ________  Signed: ____________
+  Pass: all 40 boxes. Proof: ./check.sh prints 40 of 40 + certificate.

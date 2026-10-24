@@ -1,0 +1,55 @@
+# Типичные ошибки — по одной на задачу. tests/selftest.sh требует, чтобы check.sh
+# поставил FAIL каждой: так проверяется, что задача и правда отличает верный ответ от ошибки.
+
+01 ls -a
+# только один каталог из двух
+02 ls etc
+# вывод через конвейер тот же, но в терминале будут колонки
+03 ls
+# захватывает resolv.conf.bak
+04 ls etc/*conf*
+# любые имена с a, а не «4 символа, вторая a»
+05 ls words/*a*
+06 ls words/b*
+07 ls -A
+08 ls -a
+09 ls -p
+10 ls -F
+# без -d ls заходит в каждый каталог
+11 ls */
+12 ls logs
+13 ls -la
+# -h без -l ничего не добавляет
+14 ls -h
+# показывает содержимое logs, а не сам каталог
+15 ls -l logs
+16 ls -l notes.txt hard.txt
+17 ls -l notes.txt
+18 ls -l logs
+# сведения о самой ссылке
+19 ls -l link-to-notes
+20 ls -l logs
+21 ls -l --time-style=long-iso logs
+22 ls -l logs
+23 ls -lt logs
+24 ls -lt logs
+25 ls -lS logs
+26 ls docs
+27 ls chapters
+28 ls -lt logs
+29 ls -lt logs
+30 ls logs
+31 ls
+32 ls deep
+# слэш в конце: это уже содержимое каталога
+33 ls -l current/
+34 ls -l current
+# не считает скрытые
+35 ls | wc -l
+# размер самого каталога, а не содержимого
+36 ls -ldh bigdir
+37 ls
+38 ls
+39 ls -la
+# первая строка — total, остаются только два файла
+40 ls -lS logs | head -3
