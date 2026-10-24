@@ -73,3 +73,23 @@ find /path/to/search -type d -user user1
 
 Найти файлы с правами доступа 755 и скопировать их в другую директорию:
 find /path/to/search -perm 755 -exec cp {} /backup/directory \;
+
+Ещё условия, которые часто нужны
+  -iname "*.txt"            — имя без учёта регистра (найдёт и README.TXT)
+  -mmin -30 / -mmin +60     — изменён меньше 30 минут назад / больше часа назад
+  -newer ref                — изменён позже, чем файл ref (ref удобно создать через touch -d "2026-10-01 00:00" ref)
+  -user alice / -group dev  — по владельцу / группе
+  -nouser / -nogroup        — владелец или группа удалены из системы (в ls -l вместо имени — число)
+  -empty                    — пустые файлы и каталоги
+  -samefile file            — все жёсткие ссылки на тот же inode (то же: -inum номер, номер — из ls -i)
+  -maxdepth 1 / -mindepth 2 — ограничить глубину (ставьте сразу после пути)
+  -xdev                     — не заходить в другие файловые системы (при поиске по / не уходить в /proc, /sys, сетевые диски)
+
+-exec ... \; и -exec ... +
+  find . -name "*.log" -exec ls -l {} \;   — команда запускается на КАЖДЫЙ файл отдельно
+  find . -name "*.log" -exec ls -l {} +    — файлы передаются пачкой, как у xargs: намного быстрее
+
+Сохранить результат и структуру каталогов
+  find / -user alice -type f 2>/dev/null > /root/alice_files.txt
+  find /etc -name "*.conf" -exec cp --parents {} /root/backup/ \;  — скопирует с путями: /root/backup/etc/...
+  find /var/log -type f -printf "%s %p\n" | sort -n | tail -5   — 5 самых больших файлов (-printf: %s размер, %p путь)
