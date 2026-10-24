@@ -78,3 +78,28 @@ tar -xvzf backup.tar.gz -C /home/user/extracted_files
 Просмотр содержимого архива:
 
 tar -tvf backup.tar
+
+Часто нужное на практике
+Исключить файлы или каталоги:
+  tar -czf proj.tgz --exclude='*.log' --exclude=proj/tmp proj
+Найти файл в большом архиве и извлечь только его (имя — ровно как в выводе -t):
+  tar -tzf proj.tgz | grep main.c
+  tar -xzf proj.tgz -C /tmp/restore proj/src/main.c
+Отбросить верхний каталог при распаковке: --strip-components=1 (proj/src/main.c распакуется как src/main.c).
+Добавить файл в архив: tar -rf archive.tar file — только в несжатый .tar (для .tar.gz: "Cannot update compressed archives").
+Сравнить архив с файлами на диске: tar -df archive.tar (код возврата 1, если что-то изменилось).
+
+Права, владельцы и ACL
+tar сохраняет права и владельцев в архиве всегда. При распаковке:
+  root восстанавливает права и владельцев как в архиве;
+  обычный пользователь получает файлы на себя, а права — с учётом своего umask. Флаг -p восстанавливает права как в архиве.
+ACL и расширенные атрибуты сохраняются, только если указать --acls (и --xattrs) и при создании, и при распаковке:
+  tar --acls --xattrs -cpf etc.tar /etc
+  tar --acls --xattrs -xpf etc.tar -C /restore
+
+Сжатие отдельных файлов (без tar)
+  gzip file        — заменит file на file.gz;  gzip -k file — оставит оригинал
+  gunzip file.gz   — распаковать (то же: gzip -d);  gzip -l file.gz — степень сжатия
+  zcat / zless / zgrep file.gz — читать без распаковки (так удобно смотреть старые логи /var/log/*.gz)
+  bzip2 / bunzip2 / bzcat и xz / unxz / xzcat — то же для .bz2 и .xz
+Обычно xz сжимает сильнее и медленнее, gzip — быстрее и слабее, bzip2 — посередине.
