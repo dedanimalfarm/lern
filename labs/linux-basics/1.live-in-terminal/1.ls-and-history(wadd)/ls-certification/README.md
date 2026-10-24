@@ -93,6 +93,7 @@ cd '1.ls-and-history(wadd)/ls-certification'   # кавычки обязател
 |---|---|
 | [card.txt](card.txt) | карточка-шпаргалка и чек-лист: 26 клеток — 26 задач в том же порядке |
 | [tasks.txt](tasks.txt) | задания |
+| [situations.txt](situations.txt) | где пригодится каждая из 26 команд: ситуации из работы администратора и разработчика |
 | [setup.sh](setup.sh) | создаёт арену (`~/ls-arena`, около 200 КБ) и файл ответов |
 | [check.sh](check.sh) | проверка, ранги, карточка с отметками, сертификат |
 | [answers-template.txt](answers-template.txt) | шаблон файла ответов: `setup.sh` копирует его в `~/ls-answers.txt` |
